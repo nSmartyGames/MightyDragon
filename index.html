@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Galacticus — Spice Throne</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
+<style>
+  :root{
+    --sand-3:#8a5a2b; --night:#1c130a; --rust:#c1441e; --rust-dark:#8a2e12;
+    --spice:#e0522a; --paper:#f3e3c0; --sand-2:#c99a4a;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; font-family:'Courier New',monospace;
+    background:radial-gradient(ellipse at top, #2a1a0a 0%, var(--night) 70%);
+    color:var(--paper); min-height:100vh;
+    display:flex; align-items:center; justify-content:center; padding:12px;
+  }
+  #app{ display:flex; gap:12px; width:96vw; height:92vh; max-width:1600px; }
+  .panel{
+    background:linear-gradient(180deg,#241609,#180f06);
+    border:2px solid var(--sand-3); border-radius:6px;
+    box-shadow:0 0 0 1px #000 inset, 0 8px 24px rgba(0,0,0,.5);
+  }
+  #boardWrap{ padding:10px; position:relative; flex:0 0 80%; display:flex; flex-direction:column; min-width:0; }
+  h1{ font-size:19px; letter-spacing:3px; text-transform:uppercase; color:var(--spice); margin:0 0 2px 0; text-shadow:0 0 12px rgba(224,82,42,.5); }
+  .sub{ font-size:11px; color:var(--sand-2); letter-spacing:1px; margin-bottom:8px; display:flex; justify-content:space-between;}
+  #boardHost{ border-radius:3px; border:1px solid #000; overflow:hidden; line-height:0; flex:1; min-height:0; cursor:grab; }
+  #boardHost.dragging{cursor:grabbing;}
+  #sidebar{ flex:1 1 20%; min-width:230px; padding:14px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; }
+  .statRow{ display:flex; justify-content:space-between; font-size:13px; padding:3px 0; border-bottom:1px dashed #4a3520; }
+  .statRow b{color:var(--spice);}
+  .section-title{ font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--sand-2); margin-top:6px; border-bottom:1px solid var(--sand-3); padding-bottom:3px; }
+  button{
+    font-family:inherit; background:linear-gradient(180deg,#4a3220,#2c1c0d); color:var(--paper);
+    border:1px solid var(--sand-3); border-radius:4px; padding:8px 10px; font-size:12px; cursor:pointer;
+    text-align:left; display:flex; justify-content:space-between; gap:8px; transition:transform .05s;
+  }
+  button:hover:not(:disabled){background:linear-gradient(180deg,#5c3f26,#3a2410); border-color:var(--rust);}
+  button:active:not(:disabled){transform:scale(.98);}
+  button:disabled{opacity:.35; cursor:not-allowed;}
+  button small{color:var(--sand-2); font-weight:normal;}
+  #endTurnBtn{ margin-top:auto; background:linear-gradient(180deg,var(--rust),var(--rust-dark)); border-color:#000; justify-content:center; font-weight:bold; letter-spacing:2px; text-transform:uppercase; font-size:13px; }
+  #log{ height:100px; overflow-y:auto; font-size:11px; background:#0f0a05; border:1px solid var(--sand-3); border-radius:4px; padding:6px 8px; color:#d8c19a; line-height:1.5; }
+  #log div:last-child{color:var(--paper); font-weight:bold;}
+  .overlay-base{ position:fixed; inset:0; background:rgba(10,6,2,.9); display:none; align-items:center; justify-content:center; z-index:30; padding:16px; }
+  .overlay-base .card{ background:var(--night); border:2px solid var(--rust); border-radius:8px; padding:30px 36px; max-width:420px; text-align:center; }
+  .overlay-base .card.wide{ max-width:680px; }
+  .overlay-base h2{color:var(--spice); letter-spacing:2px; margin-top:0;}
+  .overlay-base p{font-size:13px; color:var(--sand-2); line-height:1.6;}
+  .overlay-base .sub2{font-size:12px;}
+  .overlay-base button{margin:16px auto 0; justify-content:center;}
+  .hint{font-size:10px; color:#6b5636; margin-top:6px;}
+  .legend{ display:flex; gap:10px; font-size:10px; color:var(--sand-2); margin-top:6px; flex-wrap:wrap; }
+  .legend span{display:flex; align-items:center; gap:4px;}
+  .swatch{width:9px; height:9px; border-radius:2px; display:inline-block;}
+  #ctxMenu{
+    position:absolute; display:none; flex-direction:column;
+    background:#241609; border:1px solid var(--rust); border-radius:4px;
+    box-shadow:0 6px 18px rgba(0,0,0,.6); z-index:15; overflow:hidden; min-width:110px;
+  }
+  #ctxMenu button{ border:none; border-bottom:1px solid #3a2712; border-radius:0; justify-content:flex-start; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
+  #ctxMenu button:last-child{border-bottom:none;}
+  #ctxMenu .ctx-title{ font-size:9px; color:var(--sand-2); padding:5px 10px; background:#160d05; letter-spacing:1px; }
+  #modeHint{
+    position:absolute; top:6px; left:50%; transform:translateX(-50%);
+    background:rgba(20,12,4,.85); border:1px solid var(--rust); border-radius:12px;
+    padding:4px 12px; font-size:11px; letter-spacing:1px; color:var(--spice);
+    display:none; z-index:12; pointer-events:none;
+  }
+  #loadErr{
+    position:fixed; inset:0; background:#1c130a; color:#e0522a; display:none;
+    align-items:center; justify-content:center; font-family:monospace; font-size:14px; text-align:center; padding:40px; z-index:99;
+  }
+  .houseCards{ display:flex; gap:14px; margin-top:16px; flex-wrap:wrap; justify-content:center; }
+  .houseCard{ width:170px; background:linear-gradient(180deg,#241609,#160d05); border:2px solid var(--sand-3); border-radius:8px; padding:14px 12px; cursor:pointer; text-align:left; transition:transform .1s, border-color .1s; }
+  .houseCard:hover{ transform:translateY(-3px); border-color:#fff; }
+  .houseCard .bar{ height:6px; border-radius:3px; margin-bottom:10px; }
+  .houseCard h3{ margin:0 0 6px 0; font-size:14px; letter-spacing:2px; text-transform:uppercase; }
+  .houseCard p{ font-size:11px; color:var(--sand-2); line-height:1.5; margin:0; }
+  .rivalPanel{ border:1px solid var(--sand-3); border-left-width:4px; border-left-style:solid; border-radius:4px; padding:5px 8px; margin-bottom:6px; }
+  .rivalPanel .rname{ font-size:12px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; margin-bottom:2px; }
+  .rivalPanel .statRow{ font-size:11px; padding:1px 0; }
+  .rivalPanel.eliminated{ opacity:.45; }
+</style>
+</head>
+<body>
+
+<div id="loadErr">Graphics library failed to load — check your network connection and reload the page.</div>
+
+<div id="app">
+  <div class="panel" id="boardWrap">
+    <h1>Galacticus</h1>
+    <div class="sub"><span>Spice Throne — Turn <span id="turnBadge">1</span></span><span id="camHint">drag map / arrow keys to scroll</span></div>
+    <div id="boardHost"></div>
+    <div id="modeHint">MOVE — choose a tile</div>
+    <div class="legend">
+      <span><i class="swatch" style="background:#3a2f22"></i>Rocky mountain (impassable)</span>
+      <span><i class="swatch" style="background:#caa46a"></i>Desert</span>
+      <span><i class="swatch" style="background:#5c7a3a"></i>Grass (buildable)</span>
+      <span><i class="swatch" style="background:#e0522a"></i>Spice deposit</span>
+      <span><i class="swatch" style="background:#111"></i>Unexplored (fog)</span>
+    </div>
+    <div class="hint">Click a vehicle to select it, then Move / Attack / Retreat from the menu. Building buttons ask for a grass or desert tile to place on. Drag the map or use arrow keys to scroll — fog clears as your units explore. Troopers that reach a rival stronghold steal spice and damage it; reduce a stronghold to 0 to eliminate that House.</div>
+  </div>
+
+  <div class="panel" id="sidebar">
+    <div class="section-title" id="playerHouseTitle">Your holdings</div>
+    <div class="statRow"><span>Spice bank</span><b id="pSpice">0</b></div>
+    <div class="statRow"><span>Silo capacity</span><span id="pCap">100</span></div>
+    <div class="statRow"><span>Power / turn</span><span id="pPower">0</span></div>
+    <div class="statRow"><span>Army (troopers)</span><span id="pArmy">0</span></div>
+    <div class="statRow"><span>Stronghold</span><span id="pStronghold">160 / 160</span></div>
+
+    <div class="section-title">Rival houses</div>
+    <div id="rivalsContainer"></div>
+
+    <div class="section-title">Build &amp; recruit</div>
+    <button id="buildHarvester">Harvester <small>60 spice</small></button>
+    <button id="buildTurbine">Wind turbine <small>50 spice · pick a tile</small></button>
+    <button id="buildSilo">Silo <small>70 spice · pick a tile</small></button>
+    <button id="recruitTroop">Recruit trooper <small>25 spice</small></button>
+
+    <div class="section-title">Log</div>
+    <div id="log"></div>
+
+    <button id="endTurnBtn">End turn ▶</button>
+  </div>
+</div>
+
+<div id="ctxMenu">
+  <div class="ctx-title" id="ctxTitle">Unit</div>
+  <button id="ctxMove">Move</button>
+  <button id="ctxAttack">Attack</button>
+  <button id="ctxRetreat">Retreat</button>
+  <button id="ctxCancel">Cancel</button>
+</div>
+
+<div id="houseOverlay" class="overlay-base">
+  <div class="card wide">
+    <h2>Choose Your House</h2>
+    <p class="sub2">Three Great Houses vie for dominion over the Deep Desert and its Spice Throne. Pick your allegiance — the other two will fight you, and each other, for it.</p>
+    <div id="houseCards" class="houseCards"></div>
+  </div>
+</div>
+
+<div id="overlay" class="overlay-base">
+  <div class="card">
+    <h2 id="resultTitle">Victory</h2>
+    <p id="resultBody"></p>
+    <p id="learnBody" style="color:#e0522a;"></p>
+    <button id="restartBtn">Choose a house ▶</button>
+  </div>
+</div>
+
+<script>
+if(typeof PIXI === 'undefined'){
+  document.getElementById('loadErr').style.display='flex';
+}
+(function(){
+"use strict";
+if(typeof PIXI === 'undefined') return;
+
+// ================= constants =================
+const MAPW=100, MAPH=100, TILE=16, ZOOM=2, SZ=TILE*ZOOM; // 32px on-screen tile
+const SPICE_TARGET=600;
+const START_SPICE=140, START_CAP=100;
+const HARVESTER_COST=60, TURBINE_COST=50, SILO_COST=70, TROOP_COST=25;
+const HARVESTER_CAP=30, HARVEST_RATE=12;
+const WORM_COUNT=15;
+const MOVE_MS=380;
+const TROOP_HP=10;
+const STEPS_PER_TURN=3;
+const VISION_RADIUS=5;
+const BASE_HP_MAX=160;
+
+// ================= the three Great Houses =================
+const HOUSE_DEFS=[
+  { id:'horicus',    name:'Horicus',    color:0xc1441e, colorCss:'#c1441e', tagline:'Fire-forged raiders of the southern flats — aggressive and resilient in a fight.' },
+  { id:'andromedus', name:'Andromedus', color:0x3d6a9a, colorCss:'#3d6a9a', tagline:'Star-charting merchants who out-trade every rival and out-build every siege.' },
+  { id:'catarnicus', name:'Catarnicus', color:0x4a8a3a, colorCss:'#4a8a3a', tagline:'Venom-blooded strategists — patient for a hundred turns, merciless on the hundred-and-first.' }
+];
+const HOUSE_SPAWNS={ horicus:{x:10,y:90}, andromedus:{x:90,y:90}, catarnicus:{x:50,y:10} };
+const HOUSE_PERSONALITY={
+  horicus:    { econMul:1.00, milMul:1.05, aggroAdd: 0.05 },
+  andromedus: { econMul:1.30, milMul:0.85, aggroAdd:-0.05 },
+  catarnicus: { econMul:0.90, milMul:1.25, aggroAdd: 0.10 }
+};
+
+PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
+PIXI.settings.ROUND_PIXELS = true;
+
+const boardHost=document.getElementById('boardHost');
+function viewSize(){
+  const r=boardHost.getBoundingClientRect();
+  return { w: Math.max(480, Math.floor(r.width)), h: Math.max(360, Math.floor(r.height)) };
+}
+let vs=viewSize();
+const app = new PIXI.Application({width:vs.w, height:vs.h, background:0x0b0703, antialias:false});
+boardHost.appendChild(app.view);
+
+const world = new PIXI.Container();
+const layerGround = new PIXI.Container();
+const layerBuildings = new PIXI.Container();
+const layerFog = new PIXI.Container();
+const layerUnits = new PIXI.Container();
+const layerFx = new PIXI.Container();
+world.addChild(layerGround, layerBuildings, layerUnits, layerFx, layerFog);
+app.stage.addChild(world);
+
+window.addEventListener('resize', ()=>{
+  vs=viewSize();
+  app.renderer.resize(vs.w, vs.h);
+  clampCamera();
+});
+
+// ================= camera =================
+const cam={x:0,y:0};
+function clampCamera(){
+  const maxX=Math.max(0, MAPW*SZ - vs.w);
+  const maxY=Math.max(0, MAPH*SZ - vs.h);
+  cam.x=Math.max(0,Math.min(maxX,cam.x));
+  cam.y=Math.max(0,Math.min(maxY,cam.y));
+  world.x=-cam.x; world.y=-cam.y;
+}
+function centerCameraOn(tx,ty){
+  cam.x=tx*SZ - vs.w/2; cam.y=ty*SZ - vs.h/2; clampCamera();
+}
+const KEYS={};
+document.addEventListener('keydown',e=>{ KEYS[e.key]=true; if(e.key==='Escape') deselect(); });
+document.addEventListener('keyup',e=>{ KEYS[e.key]=false; });
+app.ticker.add((delta)=>{
+  const spd=8*delta;
+  if(KEYS['ArrowLeft']||KEYS['a']) cam.x-=spd;
+  if(KEYS['ArrowRight']||KEYS['d']) cam.x+=spd;
+  if(KEYS['ArrowUp']||KEYS['w']) cam.y-=spd;
+  if(KEYS['ArrowDown']||KEYS['s']) cam.y+=spd;
+  clampCamera();
+});
+
+// ================= texture generation =================
+function canvasTexture(size, drawFn){
+  const c=document.createElement('canvas'); c.width=size; c.height=size;
+  const cx=c.getContext('2d'); drawFn(cx,size);
+  const t=PIXI.Texture.from(c); t.baseTexture.scaleMode=PIXI.SCALE_MODES.NEAREST; return t;
+}
+const DIRS=8;
+function dirAngle(i){ return i*(Math.PI/4); }
+function dirIndexFromDelta(dx,dy){
+  if(dx===0 && dy===0) return null;
+  let ang=Math.atan2(dx,-dy); if(ang<0) ang+=Math.PI*2;
+  return Math.round(ang/(Math.PI/4))%8;
+}
+// Unit textures are drawn neutral (white/light-grey) and tinted per-house at render time,
+// so every House shares one texture set instead of three near-identical ones.
+function vehicleCanvas(cx,size,frame,angle,isHarvester){
+  cx.save(); cx.translate(size/2,size/2); cx.rotate(angle); cx.translate(-size/2,-size/2);
+  if(isHarvester){
+    cx.fillStyle='#ffffff'; cx.fillRect(3,4,size-6,size-7);
+    cx.fillStyle='#dcdcdc'; cx.fillRect(4,5,size-8,3);
+    cx.fillStyle= frame===0 ? 'rgba(0,0,0,.35)' : 'rgba(0,0,0,.15)';
+    cx.fillRect(2,size-5,size-4,2);
+    cx.fillStyle='#dcdcdc'; cx.beginPath(); cx.moveTo(size/2-3,4); cx.lineTo(size/2+3,4); cx.lineTo(size/2,1); cx.closePath(); cx.fill();
+  } else {
+    cx.fillStyle='#ffffff';
+    cx.beginPath(); cx.moveTo(size/2,2); cx.lineTo(size-4,size-4); cx.lineTo(size/2,size-7+(frame===0?0:1)); cx.lineTo(4,size-4); cx.closePath(); cx.fill();
+    cx.fillStyle='#dcdcdc'; cx.fillRect(size/2-1,4,2,5);
+  }
+  cx.restore();
+}
+function wormCanvas(cx,size,frame,angle){
+  cx.save(); cx.translate(size/2,size/2); cx.rotate(angle); cx.translate(-size/2,-size/2);
+  const wiggle=frame===0?0:1.4;
+  cx.fillStyle='#caa46a'; cx.strokeStyle='#5c4322'; cx.lineWidth=1;
+  [0,4,8].forEach((off,i)=>{ cx.beginPath(); cx.ellipse(size/2+(i%2?wiggle:-wiggle),3+off,4.2-off*0.15,3.2,0,0,Math.PI*2); cx.fill(); cx.stroke(); });
+  cx.fillStyle='#2c1c0d'; cx.beginPath(); cx.arc(size/2,3,1.1,0,Math.PI*2); cx.fill();
+  cx.restore();
+}
+function buildUnitTextureSet(isHarvester){
+  const set=[];
+  for(let d=0;d<DIRS;d++) set.push([0,1].map(frame=>canvasTexture(TILE,(cx,size)=>vehicleCanvas(cx,size,frame,dirAngle(d),isHarvester))));
+  return set;
+}
+function buildWormTextures(){
+  const set=[];
+  for(let d=0;d<DIRS;d++) set.push([0,1].map(frame=>canvasTexture(TILE,(cx,size)=>wormCanvas(cx,size,frame,dirAngle(d)))));
+  return set;
+}
+const TEX = {
+  harvester: buildUnitTextureSet(true),
+  trooper:   buildUnitTextureSet(false),
+  worm: buildWormTextures(),
+  spice: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#e0522a'; cx.beginPath(); cx.arc(size/2,size/2,6,0,Math.PI*2); cx.fill(); cx.fillStyle='rgba(255,180,120,.6)'; cx.beginPath(); cx.arc(size/2-1.5,size/2-1.5,2.2,0,Math.PI*2); cx.fill(); }),
+  turbine: canvasTexture(TILE,(cx,size)=>{ cx.strokeStyle='#ffffff'; cx.lineWidth=1.4; cx.beginPath(); cx.moveTo(size/2,3); cx.lineTo(size/2,size-2); cx.stroke(); cx.fillStyle='#ffffff'; cx.beginPath(); cx.arc(size/2,4,3,0,Math.PI*2); cx.fill(); }),
+  silo: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.fillRect(size/2-5,3,10,size-6); cx.strokeStyle='#dddddd'; cx.strokeRect(size/2-5,3,10,size-6); }),
+  base: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.fillRect(2,2,size-4,size-4); cx.strokeStyle='#000'; cx.strokeRect(2,2,size-4,size-4); }),
+  grassA: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#5c7a3a'; cx.fillRect(0,0,size,size); }),
+  grassB: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#547231'; cx.fillRect(0,0,size,size); }),
+  desertA: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#caa46a'; cx.fillRect(0,0,size,size); }),
+  desertB: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#c29a5e'; cx.fillRect(0,0,size,size); }),
+  mountainA: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#3a2f22'; cx.fillRect(0,0,size,size); cx.fillStyle='#4a3c2c'; cx.beginPath(); cx.moveTo(2,size-2); cx.lineTo(size/2,3); cx.lineTo(size-2,size-2); cx.closePath(); cx.fill(); }),
+  mountainB: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#352a1e'; cx.fillRect(0,0,size,size); cx.fillStyle='#453727'; cx.beginPath(); cx.moveTo(2,size-2); cx.lineTo(size/2-2,4); cx.lineTo(size-2,size-2); cx.closePath(); cx.fill(); }),
+  fog: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#0c0805'; cx.fillRect(0,0,size,size); })
+};
+
+// ================= terrain generation =================
+let terrain, spiceMap, buildingMap, explored;
+let fogSprites, groundSprites;
+
+function inBounds(x,y){ return x>=0&&y>=0&&x<MAPW&&y<MAPH; }
+
+function generateTerrain(){
+  terrain=[]; for(let y=0;y<MAPH;y++){ terrain.push(new Array(MAPW).fill('grass')); }
+  const total=MAPW*MAPH;
+  paintBlobs(Math.floor(total*0.20), 26, 'mountain', ()=>true);
+  paintBlobs(Math.floor(total*0.40), 34, 'desert', (x,y)=>terrain[y][x]!=='mountain');
+  // remainder stays grass (~40%)
+}
+function paintBlobs(targetCount, numSeeds, type, allowed){
+  let painted=0;
+  const frontier=[];
+  for(let i=0;i<numSeeds && painted<targetCount;i++){
+    let tries=0, x,y;
+    do{ x=Math.floor(Math.random()*MAPW); y=Math.floor(Math.random()*MAPH); tries++; }
+    while(tries<60 && !(terrain[y][x]==='grass' && allowed(x,y)));
+    if(terrain[y][x]==='grass' && allowed(x,y)){ terrain[y][x]=type; painted++; frontier.push({x,y}); }
+  }
+  const dirs4=[[1,0],[-1,0],[0,1],[0,-1]];
+  while(painted<targetCount && frontier.length){
+    const idx=Math.floor(Math.random()*frontier.length);
+    const tile=frontier[idx];
+    const shuffled=dirs4.slice().sort(()=>Math.random()-0.5);
+    let placed=false;
+    for(const [dx,dy] of shuffled){
+      const nx=tile.x+dx, ny=tile.y+dy;
+      if(inBounds(nx,ny) && terrain[ny][nx]==='grass' && allowed(nx,ny)){
+        terrain[ny][nx]=type; painted++; frontier.push({x:nx,y:ny}); placed=true; break;
+      }
+    }
+    if(!placed) frontier.splice(idx,1);
+  }
+}
+function carveGrassArea(cx,cy,r){
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    const x=cx+dx,y=cy+dy;
+    if(inBounds(x,y) && dx*dx+dy*dy<=r*r) terrain[y][x]='grass';
+  }
+}
+function scatterSpice(){
+  spiceMap=new Map();
+  let placed=0, target=75;
+  let guard=0;
+  while(placed<target && guard<6000){
+    guard++;
+    const x=Math.floor(Math.random()*MAPW), y=Math.floor(Math.random()*MAPH);
+    if(terrain[y][x]==='desert' || (terrain[y][x]==='grass' && Math.random()<0.15)){
+      const key=x+','+y;
+      if(!spiceMap.has(key) && !isNearBase(x,y,4)){
+        spiceMap.set(key, {x,y,amount:80+Math.floor(Math.random()*90)});
+        placed++;
+      }
+    }
+  }
+}
+function isNearBase(x,y,r){
+  return state.houses.some(h=>Math.abs(x-h.base.x)<=r && Math.abs(y-h.base.y)<=r);
+}
+
+// ================= rendering: static world =================
+function buildWorldVisuals(){
+  layerGround.removeChildren(); layerFog.removeChildren(); layerBuildings.removeChildren();
+  groundSprites=[]; fogSprites=[];
+  for(let y=0;y<MAPH;y++){
+    groundSprites.push(new Array(MAPW));
+    fogSprites.push(new Array(MAPW));
+    for(let x=0;x<MAPW;x++){
+      const t=terrain[y][x];
+      const even=(x+y)%2===0;
+      let tex = t==='mountain'? (even?TEX.mountainA:TEX.mountainB) : t==='desert'? (even?TEX.desertA:TEX.desertB) : (even?TEX.grassA:TEX.grassB);
+      const s=new PIXI.Sprite(tex);
+      s.x=x*SZ; s.y=y*SZ; s.scale.set(ZOOM);
+      layerGround.addChild(s);
+      groundSprites[y][x]=s;
+
+      const f=new PIXI.Sprite(TEX.fog);
+      f.x=x*SZ; f.y=y*SZ; f.scale.set(ZOOM);
+      layerFog.addChild(f);
+      fogSprites[y][x]=f;
+    }
+  }
+  redrawSpiceAndBuildings();
+}
+let spiceLabels=[];
+function redrawSpiceAndBuildings(){
+  layerBuildings.removeChildren();
+  spiceLabels=[];
+  spiceMap.forEach(dep=>{
+    if(dep.amount<=0) return;
+    const sp=new PIXI.Sprite(TEX.spice);
+    sp.anchor.set(0.5); sp.x=dep.x*SZ+SZ/2; sp.y=dep.y*SZ+SZ/2;
+    sp.scale.set(ZOOM*Math.max(0.6,Math.min(1.3,dep.amount/120)));
+    sp._pulse=Math.random()*Math.PI*2;
+    layerBuildings.addChild(sp);
+    const label=new PIXI.Text(String(dep.amount),{fontFamily:'monospace',fontSize:9,fill:0x2a1408});
+    label.x=dep.x*SZ+2; label.y=dep.y*SZ+SZ-12;
+    layerBuildings.addChild(label);
+  });
+  buildingMap.forEach(b=>{
+    const tex = b.type==='turbine'?TEX.turbine:TEX.silo;
+    const sp=new PIXI.Sprite(tex); sp.x=b.x*SZ; sp.y=b.y*SZ; sp.scale.set(ZOOM);
+    const owner=houseById(b.owner);
+    if(owner) sp.tint=owner.color;
+    layerBuildings.addChild(sp);
+  });
+  state.houses.forEach(h=>{
+    const sp=new PIXI.Sprite(TEX.base); sp.x=h.base.x*SZ; sp.y=h.base.y*SZ; sp.scale.set(ZOOM);
+    sp.tint=h.color; if(!h.alive) sp.alpha=0.35;
+    layerBuildings.addChild(sp);
+  });
+}
+
+function revealAround(tx,ty,radius){
+  for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
+    const x=tx+dx,y=ty+dy;
+    if(!inBounds(x,y)) continue;
+    if(dx*dx+dy*dy>radius*radius) continue;
+    if(!explored[y][x]){
+      explored[y][x]=true;
+      const f=fogSprites[y][x];
+      if(f){ layerFog.removeChild(f); fogSprites[y][x]=null; }
+    }
+  }
+}
+
+// ================= units / state =================
+let state, learning, gameOver, uiMode=null;
+let idAcc=1;
+
+function makeUnit(ownerId,type,x,y){
+  return { id:idAcc++, owner:ownerId, type, x,y, hp:type==='trooper'?TROOP_HP:null, carrying:0,
+    order:null, dir:0, frame:0, moving:false, sprite:null, moveFrom:null, moveTo:null, moveStart:0 };
+}
+function addLog(msg){ state.log.push(msg); if(state.log.length>60) state.log.shift(); renderLog(); }
+
+function houseById(id){ return state.houses.find(h=>h.id===id); }
+function playerHouse(){ return state.houses.find(h=>!h.ai); }
+function allUnits(){ return state.houses.flatMap(h=>h.units); }
+function enemyHousesOf(house){ return state.houses.filter(h=>h!==house && h.alive); }
+
+function textureFor(u){ return TEX[u.type][u.dir][u.frame]; }
+function ensureSprite(u){
+  if(!u.sprite){
+    u.sprite=new PIXI.Sprite(textureFor(u)); u.sprite.anchor.set(0.5); u.sprite.scale.set(ZOOM);
+    u.sprite.tint=houseById(u.owner).color;
+    u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; layerUnits.addChild(u.sprite);
+  }
+}
+function ensureWormSprite(w){
+  if(!w.sprite){
+    w.sprite=new PIXI.Sprite(TEX.worm[w.dir][w.frame]); w.sprite.anchor.set(0.5); w.sprite.scale.set(ZOOM);
+    w.sprite.x=w.x*SZ+SZ/2; w.sprite.y=w.y*SZ+SZ/2; layerUnits.addChild(w.sprite);
+  }
+}
+function syncAllSprites(){
+  state.houses.forEach(h=>h.units.forEach(ensureSprite));
+  state.worms.forEach(ensureWormSprite);
+}
+
+let selectionRing=null;
+function updateSelectionRing(){
+  if(selectionRing){ layerFx.removeChild(selectionRing); selectionRing=null; }
+  if(state.selectedUnit){
+    const u=state.selectedUnit;
+    selectionRing=new PIXI.Graphics();
+    selectionRing.lineStyle(2,0xffffff,0.9); selectionRing.drawCircle(0,0,SZ*0.4);
+    selectionRing.x=u.x*SZ+SZ/2; selectionRing.y=u.y*SZ+SZ/2;
+    layerFx.addChild(selectionRing);
+  }
+}
+
+app.ticker.add((delta)=>{
+  if(!state) return;
+  const now=performance.now();
+  const ph=playerHouse();
+  state.houses.forEach(h=>{
+    h.units.forEach(u=>{
+      if(!u.sprite) return;
+      u.sprite.texture=textureFor(u);
+      u.sprite.tint=h.color;
+      if(u.moving){
+        const t=Math.min(1,(now-u.moveStart)/MOVE_MS);
+        u.sprite.x=u.moveFrom.x+(u.moveTo.x-u.moveFrom.x)*t;
+        u.sprite.y=u.moveFrom.y+(u.moveTo.y-u.moveFrom.y)*t;
+        u.frame=Math.floor(now/140)%2;
+        if(t>=1){ u.moving=false; u.frame=0; }
+      } else { u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; }
+      u.sprite.visible = (h===ph) || !!(explored[u.y] && explored[u.y][u.x]);
+    });
+  });
+  state.worms.forEach(w=>{
+    if(!w.sprite) return;
+    w.frame=Math.floor(now/220)%2; w.sprite.texture=TEX.worm[w.dir][w.frame];
+    if(w.moving){
+      const t=Math.min(1,(now-w.moveStart)/MOVE_MS);
+      w.sprite.x=w.moveFrom.x+(w.moveTo.x-w.moveFrom.x)*t;
+      w.sprite.y=w.moveFrom.y+(w.moveTo.y-w.moveFrom.y)*t;
+      if(t>=1) w.moving=false;
+    } else { w.sprite.x=w.x*SZ+SZ/2; w.sprite.y=w.y*SZ+SZ/2; }
+    w.sprite.visible = !!(explored[w.y] && explored[w.y][w.x]);
+  });
+  layerBuildings.children.forEach(c=>{ if(c._pulse!==undefined){ c._pulse+=0.04*delta; c.alpha=0.85+0.15*Math.sin(c._pulse); } });
+  if(selectionRing && state.selectedUnit){
+    selectionRing.x=state.selectedUnit.x*SZ+SZ/2; selectionRing.y=state.selectedUnit.y*SZ+SZ/2;
+    selectionRing.rotation+=0.02*delta;
+  }
+});
+
+function renderLog(){ const el=document.getElementById('log'); el.innerHTML=state.log.map(m=>'<div>'+m+'</div>').join(''); el.scrollTop=el.scrollHeight; }
+function renderStats(){
+  document.getElementById('turnBadge').textContent=state.turn;
+  const ph=playerHouse();
+  document.getElementById('playerHouseTitle').textContent='Your holdings — House '+ph.name;
+  document.getElementById('pSpice').textContent=Math.floor(ph.spice);
+  document.getElementById('pCap').textContent=ph.cap;
+  document.getElementById('pPower').textContent=ph.power;
+  document.getElementById('pArmy').textContent=ph.units.filter(u=>u.type==='trooper').length;
+  document.getElementById('pStronghold').textContent=Math.max(0,Math.ceil(ph.baseHp))+' / '+ph.baseHpMax;
+
+  const rivalsEl=document.getElementById('rivalsContainer');
+  rivalsEl.innerHTML='';
+  state.houses.filter(h=>h!==ph).forEach(h=>{
+    const div=document.createElement('div');
+    div.className='rivalPanel'+(h.alive?'':' eliminated');
+    div.style.borderLeftColor=h.colorCss;
+    div.innerHTML =
+      '<div class="rname" style="color:'+h.colorCss+'">'+h.name+(h.alive?'':' — Eliminated')+'</div>'+
+      '<div class="statRow"><span>Spice</span><span>'+Math.floor(h.spice)+'</span></div>'+
+      '<div class="statRow"><span>Army</span><span>'+h.units.filter(u=>u.type==='trooper').length+'</span></div>'+
+      '<div class="statRow"><span>Stronghold</span><span>'+Math.max(0,Math.ceil(h.baseHp))+' / '+h.baseHpMax+'</span></div>';
+    rivalsEl.appendChild(div);
+  });
+
+  document.getElementById('buildHarvester').disabled=ph.spice<HARVESTER_COST || gameOver;
+  document.getElementById('buildTurbine').disabled=ph.spice<TURBINE_COST || gameOver;
+  document.getElementById('buildSilo').disabled=ph.spice<SILO_COST || gameOver;
+  document.getElementById('recruitTroop').disabled=ph.spice<TROOP_COST || gameOver;
+}
+
+// ================= movement helpers =================
+function passable(x,y){ return inBounds(x,y) && terrain[y][x]!=='mountain'; }
+function beginStep(u,nx,ny){
+  const dIdx=dirIndexFromDelta(nx-u.x, ny-u.y); if(dIdx!==null) u.dir=dIdx;
+  u.moveFrom={x:u.x*SZ+SZ/2,y:u.y*SZ+SZ/2}; u.x=nx; u.y=ny;
+  u.moveTo={x:u.x*SZ+SZ/2,y:u.y*SZ+SZ/2}; u.moveStart=performance.now(); u.moving=true;
+}
+function stepToward(u,tx,ty){
+  const dx=Math.sign(tx-u.x), dy=Math.sign(ty-u.y);
+  if(dx===0&&dy===0) return false;
+  const cand=[[dx,dy],[dx,0],[0,dy]];
+  for(const [cx,cy] of cand){
+    if(cx===0&&cy===0) continue;
+    const nx=u.x+cx, ny=u.y+cy;
+    if(passable(nx,ny)){ beginStep(u,nx,ny); return true; }
+  }
+  return false;
+}
+function beginWormStep(w,nx,ny){
+  const dIdx=dirIndexFromDelta(nx-w.x, ny-w.y); if(dIdx!==null) w.dir=dIdx;
+  w.moveFrom={x:w.x*SZ+SZ/2,y:w.y*SZ+SZ/2}; w.x=nx; w.y=ny;
+  w.moveTo={x:w.x*SZ+SZ/2,y:w.y*SZ+SZ/2}; w.moveStart=performance.now(); w.moving=true;
+}
+function findFreeTileNear(cx,cy){
+  for(let r=1;r<8;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    const x=cx+dx,y=cy+dy;
+    if(!inBounds(x,y)) continue;
+    if(terrain[y][x]!=='mountain' && !buildingMap.has(x+','+y)) return {x,y};
+  }
+  return {x:cx,y:cy};
+}
+
+// ================= turn resolution =================
+function harvestAt(u){
+  const key=u.x+','+u.y;
+  const dep=spiceMap.get(key);
+  if(dep && dep.amount>0 && u.carrying<HARVESTER_CAP){
+    const take=Math.min(HARVEST_RATE, dep.amount, HARVESTER_CAP-u.carrying);
+    dep.amount-=take; u.carrying+=take;
+    if(dep.amount<=0) spiceMap.delete(key);
+  }
+}
+function resolveHouseOrders(house){
+  house.units.forEach(u=>{
+    if(!u.order) return;
+    if(u.order.kind==='attack'){
+      const targetHouse=houseById(u.order.targetHouseId);
+      if(!targetHouse || !targetHouse.alive){ u.order=null; return; }
+      let tx,ty,targetUnit=null,targetIsBase=false;
+      if(u.order.targetId==='base'){ tx=targetHouse.base.x; ty=targetHouse.base.y; targetIsBase=true; }
+      else { targetUnit=targetHouse.units.find(t=>t.id===u.order.targetId); if(!targetUnit){ u.order=null; return; } tx=targetUnit.x; ty=targetUnit.y; }
+      const dist=Math.max(Math.abs(u.x-tx),Math.abs(u.y-ty));
+      if(dist<=1){
+        if(u.type!=='trooper'){ u.order=null; return; }
+        if(targetIsBase){
+          const stolen=Math.min(targetHouse.spice, 10+Math.random()*10);
+          const dmg=10+Math.floor(Math.random()*7);
+          targetHouse.spice-=stolen; house.spice+=stolen;
+          targetHouse.baseHp-=dmg; targetHouse.lastAttacker=house.id;
+          addLog('House '+house.name+"'s trooper strikes House "+targetHouse.name+"'s stronghold — "+Math.floor(stolen)+' spice seized, '+dmg+' damage dealt.');
+        } else if(targetUnit){
+          const dmg=3+Math.floor(Math.random()*4);
+          targetUnit.hp-=dmg;
+          addLog('House '+house.name+"'s trooper hits House "+targetHouse.name+"'s "+targetUnit.type+' for '+dmg+'.');
+          if(targetUnit.hp<=0){
+            addLog("House "+targetHouse.name+"'s "+targetUnit.type+' is destroyed.');
+            const idx=targetHouse.units.indexOf(targetUnit);
+            if(idx>=0){ if(targetUnit.sprite) layerUnits.removeChild(targetUnit.sprite); targetHouse.units.splice(idx,1); }
+            if(state.selectedUnit===targetUnit) deselect();
+            u.order=null;
+          }
+        }
+      } else {
+        for(let s=0;s<STEPS_PER_TURN;s++){ if(Math.max(Math.abs(u.x-tx),Math.abs(u.y-ty))<=1) break; if(!stepToward(u,tx,ty)) break; }
+      }
+      return;
+    }
+    for(let s=0;s<STEPS_PER_TURN;s++){
+      if(u.x===u.order.x && u.y===u.order.y) break;
+      if(!stepToward(u,u.order.x,u.order.y)) break;
+      if(u.type==='harvester') harvestAt(u);
+    }
+    if(u.x===u.order.x && u.y===u.order.y) u.order=null;
+  });
+}
+function autoHarvestAndReturn(house){
+  house.units.forEach(u=>{
+    if(u.type!=='harvester') return;
+    if(!u.order && u.carrying<HARVESTER_CAP) harvestAt(u);
+    if(u.carrying>=HARVESTER_CAP && !u.order) u.order={kind:'move', x:house.base.x, y:house.base.y};
+    if(u.x===house.base.x && u.y===house.base.y && u.carrying>0){
+      const add=Math.min(u.carrying, house.cap-house.spice);
+      house.spice+=add; u.carrying-=add;
+    }
+  });
+}
+function moveWorms(){
+  const units=allUnits();
+  state.worms.forEach(w=>{
+    if(w.rest>0){ w.rest--; return; }
+    let best=null,bestDist=8;
+    units.forEach(u=>{
+      const d=Math.abs(u.x-w.x)+Math.abs(u.y-w.y);
+      if(d<bestDist){ bestDist=d; best=u; }
+    });
+    let nx=w.x, ny=w.y, tries=0;
+    do{
+      if(best && Math.random()<0.7){ nx=w.x+Math.sign(best.x-w.x); ny=w.y+Math.sign(best.y-w.y); }
+      else { nx=w.x+(Math.floor(Math.random()*3)-1); ny=w.y+(Math.floor(Math.random()*3)-1); }
+      tries++;
+    } while(!passable(nx,ny) && tries<6);
+    if(passable(nx,ny)) beginWormStep(w,nx,ny);
+  });
+}
+function resolveWormStrikes(){
+  const ph=playerHouse();
+  state.houses.forEach(house=>{
+    house.units=house.units.filter(u=>{
+      const hit=state.worms.some(w=>w.x===u.x && w.y===u.y);
+      if(hit){
+        addLog((house===ph?'⚠ Your':"House "+house.name+"'s")+' '+u.type+' was devoured by a sandworm'+(u.carrying>0?' (lost '+Math.floor(u.carrying)+' spice)':'')+'.');
+        state.worms.forEach(w=>{ if(w.x===u.x&&w.y===u.y) w.rest=2; });
+        if(u.sprite) layerUnits.removeChild(u.sprite);
+        if(state.selectedUnit===u) deselect();
+        return false;
+      }
+      return true;
+    });
+  });
+}
+function maybeSpawnSpice(){
+  if(Math.random()<0.25 && spiceMap.size<90){
+    for(let tries=0;tries<25;tries++){
+      const x=Math.floor(Math.random()*MAPW), y=Math.floor(Math.random()*MAPH);
+      if(terrain[y][x]==='desert' && !spiceMap.has(x+','+y)){
+        spiceMap.set(x+','+y, {x,y,amount:60+Math.floor(Math.random()*70)}); break;
+      }
+    }
+  }
+}
+
+// ================= AI =================
+function aiTurnForHouse(house){
+  house.units.filter(u=>u.type==='harvester').forEach(h=>{
+    if(!h.order){
+      let best=null,bd=99999;
+      spiceMap.forEach(dep=>{ const d=Math.abs(dep.x-h.x)+Math.abs(dep.y-h.y); if(d<bd){bd=d;best={x:dep.x,y:dep.y};} });
+      if(best) h.order={kind:'move', x:best.x, y:best.y};
+    }
+  });
+  const profile=learning[house.id];
+  const pers=HOUSE_PERSONALITY[house.id];
+  const economyWeight=profile.economyWeight*pers.econMul;
+  const militaryWeight=profile.militaryWeight*pers.milMul;
+  const totalW=economyWeight+militaryWeight;
+  const econShare=economyWeight/totalW;
+  let budget=house.spice, spentEcon=0, spentMil=0;
+  if(Math.random()<econShare){
+    if(budget>=HARVESTER_COST && house.units.filter(u=>u.type==='harvester').length<7 && Math.random()<0.6){
+      house.spice-=HARVESTER_COST; spentEcon+=HARVESTER_COST;
+      const spot=findFreeTileNear(house.base.x,house.base.y);
+      const h=makeUnit(house.id,'harvester',house.base.x,house.base.y); h.order={kind:'move',x:spot.x,y:spot.y};
+      house.units.push(h); addLog('House '+house.name+' deploys a new harvester.');
+    } else if(budget>=TURBINE_COST){
+      const spot=findFreeTileNear(house.base.x,house.base.y);
+      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:house.id});
+      house.spice-=TURBINE_COST; house.power+=6; spentEcon+=TURBINE_COST; redrawSpiceAndBuildings();
+    } else if(budget>=SILO_COST){
+      const spot=findFreeTileNear(house.base.x,house.base.y);
+      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:house.id});
+      house.spice-=SILO_COST; house.cap+=80; spentEcon+=SILO_COST; redrawSpiceAndBuildings();
+    }
+  } else if(budget>=TROOP_COST){
+    const n=Math.min(3, Math.floor(budget/TROOP_COST));
+    for(let i=0;i<n;i++) house.units.push(makeUnit(house.id,'trooper',house.base.x,house.base.y));
+    house.spice-=n*TROOP_COST; spentMil+=n*TROOP_COST;
+  }
+  house.spentEconomy+=spentEcon; house.spentMilitary+=spentMil;
+
+  const myArmy=house.units.filter(u=>u.type==='trooper');
+  const rivals=enemyHousesOf(house);
+  if(rivals.length===0 || myArmy.length<3) return;
+  let target=null;
+  rivals.forEach(r=>{
+    const rArmy=r.units.filter(u=>u.type==='trooper').length;
+    if(!target || rArmy<target.army || (rArmy===target.army && r.spice<target.spice)) target={house:r, army:rArmy, spice:r.spice};
+  });
+  const aggression=profile.aggression+pers.aggroAdd;
+  if(target && myArmy.length>target.army*(1+aggression) && Math.random()<0.5){
+    myArmy.forEach(t=>{ if(!t.order) t.order={kind:'attack', targetHouseId:target.house.id, targetId:'base'}; });
+    addLog('House '+house.name+' musters an assault on House '+target.house.name+"'s stronghold!");
+  }
+}
+
+function processEliminations(){
+  state.houses.forEach(h=>{
+    if(h.alive && h.baseHp<=0){
+      h.alive=false;
+      h.units.forEach(u=>{ if(u.sprite) layerUnits.removeChild(u.sprite); });
+      h.units=[];
+      const finisher=h.lastAttacker?houseById(h.lastAttacker):null;
+      addLog("House "+h.name+"'s stronghold has fallen! House "+h.name+' is eliminated.'+(finisher?(' House '+finisher.name+' delivered the final blow.'):''));
+      if(state.selectedUnit && state.selectedUnit.owner===h.id) deselect();
+    }
+  });
+  redrawSpiceAndBuildings();
+}
+
+function checkGameEnd(){
+  const ph=playerHouse();
+  let winner=null;
+  state.houses.forEach(h=>{ if(h.alive && h.spice>=SPICE_TARGET && !winner) winner=h; });
+  if(winner) return winner===ph ? {type:'player_econ'} : {type:'ai_econ', winnerId:winner.id};
+  if(!ph.alive) return {type:'player_eliminated', attackerId:ph.lastAttacker};
+  const alive=state.houses.filter(h=>h.alive);
+  if(alive.length===1 && alive[0]===ph) return {type:'player_survivor'};
+  return null;
+}
+
+const DEFAULT_LEARNING_ENTRY={ games:0, wins:0, losses:0, economyWeight:1.0, militaryWeight:1.0, aggression:0.15 };
+const LEARNING_KEY='galacticus-ai-profile-v1';
+async function loadLearning(){
+  let profile=null;
+  try{
+    if(window.storage && window.storage.get){
+      const res=await window.storage.get(LEARNING_KEY, false);
+      if(res && res.value) profile=JSON.parse(res.value);
+    } else {
+      const raw=localStorage.getItem(LEARNING_KEY);
+      if(raw) profile=JSON.parse(raw);
+    }
+  } catch(e){}
+  const out={};
+  HOUSE_DEFS.forEach(hd=>{ out[hd.id] = (profile && profile[hd.id]) ? profile[hd.id] : {...DEFAULT_LEARNING_ENTRY}; });
+  return out;
+}
+async function saveLearning(profile){
+  try{
+    if(window.storage && window.storage.set){ await window.storage.set(LEARNING_KEY, JSON.stringify(profile), false); }
+    else { localStorage.setItem(LEARNING_KEY, JSON.stringify(profile)); }
+  } catch(e){}
+}
+
+async function endGame(result){
+  gameOver=true;
+  const overlay=document.getElementById('overlay');
+  const ph=playerHouse();
+  state.houses.forEach(h=>{
+    if(!h.ai) return;
+    const L=learning[h.id]; L.games++;
+    if(result.type==='player_econ'){
+      L.losses++; L.economyWeight=Math.min(3, L.economyWeight+0.2);
+    } else if(result.type==='ai_econ'){
+      if(h.id===result.winnerId) L.wins++; else L.losses++;
+    } else if(result.type==='player_eliminated'){
+      if(h.id===result.attackerId){ L.wins++; L.militaryWeight=Math.min(3, L.militaryWeight+0.25); L.aggression=Math.min(0.6, L.aggression+0.05); }
+      else L.losses++;
+    } else if(result.type==='player_survivor'){
+      L.losses++; L.militaryWeight=Math.min(3, L.militaryWeight+0.2); L.aggression=Math.min(0.6, L.aggression+0.05);
+    }
+  });
+  let title, body;
+  if(result.type==='player_econ'){ title='Victory'; body='House '+ph.name+' banked '+SPICE_TARGET+' spice first and claims the Spice Throne.'; }
+  else if(result.type==='ai_econ'){ title='Defeat'; body='House '+houseById(result.winnerId).name+' reached '+SPICE_TARGET+' banked spice first.'; }
+  else if(result.type==='player_eliminated'){ title='Defeat'; body="House "+ph.name+"'s stronghold was overrun"+(result.attackerId?(' by House '+houseById(result.attackerId).name):'')+'.'; }
+  else if(result.type==='player_survivor'){ title='Victory'; body='House '+ph.name+' stands as the last power in the Deep Desert.'; }
+  document.getElementById('resultTitle').textContent=title;
+  document.getElementById('resultBody').textContent=body;
+  await saveLearning(learning);
+  const standings=state.houses.map(h=>h.name+': '+Math.floor(h.spice)+' spice'+(h.alive?'':' (eliminated)')).join(' · ');
+  document.getElementById('learnBody').textContent='Final standings — '+standings;
+  overlay.style.display='flex';
+}
+
+async function endTurn(){
+  if(!state || gameOver) return;
+  deselect();
+  state.houses.forEach(h=>{ if(h.alive) resolveHouseOrders(h); });
+  state.houses.forEach(h=>{ if(h.alive) autoHarvestAndReturn(h); });
+  moveWorms();
+  const ph=playerHouse();
+  ph.units.forEach(u=>revealAround(u.x,u.y,VISION_RADIUS));
+  setTimeout(()=>{ resolveWormStrikes(); redrawSpiceAndBuildings(); renderStats(); }, MOVE_MS+30);
+  maybeSpawnSpice();
+  state.houses.forEach(h=>{ if(h.ai && h.alive) aiTurnForHouse(h); });
+  state.turn++;
+  processEliminations();
+  const result=checkGameEnd();
+  renderStats();
+  if(result) await endGame(result);
+}
+
+// ================= selection / context menu / build placement / input =================
+const ctxMenu=document.getElementById('ctxMenu');
+const modeHint=document.getElementById('modeHint');
+
+function deselect(){
+  if(!state) return;
+  state.selectedUnit=null; uiMode=null;
+  ctxMenu.style.display='none'; modeHint.style.display='none';
+  updateSelectionRing();
+}
+function selectUnit(u){ state.selectedUnit=u; uiMode=null; updateSelectionRing(); openCtxMenuFor(u); }
+function openCtxMenuFor(u){
+  const rect=app.view.getBoundingClientRect();
+  const sx=rect.left+window.scrollX+(u.x*SZ-cam.x)+SZ+6;
+  const sy=rect.top+window.scrollY+(u.y*SZ-cam.y);
+  ctxMenu.style.left=sx+'px'; ctxMenu.style.top=sy+'px';
+  document.getElementById('ctxTitle').textContent=(u.type==='harvester'?'Harvester':'Trooper')+' #'+u.id;
+  document.getElementById('ctxAttack').style.display=u.type==='trooper'?'flex':'none';
+  ctxMenu.style.display='flex'; modeHint.style.display='none';
+}
+document.getElementById('ctxMove').onclick=()=>{ uiMode={type:'move', unit:state.selectedUnit}; ctxMenu.style.display='none'; modeHint.textContent='MOVE — choose a tile'; modeHint.style.display='block'; };
+document.getElementById('ctxAttack').onclick=()=>{ uiMode={type:'attack', unit:state.selectedUnit}; ctxMenu.style.display='none'; modeHint.textContent='ATTACK — choose a target'; modeHint.style.display='block'; };
+document.getElementById('ctxRetreat').onclick=()=>{
+  const u=state.selectedUnit; const owner=houseById(u.owner);
+  u.order={kind:'move', x:owner.base.x, y:owner.base.y};
+  addLog("House "+owner.name+"'s "+u.type+' retreats to the stronghold.');
+  deselect();
+};
+document.getElementById('ctxCancel').onclick=()=>{ deselect(); };
+
+function tileFromEvent(e){
+  const rect=app.view.getBoundingClientRect();
+  const px=e.clientX-rect.left+cam.x, py=e.clientY-rect.top+cam.y;
+  return {x:Math.floor(px/SZ), y:Math.floor(py/SZ)};
+}
+
+let dragState=null;
+app.view.addEventListener('pointerdown',(e)=>{
+  dragState={startX:e.clientX, startY:e.clientY, camX:cam.x, camY:cam.y, moved:false};
+});
+app.view.addEventListener('pointermove',(e)=>{
+  if(!dragState) return;
+  const dx=e.clientX-dragState.startX, dy=e.clientY-dragState.startY;
+  if(Math.abs(dx)>4 || Math.abs(dy)>4){
+    dragState.moved=true;
+    boardHost.classList.add('dragging');
+    cam.x=dragState.camX-dx; cam.y=dragState.camY-dy; clampCamera();
+  }
+});
+window.addEventListener('pointerup',(e)=>{
+  if(!dragState) return;
+  boardHost.classList.remove('dragging');
+  if(!dragState.moved) handleBoardClick(e);
+  dragState=null;
+});
+
+function handleBoardClick(e){
+  if(!state || gameOver) return;
+  const {x,y}=tileFromEvent(e);
+  if(!inBounds(x,y)) return;
+  const ph=playerHouse();
+
+  if(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo')){
+    const key=x+','+y;
+    if(terrain[y][x]==='mountain'){ addLog('Cannot build on rocky mountain terrain.'); }
+    else if(buildingMap.has(key) || spiceMap.has(key)){ addLog('That tile is already occupied.'); }
+    else if(!explored[y][x]){ addLog('Choose a tile you have already explored.'); }
+    else {
+      const cost = uiMode.type==='place-turbine' ? TURBINE_COST : SILO_COST;
+      if(ph.spice>=cost){
+        ph.spice-=cost;
+        if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id}); ph.power+=6; addLog('Wind turbine raised — power +6/turn.'); }
+        else { buildingMap.set(key,{x,y,type:'silo',owner:ph.id}); ph.cap+=80; addLog('Silo constructed — capacity +80.'); }
+        redrawSpiceAndBuildings();
+      }
+    }
+    uiMode=null; modeHint.style.display='none'; renderStats();
+    return;
+  }
+
+  if(uiMode){
+    const u=uiMode.unit;
+    if(uiMode.type==='move'){
+      if(passable(x,y)){ u.order={kind:'move', x, y}; addLog('Order given: move to ('+x+','+y+').'); }
+      else addLog('Rocky mountains block that route.');
+    } else if(uiMode.type==='attack'){
+      const enemyUnit=state.houses.filter(h=>h!==ph).flatMap(h=>h.units).find(t=>t.x===x&&t.y===y);
+      if(enemyUnit){ u.order={kind:'attack', targetHouseId:enemyUnit.owner, targetId:enemyUnit.id}; addLog('Order given: attack House '+houseById(enemyUnit.owner).name+"'s "+enemyUnit.type+'.'); }
+      else {
+        const targetHouse=state.houses.find(h=>h!==ph && h.alive && h.base.x===x && h.base.y===y);
+        if(targetHouse){ u.order={kind:'attack', targetHouseId:targetHouse.id, targetId:'base'}; addLog('Order given: attack House '+targetHouse.name+"'s stronghold."); }
+        else addLog('No target there — attack cancelled.');
+      }
+    }
+    deselect();
+    return;
+  }
+
+  const clicked=ph.units.find(u=>u.x===x&&u.y===y);
+  if(clicked){ selectUnit(clicked); return; }
+  deselect();
+}
+
+// ================= build/recruit buttons =================
+document.getElementById('buildHarvester').onclick=()=>{
+  const ph=playerHouse();
+  if(!ph || ph.spice<HARVESTER_COST || gameOver) return;
+  ph.spice-=HARVESTER_COST;
+  ph.units.push(makeUnit(ph.id,'harvester', ph.base.x, ph.base.y));
+  addLog('New harvester deployed.'); renderStats();
+};
+document.getElementById('buildTurbine').onclick=()=>{
+  const ph=playerHouse();
+  if(!ph || ph.spice<TURBINE_COST || gameOver) return;
+  uiMode={type:'place-turbine'}; modeHint.textContent='PLACE TURBINE — choose a grass/desert tile'; modeHint.style.display='block';
+};
+document.getElementById('buildSilo').onclick=()=>{
+  const ph=playerHouse();
+  if(!ph || ph.spice<SILO_COST || gameOver) return;
+  uiMode={type:'place-silo'}; modeHint.textContent='PLACE SILO — choose a grass/desert tile'; modeHint.style.display='block';
+};
+document.getElementById('recruitTroop').onclick=()=>{
+  const ph=playerHouse();
+  if(!ph || ph.spice<TROOP_COST || gameOver) return;
+  ph.spice-=TROOP_COST;
+  ph.units.push(makeUnit(ph.id,'trooper', ph.base.x, ph.base.y));
+  addLog('A trooper joins your army.'); renderStats();
+};
+document.getElementById('endTurnBtn').onclick=()=>{ endTurn(); };
+document.getElementById('restartBtn').onclick=()=>{ showHouseSelect(); };
+
+// ================= boot =================
+function newGame(chosenId){
+  generateTerrain();
+  HOUSE_DEFS.forEach(hd=>{ const sp=HOUSE_SPAWNS[hd.id]; carveGrassArea(sp.x,sp.y,7); });
+  buildingMap=new Map();
+  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(false));
+  state={
+    turn:1, log:[], selectedUnit:null,
+    worms:[],
+    houses: HOUSE_DEFS.map(hd=>({
+      id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss,
+      ai: hd.id!==chosenId,
+      base:{...HOUSE_SPAWNS[hd.id]}, baseHp:BASE_HP_MAX, baseHpMax:BASE_HP_MAX,
+      spice:START_SPICE, cap:START_CAP, power:0, units:[],
+      spentEconomy:0, spentMilitary:0, alive:true, lastAttacker:null
+    }))
+  };
+  scatterSpice();
+  for(let i=0;i<WORM_COUNT;i++){
+    let x,y,tries=0;
+    do{ x=Math.floor(Math.random()*MAPW); y=Math.floor(Math.random()*MAPH); tries++; }
+    while(tries<50 && (!passable(x,y) || isNearBase(x,y,10)));
+    state.worms.push({x,y,rest:0,dir:0,frame:0,sprite:null});
+  }
+}
+async function start(chosenId){
+  gameOver=false;
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('houseOverlay').style.display='none';
+  newGame(chosenId);
+  state.houses.forEach(h=>{ h.units.push(makeUnit(h.id,'harvester', h.base.x, h.base.y)); });
+  learning=await loadLearning();
+  const ph=playerHouse();
+  const rivalNames=state.houses.filter(h=>h!==ph).map(h=>h.name+' (played '+learning[h.id].games+' game(s))').join(' and House ');
+  addLog('House '+ph.name+' begins its expedition into the Deep Desert. Rivals: House '+rivalNames+'.');
+  buildWorldVisuals();
+  layerUnits.removeChildren();
+  syncAllSprites();
+  revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
+  centerCameraOn(ph.base.x, ph.base.y);
+  renderStats(); renderLog();
+}
+function showHouseSelect(){
+  document.getElementById('overlay').style.display='none';
+  const el=document.getElementById('houseOverlay');
+  const cardsEl=document.getElementById('houseCards');
+  cardsEl.innerHTML='';
+  HOUSE_DEFS.forEach(hd=>{
+    const card=document.createElement('div');
+    card.className='houseCard';
+    card.innerHTML='<div class="bar" style="background:'+hd.colorCss+'"></div><h3 style="color:'+hd.colorCss+'">'+hd.name+'</h3><p>'+hd.tagline+'</p>';
+    card.onclick=()=>{ start(hd.id); };
+    cardsEl.appendChild(card);
+  });
+  el.style.display='flex';
+}
+showHouseSelect();
+})();
+</script>
+</body>
+</html>
