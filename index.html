@@ -709,7 +709,7 @@ function aiTurnForHouse(house){
       house.spice-=HARVESTER_COST; spentEcon+=HARVESTER_COST;
       const spot=findFreeTileNear(house.base.x,house.base.y);
       const h=makeUnit(house.id,'harvester',house.base.x,house.base.y); h.order={kind:'move',x:spot.x,y:spot.y};
-      house.units.push(h); addLog('House '+house.name+' deploys a new harvester.');
+      house.units.push(h); ensureSprite(h); addLog('House '+house.name+' deploys a new harvester.');
     } else if(budget>=TURBINE_COST){
       const spot=findFreeTileNear(house.base.x,house.base.y);
       buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:house.id});
@@ -721,7 +721,7 @@ function aiTurnForHouse(house){
     }
   } else if(budget>=TROOP_COST){
     const n=Math.min(3, Math.floor(budget/TROOP_COST));
-    for(let i=0;i<n;i++) house.units.push(makeUnit(house.id,'trooper',house.base.x,house.base.y));
+    for(let i=0;i<n;i++){ const t=makeUnit(house.id,'trooper',house.base.x,house.base.y); house.units.push(t); ensureSprite(t); }
     house.spice-=n*TROOP_COST; spentMil+=n*TROOP_COST;
   }
   house.spentEconomy+=spentEcon; house.spentMilitary+=spentMil;
@@ -947,7 +947,8 @@ document.getElementById('buildHarvester').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<HARVESTER_COST || gameOver) return;
   ph.spice-=HARVESTER_COST;
-  ph.units.push(makeUnit(ph.id,'harvester', ph.base.x, ph.base.y));
+  const h=makeUnit(ph.id,'harvester', ph.base.x, ph.base.y);
+  ph.units.push(h); ensureSprite(h);
   addLog('New harvester deployed.'); renderStats();
 };
 document.getElementById('buildTurbine').onclick=()=>{
@@ -964,7 +965,8 @@ document.getElementById('recruitTroop').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<TROOP_COST || gameOver) return;
   ph.spice-=TROOP_COST;
-  ph.units.push(makeUnit(ph.id,'trooper', ph.base.x, ph.base.y));
+  const t=makeUnit(ph.id,'trooper', ph.base.x, ph.base.y);
+  ph.units.push(t); ensureSprite(t);
   addLog('A trooper joins your army.'); renderStats();
 };
 document.getElementById('endTurnBtn').onclick=()=>{ endTurn(); };
