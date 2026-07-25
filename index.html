@@ -18,25 +18,30 @@
     display:flex; align-items:center; justify-content:center; padding:12px;
     overflow-y:auto;
   }
-  #app{ display:flex; gap:12px; width:96vw; height:92vh; max-width:1600px; }
-  @media (max-width:1000px){
-    body{ align-items:flex-start; }
-    #app{ flex-direction:column; width:98vw; height:auto; max-width:none; }
-    #boardWrap{ flex:0 0 auto; min-width:0; }
-    #boardHost{ min-height:320px; height:50vh; }
-    #sidebar{ flex:0 0 auto; min-width:0; width:100%; max-height:none; }
-  }
+  #app{ display:flex; width:96vw; height:92vh; max-width:1600px; }
   .panel{
     background:linear-gradient(180deg,#241609,#180f06);
     border:2px solid var(--sand-3); border-radius:6px;
     box-shadow:0 0 0 1px #000 inset, 0 8px 24px rgba(0,0,0,.5);
   }
-  #boardWrap{ padding:10px; position:relative; flex:0 0 80%; display:flex; flex-direction:column; min-width:0; }
+  #boardWrap{ padding:10px; position:relative; flex:1 1 100%; display:flex; flex-direction:column; min-width:0; }
   h1{ font-size:19px; letter-spacing:3px; text-transform:uppercase; color:var(--spice); margin:0 0 2px 0; text-shadow:0 0 12px rgba(224,82,42,.5); }
   .sub{ font-size:11px; color:var(--sand-2); letter-spacing:1px; margin-bottom:8px; display:flex; justify-content:space-between;}
-  #boardHost{ border-radius:3px; border:1px solid #000; overflow:hidden; line-height:0; flex:1; min-height:0; cursor:grab; }
+  #boardHost{ border-radius:3px; border:1px solid #000; overflow:hidden; line-height:0; flex:1; min-height:0; cursor:grab; position:relative; }
   #boardHost.dragging{cursor:grabbing;}
-  #sidebar{ flex:1 1 20%; min-width:230px; padding:14px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; }
+  #hud{
+    position:absolute; top:10px; right:10px; width:230px; max-height:calc(100% - 20px);
+    overflow-y:auto; background:rgba(20,12,4,.9); border:1px solid var(--sand-3); border-radius:8px;
+    padding:10px 12px; z-index:20; box-shadow:0 6px 18px rgba(0,0,0,.5); pointer-events:auto;
+    line-height:normal;
+  }
+  #actionBar{
+    position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
+    display:flex; gap:8px; z-index:20; background:rgba(20,12,4,.9); padding:8px;
+    border-radius:10px; border:1px solid var(--rust); box-shadow:0 6px 18px rgba(0,0,0,.5);
+    line-height:normal;
+  }
+  #actionBar button{ flex-direction:column; align-items:center; justify-content:center; gap:2px; min-width:92px; text-align:center; font-size:11px; }
   .statRow{ display:flex; justify-content:space-between; font-size:13px; padding:3px 0; border-bottom:1px dashed #4a3520; }
   .statRow b{color:var(--spice);}
   .section-title{ font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--sand-2); margin-top:6px; border-bottom:1px solid var(--sand-3); padding-bottom:3px; }
@@ -49,8 +54,8 @@
   button:active:not(:disabled){transform:scale(.98);}
   button:disabled{opacity:.35; cursor:not-allowed;}
   button small{color:var(--sand-2); font-weight:normal;}
-  #endTurnBtn{ margin-top:auto; background:linear-gradient(180deg,var(--rust),var(--rust-dark)); border-color:#000; justify-content:center; font-weight:bold; letter-spacing:2px; text-transform:uppercase; font-size:13px; }
-  #log{ height:100px; overflow-y:auto; font-size:11px; background:#0f0a05; border:1px solid var(--sand-3); border-radius:4px; padding:6px 8px; color:#d8c19a; line-height:1.5; }
+  #endTurnBtn{ background:linear-gradient(180deg,var(--rust),var(--rust-dark)); border-color:#000; font-weight:bold; letter-spacing:2px; text-transform:uppercase; }
+  #log{ height:90px; overflow-y:auto; font-size:11px; background:#0f0a05; border:1px solid var(--sand-3); border-radius:4px; padding:6px 8px; color:#d8c19a; line-height:1.5; margin-top:6px; }
   #log div:last-child{color:var(--paper); font-weight:bold;}
   .overlay-base{ position:fixed; inset:0; background:rgba(10,6,2,.9); display:none; align-items:center; justify-content:center; z-index:30; padding:16px; }
   .overlay-base .card{ background:var(--night); border:2px solid var(--rust); border-radius:8px; padding:30px 36px; max-width:420px; text-align:center; }
@@ -91,6 +96,15 @@
   .rivalPanel .rname{ font-size:12px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; margin-bottom:2px; }
   .rivalPanel .statRow{ font-size:11px; padding:1px 0; }
   .rivalPanel.eliminated{ opacity:.45; }
+  @media (max-width:700px){
+    body{ align-items:flex-start; }
+    #app{ width:98vw; height:auto; max-width:none; }
+    #boardHost{ min-height:360px; height:74vh; }
+    #hud{ width:172px; font-size:9px; max-height:44%; padding:8px 9px; }
+    #hud .section-title{ font-size:9px; margin-top:4px; }
+    #actionBar{ flex-wrap:wrap; justify-content:center; max-width:96%; gap:5px; padding:6px; bottom:6px; }
+    #actionBar button{ min-width:64px; font-size:9px; padding:5px 6px; }
+  }
 </style>
 </head>
 <body>
@@ -101,7 +115,29 @@
   <div class="panel" id="boardWrap">
     <h1>Galacticus</h1>
     <div class="sub"><span>Spice Throne — Turn <span id="turnBadge">1</span></span><span id="camHint">drag map / arrow keys to scroll</span></div>
-    <div id="boardHost"></div>
+    <div id="boardHost">
+      <div id="hud">
+        <div class="section-title" id="playerHouseTitle">Your holdings</div>
+        <div class="statRow"><span>Spice bank</span><b id="pSpice">0</b></div>
+        <div class="statRow"><span>Silo capacity</span><span id="pCap">100</span></div>
+        <div class="statRow"><span>Power / turn</span><span id="pPower">0</span></div>
+        <div class="statRow"><span>Army (troopers)</span><span id="pArmy">0</span></div>
+        <div class="statRow"><span>Stronghold</span><span id="pStronghold">160 / 160</span></div>
+
+        <div class="section-title">Rival houses</div>
+        <div id="rivalsContainer"></div>
+
+        <div class="section-title">Log</div>
+        <div id="log"></div>
+      </div>
+      <div id="actionBar">
+        <button id="buildHarvester">Harvester<small>60 spice</small></button>
+        <button id="buildTurbine">Wind turbine<small>50 spice</small></button>
+        <button id="buildSilo">Silo<small>70 spice</small></button>
+        <button id="recruitTroop">Recruit trooper<small>25 spice</small></button>
+        <button id="endTurnBtn">End turn ▶</button>
+      </div>
+    </div>
     <div id="modeHint">MOVE — choose a tile</div>
     <div class="legend">
       <span><i class="swatch" style="background:#3a2f22"></i>Rocky mountain (impassable)</span>
@@ -111,29 +147,6 @@
       <span><i class="swatch" style="background:#111"></i>Unexplored (fog)</span>
     </div>
     <div class="hint">Click a vehicle to select it, then Move / Attack / Retreat from the menu. Building buttons ask for a grass or desert tile to place on. Drag the map or use arrow keys to scroll — fog clears as your units explore. Troopers that reach a rival stronghold steal spice and damage it; reduce a stronghold to 0 to eliminate that House.</div>
-  </div>
-
-  <div class="panel" id="sidebar">
-    <div class="section-title" id="playerHouseTitle">Your holdings</div>
-    <div class="statRow"><span>Spice bank</span><b id="pSpice">0</b></div>
-    <div class="statRow"><span>Silo capacity</span><span id="pCap">100</span></div>
-    <div class="statRow"><span>Power / turn</span><span id="pPower">0</span></div>
-    <div class="statRow"><span>Army (troopers)</span><span id="pArmy">0</span></div>
-    <div class="statRow"><span>Stronghold</span><span id="pStronghold">160 / 160</span></div>
-
-    <div class="section-title">Rival houses</div>
-    <div id="rivalsContainer"></div>
-
-    <div class="section-title">Build &amp; recruit</div>
-    <button id="buildHarvester">Harvester <small>60 spice</small></button>
-    <button id="buildTurbine">Wind turbine <small>50 spice · pick a tile</small></button>
-    <button id="buildSilo">Silo <small>70 spice · pick a tile</small></button>
-    <button id="recruitTroop">Recruit trooper <small>25 spice</small></button>
-
-    <div class="section-title">Log</div>
-    <div id="log"></div>
-
-    <button id="endTurnBtn">End turn ▶</button>
   </div>
 </div>
 
