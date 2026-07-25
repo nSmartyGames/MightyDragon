@@ -588,6 +588,22 @@ function findFreeTileNear(cx,cy){
   }
   return {x:cx,y:cy};
 }
+// Spawns pick a tile with no building AND no other unit already on it, so newly
+// created units land visibly apart instead of stacking invisibly on the base tile.
+function findFreeSpawnTile(cx,cy){
+  for(let r=0;r<8;r++){
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+      if(Math.max(Math.abs(dx),Math.abs(dy))!==r) continue;
+      const x=cx+dx,y=cy+dy;
+      if(!inBounds(x,y)) continue;
+      if(terrain[y][x]==='mountain') continue;
+      if(buildingMap.has(x+','+y)) continue;
+      if(allUnits().some(u=>u.x===x&&u.y===y)) continue;
+      return {x,y};
+    }
+  }
+  return {x:cx,y:cy};
+}
 
 // ================= turn resolution =================
 function harvestAt(u){
@@ -699,14 +715,17 @@ function maybeSpawnSpice(){
 }
 
 // ================= AI =================
-function aiTurnForHouse(house){
+function autoAssignHarvesters(house){
   house.units.filter(u=>u.type==='harvester').forEach(h=>{
-    if(!h.order){
+    if(!h.order && h.carrying<HARVESTER_CAP){
       let best=null,bd=99999;
       spiceMap.forEach(dep=>{ const d=Math.abs(dep.x-h.x)+Math.abs(dep.y-h.y); if(d<bd){bd=d;best={x:dep.x,y:dep.y};} });
       if(best) h.order={kind:'move', x:best.x, y:best.y};
     }
   });
+}
+
+function aiTurnForHouse(house){
   const profile=learning[house.id];
   const pers=HOUSE_PERSONALITY[house.id];
   const economyWeight=profile.economyWeight*pers.econMul;
@@ -718,7 +737,8 @@ function aiTurnForHouse(house){
     if(budget>=HARVESTER_COST && house.units.filter(u=>u.type==='harvester').length<7 && Math.random()<0.6){
       house.spice-=HARVESTER_COST; spentEcon+=HARVESTER_COST;
       const spot=findFreeTileNear(house.base.x,house.base.y);
-      const h=makeUnit(house.id,'harvester',house.base.x,house.base.y); h.order={kind:'move',x:spot.x,y:spot.y};
+      const spawn=findFreeSpawnTile(house.base.x,house.base.y);
+      const h=makeUnit(house.id,'harvester',spawn.x,spawn.y); h.order={kind:'move',x:spot.x,y:spot.y};
       house.units.push(h); ensureSprite(h); addLog('House '+house.name+' deploys a new harvester.');
     } else if(budget>=TURBINE_COST){
       const spot=findFreeTileNear(house.base.x,house.base.y);
@@ -731,7 +751,7 @@ function aiTurnForHouse(house){
     }
   } else if(budget>=TROOP_COST){
     const n=Math.min(3, Math.floor(budget/TROOP_COST));
-    for(let i=0;i<n;i++){ const t=makeUnit(house.id,'trooper',house.base.x,house.base.y); house.units.push(t); ensureSprite(t); }
+    for(let i=0;i<n;i++){ const spawn=findFreeSpawnTile(house.base.x,house.base.y); const t=makeUnit(house.id,'trooper',spawn.x,spawn.y); house.units.push(t); ensureSprite(t); }
     house.spice-=n*TROOP_COST; spentMil+=n*TROOP_COST;
   }
   house.spentEconomy+=spentEcon; house.spentMilitary+=spentMil;
@@ -836,6 +856,7 @@ async function endTurn(){
   deselect();
   state.houses.forEach(h=>{ if(h.alive) resolveHouseOrders(h); });
   state.houses.forEach(h=>{ if(h.alive) autoHarvestAndReturn(h); });
+  state.houses.forEach(h=>{ if(h.alive) autoAssignHarvesters(h); });
   moveWorms();
   const ph=playerHouse();
   ph.units.forEach(u=>revealAround(u.x,u.y,VISION_RADIUS));
@@ -964,7 +985,8 @@ document.getElementById('buildHarvester').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<HARVESTER_COST || gameOver) return;
   ph.spice-=HARVESTER_COST;
-  const h=makeUnit(ph.id,'harvester', ph.base.x, ph.base.y);
+  const spawn=findFreeSpawnTile(ph.base.x, ph.base.y);
+  const h=makeUnit(ph.id,'harvester', spawn.x, spawn.y);
   ph.units.push(h); ensureSprite(h);
   addLog('New harvester deployed.'); renderStats();
 };
@@ -982,7 +1004,8 @@ document.getElementById('recruitTroop').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<TROOP_COST || gameOver) return;
   ph.spice-=TROOP_COST;
-  const t=makeUnit(ph.id,'trooper', ph.base.x, ph.base.y);
+  const spawn=findFreeSpawnTile(ph.base.x, ph.base.y);
+  const t=makeUnit(ph.id,'trooper', spawn.x, spawn.y);
   ph.units.push(t); ensureSprite(t);
   addLog('A trooper joins your army.'); renderStats();
 };
