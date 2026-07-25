@@ -16,8 +16,16 @@
     background:radial-gradient(ellipse at top, #2a1a0a 0%, var(--night) 70%);
     color:var(--paper); min-height:100vh;
     display:flex; align-items:center; justify-content:center; padding:12px;
+    overflow-y:auto;
   }
   #app{ display:flex; gap:12px; width:96vw; height:92vh; max-width:1600px; }
+  @media (max-width:1000px){
+    body{ align-items:flex-start; }
+    #app{ flex-direction:column; width:98vw; height:auto; max-width:none; }
+    #boardWrap{ flex:0 0 auto; min-width:0; }
+    #boardHost{ min-height:320px; height:50vh; }
+    #sidebar{ flex:0 0 auto; min-width:0; width:100%; max-height:none; }
+  }
   .panel{
     background:linear-gradient(180deg,#241609,#180f06);
     border:2px solid var(--sand-3); border-radius:6px;
@@ -194,7 +202,9 @@ PIXI.settings.ROUND_PIXELS = true;
 const boardHost=document.getElementById('boardHost');
 function viewSize(){
   const r=boardHost.getBoundingClientRect();
-  return { w: Math.max(480, Math.floor(r.width)), h: Math.max(360, Math.floor(r.height)) };
+  // Low floor only guards against a zero-sized container; matching the real
+  // container size avoids the canvas overflowing and clipping on narrow layouts.
+  return { w: Math.max(240, Math.floor(r.width)), h: Math.max(200, Math.floor(r.height)) };
 }
 let vs=viewSize();
 const app = new PIXI.Application({width:vs.w, height:vs.h, background:0x0b0703, antialias:false});
@@ -852,12 +862,19 @@ function deselect(){
 function selectUnit(u){ state.selectedUnit=u; uiMode=null; updateSelectionRing(); openCtxMenuFor(u); }
 function openCtxMenuFor(u){
   const rect=app.view.getBoundingClientRect();
-  const sx=rect.left+window.scrollX+(u.x*SZ-cam.x)+SZ+6;
-  const sy=rect.top+window.scrollY+(u.y*SZ-cam.y);
-  ctxMenu.style.left=sx+'px'; ctxMenu.style.top=sy+'px';
+  let sx=rect.left+window.scrollX+(u.x*SZ-cam.x)+SZ+6;
+  let sy=rect.top+window.scrollY+(u.y*SZ-cam.y);
   document.getElementById('ctxTitle').textContent=(u.type==='harvester'?'Harvester':'Trooper')+' #'+u.id;
   document.getElementById('ctxAttack').style.display=u.type==='trooper'?'flex':'none';
+  ctxMenu.style.left=sx+'px'; ctxMenu.style.top=sy+'px';
   ctxMenu.style.display='flex'; modeHint.style.display='none';
+  // clamp so the menu never renders off-screen, regardless of viewport size
+  const menuRect=ctxMenu.getBoundingClientRect();
+  const maxLeft=window.scrollX+window.innerWidth-menuRect.width-6;
+  const maxTop=window.scrollY+window.innerHeight-menuRect.height-6;
+  sx=Math.max(window.scrollX+6, Math.min(sx, maxLeft));
+  sy=Math.max(window.scrollY+6, Math.min(sy, maxTop));
+  ctxMenu.style.left=sx+'px'; ctxMenu.style.top=sy+'px';
 }
 document.getElementById('ctxMove').onclick=()=>{ uiMode={type:'move', unit:state.selectedUnit}; ctxMenu.style.display='none'; modeHint.textContent='MOVE — choose a tile'; modeHint.style.display='block'; };
 document.getElementById('ctxAttack').onclick=()=>{ uiMode={type:'attack', unit:state.selectedUnit}; ctxMenu.style.display='none'; modeHint.textContent='ATTACK — choose a target'; modeHint.style.display='block'; };
