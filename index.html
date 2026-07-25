@@ -54,7 +54,6 @@
   button:active:not(:disabled){transform:scale(.98);}
   button:disabled{opacity:.35; cursor:not-allowed;}
   button small{color:var(--sand-2); font-weight:normal;}
-  #endTurnBtn{ background:linear-gradient(180deg,var(--rust),var(--rust-dark)); border-color:#000; font-weight:bold; letter-spacing:2px; text-transform:uppercase; }
   #log{ height:90px; overflow-y:auto; font-size:11px; background:#0f0a05; border:1px solid var(--sand-3); border-radius:4px; padding:6px 8px; color:#d8c19a; line-height:1.5; margin-top:6px; }
   #log div:last-child{color:var(--paper); font-weight:bold;}
   .overlay-base{ position:fixed; inset:0; background:rgba(10,6,2,.9); display:none; align-items:center; justify-content:center; z-index:30; padding:16px; }
@@ -114,13 +113,13 @@
 <div id="app">
   <div class="panel" id="boardWrap">
     <h1>Galacticus</h1>
-    <div class="sub"><span>Spice Throne — Turn <span id="turnBadge">1</span></span><span id="camHint">drag map / arrow keys to scroll</span></div>
+    <div class="sub"><span>Spice Throne — <span id="gameClock">00:00</span></span><span id="camHint">drag map / arrow keys to scroll</span></div>
     <div id="boardHost">
       <div id="hud">
         <div class="section-title" id="playerHouseTitle">Your holdings</div>
         <div class="statRow"><span>Spice bank</span><b id="pSpice">0</b></div>
         <div class="statRow"><span>Silo capacity</span><span id="pCap">100</span></div>
-        <div class="statRow"><span>Power / turn</span><span id="pPower">0</span></div>
+        <div class="statRow"><span>Power</span><span id="pPower">0</span></div>
         <div class="statRow"><span>Army (troopers)</span><span id="pArmy">0</span></div>
         <div class="statRow"><span>Stronghold</span><span id="pStronghold">160 / 160</span></div>
 
@@ -135,7 +134,6 @@
         <button id="buildTurbine">Wind turbine<small>50 spice</small></button>
         <button id="buildSilo">Silo<small>70 spice</small></button>
         <button id="recruitTroop">Recruit trooper<small>25 spice</small></button>
-        <button id="endTurnBtn">End turn ▶</button>
       </div>
     </div>
     <div id="modeHint">MOVE — choose a tile</div>
@@ -192,9 +190,15 @@ const HARVESTER_CAP=30, HARVEST_RATE=12;
 const WORM_COUNT=15;
 const MOVE_MS=380;
 const TROOP_HP=10;
-const STEPS_PER_TURN=3;
 const VISION_RADIUS=5;
 const BASE_HP_MAX=160;
+// real-time pacing
+const TICK_MS=150;
+const HARVEST_INTERVAL_MS=500;
+const ATTACK_COOLDOWN_MS=900;
+const AI_THINK_INTERVAL_MS=4000;
+const WORM_MOVE_INTERVAL_MS=900;
+const SPICE_SPAWN_INTERVAL_MS=6000;
 
 // ================= the three Great Houses =================
 const HOUSE_DEFS=[
@@ -541,7 +545,6 @@ app.ticker.add((delta)=>{
 
 function renderLog(){ const el=document.getElementById('log'); el.innerHTML=state.log.map(m=>'<div>'+m+'</div>').join(''); el.scrollTop=el.scrollHeight; }
 function renderStats(){
-  document.getElementById('turnBadge').textContent=state.turn;
   const ph=playerHouse();
   document.getElementById('playerHouseTitle').textContent='Your holdings — House '+ph.name;
   document.getElementById('pSpice').textContent=Math.floor(ph.spice);
@@ -618,19 +621,26 @@ function findFreeSpawnTile(cx,cy){
   return {x:cx,y:cy};
 }
 
-// ================= turn resolution =================
+// ================= real-time order resolution =================
 function harvestAt(u){
+  const now=performance.now();
+  if(u._lastHarvest && now-u._lastHarvest<HARVEST_INTERVAL_MS) return;
   const key=u.x+','+u.y;
   const dep=spiceMap.get(key);
   if(dep && dep.amount>0 && u.carrying<HARVESTER_CAP){
     const take=Math.min(HARVEST_RATE, dep.amount, HARVESTER_CAP-u.carrying);
     dep.amount-=take; u.carrying+=take;
+    u._lastHarvest=now;
     if(dep.amount<=0) spiceMap.delete(key);
   }
 }
-function resolveHouseOrders(house){
+// Advances each unit with an order by exactly one step per call. Called on a
+// fast timer so units move continuously; a unit only advances once its current
+// step animation (u.moving) has finished, so real movement speed is paced by
+// MOVE_MS regardless of how often this is called.
+function stepHouseUnits(house){
   house.units.forEach(u=>{
-    if(!u.order) return;
+    if(!u.order || u.moving) return;
     if(u.order.kind==='attack'){
       const targetHouse=houseById(u.order.targetHouseId);
       if(!targetHouse || !targetHouse.alive){ u.order=null; return; }
@@ -640,6 +650,9 @@ function resolveHouseOrders(house){
       const dist=Math.max(Math.abs(u.x-tx),Math.abs(u.y-ty));
       if(dist<=1){
         if(u.type!=='trooper'){ u.order=null; return; }
+        const now=performance.now();
+        if(u._lastAttack && now-u._lastAttack<ATTACK_COOLDOWN_MS) return;
+        u._lastAttack=now;
         if(targetIsBase){
           const stolen=Math.min(targetHouse.spice, 10+Math.random()*10);
           const dmg=10+Math.floor(Math.random()*7);
@@ -659,16 +672,13 @@ function resolveHouseOrders(house){
           }
         }
       } else {
-        for(let s=0;s<STEPS_PER_TURN;s++){ if(Math.max(Math.abs(u.x-tx),Math.abs(u.y-ty))<=1) break; if(!stepToward(u,tx,ty)) break; }
+        stepToward(u,tx,ty);
       }
       return;
     }
-    for(let s=0;s<STEPS_PER_TURN;s++){
-      if(u.x===u.order.x && u.y===u.order.y) break;
-      if(!stepToward(u,u.order.x,u.order.y)) break;
-      if(u.type==='harvester') harvestAt(u);
-    }
-    if(u.x===u.order.x && u.y===u.order.y) u.order=null;
+    if(u.x===u.order.x && u.y===u.order.y){ u.order=null; return; }
+    stepToward(u,u.order.x,u.order.y);
+    if(u.type==='harvester') harvestAt(u);
   });
 }
 function autoHarvestAndReturn(house){
@@ -864,23 +874,53 @@ async function endGame(result){
   overlay.style.display='flex';
 }
 
-async function endTurn(){
+function updateClock(){
+  if(!state) return;
+  const el=document.getElementById('gameClock'); if(!el) return;
+  const secs=Math.max(0,Math.floor((performance.now()-state.startTime)/1000));
+  const mm=String(Math.floor(secs/60)).padStart(2,'0');
+  const ss=String(secs%60).padStart(2,'0');
+  el.textContent=mm+':'+ss;
+}
+
+let simHandle=null;
+let lastAiThink={}, lastWormMove=0, lastSpiceSpawn=0;
+function stopSim(){ if(simHandle){ clearInterval(simHandle); simHandle=null; } }
+
+function gameTick(){
   if(!state || gameOver) return;
-  deselect();
-  state.houses.forEach(h=>{ if(h.alive) resolveHouseOrders(h); });
-  state.houses.forEach(h=>{ if(h.alive) autoHarvestAndReturn(h); });
-  state.houses.forEach(h=>{ if(h.alive) autoAssignHarvesters(h); });
-  moveWorms();
+  const now=performance.now();
+
+  state.houses.forEach(h=>{
+    if(!h.alive) return;
+    stepHouseUnits(h);
+    autoHarvestAndReturn(h);
+    autoAssignHarvesters(h);
+  });
+
   const ph=playerHouse();
   ph.units.forEach(u=>revealAround(u.x,u.y,VISION_RADIUS));
-  setTimeout(()=>{ resolveWormStrikes(); redrawSpiceAndBuildings(); renderStats(); }, MOVE_MS+30);
-  maybeSpawnSpice();
-  state.houses.forEach(h=>{ if(h.ai && h.alive) aiTurnForHouse(h); });
-  state.turn++;
+
+  if(now-lastWormMove>=WORM_MOVE_INTERVAL_MS){
+    lastWormMove=now;
+    moveWorms();
+    setTimeout(()=>{ resolveWormStrikes(); redrawSpiceAndBuildings(); renderStats(); }, MOVE_MS+30);
+  }
+
+  state.houses.forEach(h=>{
+    if(h.ai && h.alive && now-(lastAiThink[h.id]||0)>=AI_THINK_INTERVAL_MS){
+      lastAiThink[h.id]=now;
+      aiTurnForHouse(h);
+    }
+  });
+
+  if(now-lastSpiceSpawn>=SPICE_SPAWN_INTERVAL_MS){ lastSpiceSpawn=now; maybeSpawnSpice(); }
+
   processEliminations();
   const result=checkGameEnd();
+  updateClock();
   renderStats();
-  if(result) await endGame(result);
+  if(result){ stopSim(); endGame(result); }
 }
 
 // ================= selection / context menu / build placement / input =================
@@ -961,7 +1001,7 @@ function handleBoardClick(e){
       const cost = uiMode.type==='place-turbine' ? TURBINE_COST : SILO_COST;
       if(ph.spice>=cost){
         ph.spice-=cost;
-        if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id}); ph.power+=6; addLog('Wind turbine raised — power +6/turn.'); }
+        if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id}); ph.power+=6; addLog('Wind turbine raised — power +6.'); }
         else { buildingMap.set(key,{x,y,type:'silo',owner:ph.id}); ph.cap+=80; addLog('Silo constructed — capacity +80.'); }
         redrawSpiceAndBuildings();
       }
@@ -1022,7 +1062,6 @@ document.getElementById('recruitTroop').onclick=()=>{
   ph.units.push(t); ensureSprite(t);
   addLog('A trooper joins your army.'); renderStats();
 };
-document.getElementById('endTurnBtn').onclick=()=>{ endTurn(); };
 document.getElementById('restartBtn').onclick=()=>{ showHouseSelect(); };
 
 // ================= boot =================
@@ -1032,7 +1071,7 @@ function newGame(chosenId){
   buildingMap=new Map();
   explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(false));
   state={
-    turn:1, log:[], selectedUnit:null,
+    startTime:performance.now(), log:[], selectedUnit:null,
     worms:[],
     houses: HOUSE_DEFS.map(hd=>({
       id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss,
@@ -1051,6 +1090,8 @@ function newGame(chosenId){
   }
 }
 async function start(chosenId){
+  stopSim();
+  lastAiThink={}; lastWormMove=0; lastSpiceSpawn=0;
   gameOver=false;
   document.getElementById('overlay').style.display='none';
   document.getElementById('houseOverlay').style.display='none';
@@ -1065,9 +1106,11 @@ async function start(chosenId){
   syncAllSprites();
   revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
   centerCameraOn(ph.base.x, ph.base.y);
-  renderStats(); renderLog();
+  renderStats(); renderLog(); updateClock();
+  simHandle=setInterval(gameTick, TICK_MS);
 }
 function showHouseSelect(){
+  stopSim();
   document.getElementById('overlay').style.display='none';
   const el=document.getElementById('houseOverlay');
   const cardsEl=document.getElementById('houseCards');
