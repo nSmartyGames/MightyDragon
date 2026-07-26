@@ -344,6 +344,7 @@ const TEX = {
   turbine: canvasTexture(TILE,(cx,size)=>{ cx.strokeStyle='#ffffff'; cx.lineWidth=1.4; cx.beginPath(); cx.moveTo(size/2,3); cx.lineTo(size/2,size-2); cx.stroke(); cx.fillStyle='#ffffff'; cx.beginPath(); cx.arc(size/2,4,3,0,Math.PI*2); cx.fill(); }),
   silo: null,
   base: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.fillRect(2,2,size-4,size-4); cx.strokeStyle='#000'; cx.strokeRect(2,2,size-4,size-4); }),
+  light: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.beginPath(); cx.arc(size/2,size/2,3,0,Math.PI*2); cx.fill(); cx.strokeStyle='rgba(0,0,0,.6)'; cx.lineWidth=1; cx.stroke(); }),
   grassA: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#5c7a3a'; cx.fillRect(0,0,size,size); }),
   grassB: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#547231'; cx.fillRect(0,0,size,size); }),
   desertA: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#caa46a'; cx.fillRect(0,0,size,size); }),
@@ -467,6 +468,12 @@ function redrawSpiceAndBuildings(){
     const sp=new PIXI.Sprite(TEX.base); sp.x=h.base.x*SZ; sp.y=h.base.y*SZ; sp.scale.set(ZOOM);
     sp.tint=h.color; if(!h.alive) sp.alpha=0.35;
     layerBuildings.addChild(sp);
+    if(h.alive){
+      const light=new PIXI.Sprite(TEX.light); light.anchor.set(0.5);
+      light.x=h.base.x*SZ+SZ-8; light.y=h.base.y*SZ+8; light.scale.set(ZOOM*0.6);
+      light._isBaseLight=true;
+      layerBuildings.addChild(light);
+    }
   });
 }
 
@@ -560,7 +567,10 @@ app.ticker.add((delta)=>{
     } else { w.sprite.x=w.x*SZ+SZ/2; w.sprite.y=w.y*SZ+SZ/2; }
     w.sprite.visible = !!(explored[w.y] && explored[w.y][w.x]);
   });
-  layerBuildings.children.forEach(c=>{ if(c._pulse!==undefined){ c._pulse+=0.04*delta; c.alpha=0.85+0.15*Math.sin(c._pulse); } });
+  layerBuildings.children.forEach(c=>{
+    if(c._pulse!==undefined){ c._pulse+=0.04*delta; c.alpha=0.85+0.15*Math.sin(c._pulse); }
+    else if(c._isBaseLight){ c.tint = Math.floor(now/1000)%2===0 ? 0x33ff66 : 0x3388ff; }
+  });
   if(selectionRing && state.selectedUnit){
     selectionRing.x=state.selectedUnit.x*SZ+SZ/2; selectionRing.y=state.selectedUnit.y*SZ+SZ/2;
     selectionRing.rotation+=0.02*delta;
@@ -1197,6 +1207,13 @@ function newGame(chosenId){
     }))
   };
   scatterSpice();
+  // Every house starts with a silo already built next to its stronghold, so
+  // harvesters have somewhere to unload from turn one instead of spilling cargo.
+  state.houses.forEach(h=>{
+    const spot=findFreeTileNear(h.base.x,h.base.y);
+    buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:h.id});
+    h.cap+=80;
+  });
   for(let i=0;i<WORM_COUNT;i++){
     let x,y,tries=0;
     do{ x=Math.floor(Math.random()*MAPW); y=Math.floor(Math.random()*MAPH); tries++; }
