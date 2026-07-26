@@ -41,9 +41,27 @@
     border-radius:10px; border:1px solid var(--rust); box-shadow:0 6px 18px rgba(0,0,0,.5);
     line-height:normal;
   }
-  #actionBar button{ flex-direction:column; align-items:center; justify-content:center; gap:2px; min-width:92px; text-align:center; font-size:11px; }
-  .statRow{ display:flex; justify-content:space-between; font-size:13px; padding:3px 0; border-bottom:1px dashed #4a3520; }
-  .statRow b{color:var(--spice);}
+  .statRow{ display:flex; align-items:center; gap:10px; font-size:13px; padding:3px 0; border-bottom:1px dashed #4a3520; }
+  .statRow .letter{
+    display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
+    width:18px; height:18px; background:var(--rust); color:#fff; font-weight:bold;
+    border-radius:3px; font-size:11px; letter-spacing:0;
+  }
+  .statRow .val{color:var(--paper); font-weight:bold;}
+  .statRow b.val{color:var(--spice);}
+  #actionBar button.iconBtn{
+    width:60px; height:60px; padding:0; position:relative;
+    background-size:34px 34px; background-position:center; background-repeat:no-repeat;
+  }
+  #buildHarvester{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVR4nN1SyxHFIAiETBqxrvSglKL0kLZohXd4ISPxM87klj0hLLCrIgwQY1SLmRlHvG1UWMXrATvAutwe1ykgIhARFRGt85YTESUiN7BrIec8PTcWDCEEp6YeUNdqOL+qqiml7gAAgFLKvwnx7mssGGk137zCc2sPxmdmdHeAiMeDeDLzcZFd3uLpR7LmGZyCa+PyR/oIfs7ATUgSh/exAAAAAElFTkSuQmCC'); }
+  #buildTurbine{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaklEQVR4nM2SQQrAIAwEN6XvTb4SP+hXtpdaaNFEsIXOSYkZNioQwJPozBYVZ1gWyKiQRRcRAYB91Gxm176UMheHD1Q1vcRQQJK11lBwG6HN1ciagT8843cCVWVv/XqC7kdquHsqWE6wzAGHm0qrAAzDnwAAAABJRU5ErkJggg=='); }
+  #buildSilo{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAi0lEQVR4nN2SsRXDIAxEv/O8CMswDjAKj1moNAgtoziV/QgI7BRpchXijtMhgAVyzseKB9gAnHOD0Fp7rUVEPZxS2vazCCEMglIKIqJyMUYAXqt4s84tBoPTWYPG7f1GG7ePrl1lMDDGTBMA1Fo/6uUMnuAfDbz3U7HGqc/YT7rlbhN8iyvB6gf+FG8TqylG5bxpTQAAAABJRU5ErkJggg=='); }
+  #buildRefinery{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABSklEQVR4nN1W223AIAy8VFmEBYFRgAHxKOmXkcsj4LRJ2p4UiceBT3AmBl7GBgDW2uON4CmlbeeO9/7R4CEEAMDeGwSeE/TxSJQrAuRp3DUGCBO+4YGU0vZ7r6DG6Ai/y9/PJutNZlmi5Q8F8MIY41Ccc64ZW+HXQporGAUnotNgq/z6lLoekJsRUdmM29xnnpbfwFp75JwPa+0xgpzLOV/iyzn+/wxNSEQwxny5a27HGJsj1vIZp1nAkMZZSS8Nv3hAElltz+k8ruVLXleAVG2MATA2TYxRzZc8iaUruOsVnAogoqLeOVfaG0Np+QWchnVq8VjvO0u3GZ/jAIOHiE1jjClfr888LV+iEcDmqsm1geq3XctndD0w2rTHucKfCugtCiFMC1UtH1DUhN57Vf1XB3+9JqyLk79XE96Fpaf4JzDNAu17/2/wCcJQumVBN721AAAAAElFTkSuQmCC'); }
+  #recruitTroop{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAjElEQVR4nL2QQQ4DIQhFP03P5sqzEI9CvAtXcclV6GqMrVhnMmlfYmTB/3wAfg0z+/h/QjvhSK116n9+m15K6bWIhD2P3fRRuFojhJndzPo7fQMz81XklBIAIOfcdUuDAxHpt2it7Q0AwN3DuKo6GYRHvMKlBABARG+a2wlCAyIiVYWqTvUpg9sJ/soLOuxFz7BoHSIAAAAASUVORK5CYII='); }
+  .costBadge{
+    position:absolute; right:2px; bottom:1px; font-size:9px; color:var(--sand-2);
+    background:rgba(10,6,2,.75); padding:1px 3px; border-radius:3px; line-height:1.2;
+  }
   .section-title{ font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--sand-2); margin-top:6px; border-bottom:1px solid var(--sand-3); padding-bottom:3px; }
   button{
     font-family:inherit; background:linear-gradient(180deg,#4a3220,#2c1c0d); color:var(--paper);
@@ -53,7 +71,6 @@
   button:hover:not(:disabled){background:linear-gradient(180deg,#5c3f26,#3a2410); border-color:var(--rust);}
   button:active:not(:disabled){transform:scale(.98);}
   button:disabled{opacity:.35; cursor:not-allowed;}
-  button small{color:var(--sand-2); font-weight:normal;}
   #log{ height:90px; overflow-y:auto; font-size:11px; background:#0f0a05; border:1px solid var(--sand-3); border-radius:4px; padding:6px 8px; color:#d8c19a; line-height:1.5; margin-top:6px; }
   #log div:last-child{color:var(--paper); font-weight:bold;}
   .overlay-base{ position:fixed; inset:0; background:rgba(10,6,2,.9); display:none; align-items:center; justify-content:center; z-index:30; padding:16px; }
@@ -102,7 +119,8 @@
     #hud{ width:172px; font-size:9px; max-height:44%; padding:8px 9px; }
     #hud .section-title{ font-size:9px; margin-top:4px; }
     #actionBar{ flex-wrap:wrap; justify-content:center; max-width:96%; gap:5px; padding:6px; bottom:6px; }
-    #actionBar button{ min-width:64px; font-size:9px; padding:5px 6px; }
+    #actionBar button.iconBtn{ width:46px; height:46px; background-size:26px 26px; }
+    .costBadge{ font-size:8px; }
   }
 </style>
 </head>
@@ -117,11 +135,11 @@
     <div id="boardHost">
       <div id="hud">
         <div class="section-title" id="playerHouseTitle">Your holdings</div>
-        <div class="statRow"><span>Spice bank</span><b id="pSpice">0</b></div>
-        <div class="statRow"><span>Silo capacity</span><span id="pCap">100</span></div>
-        <div class="statRow"><span>Power</span><span id="pPower">0</span></div>
-        <div class="statRow"><span>Army (troopers)</span><span id="pArmy">0</span></div>
-        <div class="statRow"><span>Stronghold</span><span id="pStronghold">160 / 160</span></div>
+        <div class="statRow" title="Spice bank"><span class="letter">S</span><b id="pSpice" class="val">0</b></div>
+        <div class="statRow" title="Silo capacity"><span class="letter">C</span><span id="pCap" class="val">100</span></div>
+        <div class="statRow" title="Power"><span class="letter">P</span><span id="pPower" class="val">0</span></div>
+        <div class="statRow" title="Army (troopers)"><span class="letter">A</span><span id="pArmy" class="val">0</span></div>
+        <div class="statRow" title="Stronghold"><span class="letter">H</span><span id="pStronghold" class="val">160 / 160</span></div>
 
         <div class="section-title">Rival houses</div>
         <div id="rivalsContainer"></div>
@@ -130,11 +148,11 @@
         <div id="log"></div>
       </div>
       <div id="actionBar">
-        <button id="buildHarvester">Harvester<small>60 spice</small></button>
-        <button id="buildTurbine">Wind turbine<small>50 spice</small></button>
-        <button id="buildSilo">Silo<small>70 spice</small></button>
-        <button id="buildRefinery">Refinery<small>110 spice</small></button>
-        <button id="recruitTroop">Recruit trooper<small>25 spice</small></button>
+        <button id="buildHarvester" class="iconBtn" title="Harvester — 60 spice"><span class="costBadge">60</span></button>
+        <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice"><span class="costBadge">50</span></button>
+        <button id="buildSilo" class="iconBtn" title="Silo — 70 spice"><span class="costBadge">70</span></button>
+        <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice"><span class="costBadge">110</span></button>
+        <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice"><span class="costBadge">25</span></button>
       </div>
     </div>
     <div id="modeHint">MOVE — choose a tile</div>
@@ -240,7 +258,11 @@ const layerFx = new PIXI.Container();
 world.addChild(layerGround, layerBuildings, layerUnits, layerFx, layerFog);
 app.stage.addChild(world);
 
-window.addEventListener('resize', ()=>{
+// Map resizes only on an explicit double-click, not on every window resize
+// event (which fires constantly on mobile from address-bar/keyboard changes).
+// This never touches the action bar or HUD, which are fixed-size CSS.
+boardHost.addEventListener('dblclick', (e)=>{
+  e.preventDefault();
   vs=viewSize();
   app.renderer.resize(vs.w, vs.h);
   clampCamera();
@@ -563,9 +585,9 @@ function renderStats(){
     div.style.borderLeftColor=h.colorCss;
     div.innerHTML =
       '<div class="rname" style="color:'+h.colorCss+'">'+h.name+(h.alive?'':' — Eliminated')+'</div>'+
-      '<div class="statRow"><span>Spice</span><span>'+Math.floor(h.spice)+'</span></div>'+
-      '<div class="statRow"><span>Army</span><span>'+h.units.filter(u=>u.type==='trooper').length+'</span></div>'+
-      '<div class="statRow"><span>Stronghold</span><span>'+Math.max(0,Math.ceil(h.baseHp))+' / '+h.baseHpMax+'</span></div>';
+      '<div class="statRow" title="Spice"><span class="letter">S</span><span class="val">'+Math.floor(h.spice)+'</span></div>'+
+      '<div class="statRow" title="Army"><span class="letter">A</span><span class="val">'+h.units.filter(u=>u.type==='trooper').length+'</span></div>'+
+      '<div class="statRow" title="Stronghold"><span class="letter">H</span><span class="val">'+Math.max(0,Math.ceil(h.baseHp))+' / '+h.baseHpMax+'</span></div>';
     rivalsEl.appendChild(div);
   });
 
