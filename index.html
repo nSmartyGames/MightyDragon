@@ -220,6 +220,7 @@ const ATTACK_COOLDOWN_MS=900;
 const AI_THINK_INTERVAL_MS=4000;
 const WORM_MOVE_INTERVAL_MS=900;
 const SPICE_SPAWN_INTERVAL_MS=6000;
+const WORM_SURFACE_MS=700;
 const SEARCH_RADIUS=8;
 
 // ================= the three Great Houses =================
@@ -305,18 +306,32 @@ function dirIndexFromDelta(dx,dy){
   let ang=Math.atan2(dx,-dy); if(ang<0) ang+=Math.PI*2;
   return Math.round(ang/(Math.PI/4))%8;
 }
-function wormCanvas(cx,size,frame,angle){
-  cx.save(); cx.translate(size/2,size/2); cx.rotate(angle); cx.translate(-size/2,-size/2);
-  const wiggle=frame===0?0:1.4;
-  cx.fillStyle='#caa46a'; cx.strokeStyle='#5c4322'; cx.lineWidth=1;
-  [0,4,8].forEach((off,i)=>{ cx.beginPath(); cx.ellipse(size/2+(i%2?wiggle:-wiggle),3+off,4.2-off*0.15,3.2,0,0,Math.PI*2); cx.fill(); cx.stroke(); });
-  cx.fillStyle='#2c1c0d'; cx.beginPath(); cx.arc(size/2,3,1.1,0,Math.PI*2); cx.fill();
+// Subtle surface disturbance shown while a worm burrows underground —
+// the worm itself stays hidden; this is the only above-ground tell.
+function sandTrailCanvas(cx,size){
+  cx.save();
+  cx.fillStyle='#caa46a'; cx.beginPath(); cx.ellipse(size/2,size/2,6,3.6,0,0,Math.PI*2); cx.fill();
+  cx.strokeStyle='#8a6a3a'; cx.lineWidth=1; cx.beginPath(); cx.ellipse(size/2,size/2,6,3.6,0,0,Math.PI*2); cx.stroke();
+  cx.fillStyle='#e8c98a'; cx.beginPath(); cx.ellipse(size/2-1.5,size/2-0.8,2.4,1.4,0,0,Math.PI*2); cx.fill();
   cx.restore();
 }
-function buildWormTextures(){
-  const set=[];
-  for(let d=0;d<DIRS;d++) set.push([0,1].map(frame=>canvasTexture(TILE,(cx,size)=>wormCanvas(cx,size,frame,dirAngle(d)))));
-  return set;
+// Huge round toothy maw the worm rears up with to strike a unit.
+function wormMouthCanvas(cx,size){
+  cx.save();
+  const cxy=size/2, r=size/2-0.5;
+  cx.fillStyle='#8a6a3a'; cx.beginPath(); cx.arc(cxy,cxy,r,0,Math.PI*2); cx.fill();
+  cx.fillStyle='#4a1008'; cx.beginPath(); cx.arc(cxy,cxy,r*0.72,0,Math.PI*2); cx.fill();
+  cx.fillStyle='#f3e3c0';
+  const teeth=10;
+  for(let i=0;i<teeth;i++){
+    const a=(i/teeth)*Math.PI*2, ta=r*0.72, tb=r*0.92;
+    const x1=cxy+Math.cos(a)*ta, y1=cxy+Math.sin(a)*ta;
+    const x2=cxy+Math.cos(a+0.2)*ta, y2=cxy+Math.sin(a+0.2)*ta;
+    const xm=cxy+Math.cos(a+0.1)*tb, ym=cxy+Math.sin(a+0.1)*tb;
+    cx.beginPath(); cx.moveTo(x1,y1); cx.lineTo(x2,y2); cx.lineTo(xm,ym); cx.closePath(); cx.fill();
+  }
+  cx.fillStyle='#1a0503'; cx.beginPath(); cx.arc(cxy,cxy,r*0.34,0,Math.PI*2); cx.fill();
+  cx.restore();
 }
 // Hand-drawn image tiles (base64 PNG, neutral white/light-grey so the existing
 // per-house tint-at-render still works). Trooper/tank are single static
@@ -339,7 +354,8 @@ const TEX = {
   harvester: null, // filled in by preloadImageTiles()
   trooper: null,
   refinery: null,
-  worm: buildWormTextures(),
+  sandTrail: canvasTexture(TILE, sandTrailCanvas),
+  wormMouth: canvasTexture(TILE, wormMouthCanvas),
   spice: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#e0522a'; cx.beginPath(); cx.arc(size/2,size/2,6,0,Math.PI*2); cx.fill(); cx.fillStyle='rgba(255,180,120,.6)'; cx.beginPath(); cx.arc(size/2-1.5,size/2-1.5,2.2,0,Math.PI*2); cx.fill(); }),
   turbine: canvasTexture(TILE,(cx,size)=>{ cx.strokeStyle='#ffffff'; cx.lineWidth=1.4; cx.beginPath(); cx.moveTo(size/2,3); cx.lineTo(size/2,size-2); cx.stroke(); cx.fillStyle='#ffffff'; cx.beginPath(); cx.arc(size/2,4,3,0,Math.PI*2); cx.fill(); }),
   silo: null,
@@ -516,7 +532,7 @@ function ensureSprite(u){
 }
 function ensureWormSprite(w){
   if(!w.sprite){
-    w.sprite=new PIXI.Sprite(TEX.worm[w.dir][w.frame]); w.sprite.anchor.set(0.5); w.sprite.scale.set(ZOOM);
+    w.sprite=new PIXI.Sprite(TEX.sandTrail); w.sprite.anchor.set(0.5); w.sprite.scale.set(ZOOM*0.85);
     w.sprite.x=w.x*SZ+SZ/2; w.sprite.y=w.y*SZ+SZ/2; layerUnits.addChild(w.sprite);
   }
 }
@@ -558,13 +574,20 @@ app.ticker.add((delta)=>{
   });
   state.worms.forEach(w=>{
     if(!w.sprite) return;
-    w.frame=Math.floor(now/220)%2; w.sprite.texture=TEX.worm[w.dir][w.frame];
+    const surfacing=!!(w.surfaceUntil && now<w.surfaceUntil);
+    if(surfacing){
+      w.sprite.texture=TEX.wormMouth; w.sprite.rotation=0; w.sprite.scale.set(ZOOM*1.8);
+    } else {
+      // underground: only a faint shifting-sand disturbance marks its path
+      w.sprite.texture=TEX.sandTrail; w.sprite.rotation=dirAngle(w.dir); w.sprite.scale.set(ZOOM*0.85);
+    }
     if(w.moving){
       const t=Math.min(1,(now-w.moveStart)/MOVE_MS);
       w.sprite.x=w.moveFrom.x+(w.moveTo.x-w.moveFrom.x)*t;
       w.sprite.y=w.moveFrom.y+(w.moveTo.y-w.moveFrom.y)*t;
       if(t>=1) w.moving=false;
     } else { w.sprite.x=w.x*SZ+SZ/2; w.sprite.y=w.y*SZ+SZ/2; }
+    w.sprite.alpha = surfacing ? 1 : 0.75+0.15*Math.sin(now/260+w.x*3+w.y*7);
     w.sprite.visible = !!(explored[w.y] && explored[w.y][w.x]);
   });
   layerBuildings.children.forEach(c=>{
@@ -610,6 +633,9 @@ function renderStats(){
 
 // ================= movement helpers =================
 function passable(x,y){ return inBounds(x,y) && terrain[y][x]!=='mountain'; }
+// Worms burrow through sand only — they can't cross grass or rock, so grass
+// near a stronghold is a real safe zone.
+function wormPassable(x,y){ return inBounds(x,y) && terrain[y][x]==='desert'; }
 function beginStep(u,nx,ny){
   const dIdx=dirIndexFromDelta(nx-u.x, ny-u.y); if(dIdx!==null) u.dir=dIdx;
   u.moveFrom={x:u.x*SZ+SZ/2,y:u.y*SZ+SZ/2}; u.x=nx; u.y=ny;
@@ -796,18 +822,19 @@ function moveWorms(){
       if(best && Math.random()<0.7){ nx=w.x+Math.sign(best.x-w.x); ny=w.y+Math.sign(best.y-w.y); }
       else { nx=w.x+(Math.floor(Math.random()*3)-1); ny=w.y+(Math.floor(Math.random()*3)-1); }
       tries++;
-    } while(!passable(nx,ny) && tries<6);
-    if(passable(nx,ny)) beginWormStep(w,nx,ny);
+    } while(!wormPassable(nx,ny) && tries<6);
+    if(wormPassable(nx,ny)) beginWormStep(w,nx,ny);
   });
 }
 function resolveWormStrikes(){
   const ph=playerHouse();
+  const now=performance.now();
   state.houses.forEach(house=>{
     house.units=house.units.filter(u=>{
       const hit=state.worms.some(w=>w.x===u.x && w.y===u.y);
       if(hit){
-        addLog((house===ph?'⚠ Your':"House "+house.name+"'s")+' '+u.type+' was devoured by a sandworm'+(u.carrying>0?' (lost '+Math.floor(u.carrying)+' spice)':'')+'.');
-        state.worms.forEach(w=>{ if(w.x===u.x&&w.y===u.y) w.rest=2; });
+        addLog((house===ph?'⚠ Your':"House "+house.name+"'s")+' '+u.type+' is swallowed as a sandworm erupts from the dune'+(u.carrying>0?' (lost '+Math.floor(u.carrying)+' spice)':'')+'.');
+        state.worms.forEach(w=>{ if(w.x===u.x&&w.y===u.y){ w.rest=2; w.surfaceUntil=now+WORM_SURFACE_MS; } });
         if(u.sprite) layerUnits.removeChild(u.sprite);
         if(state.selectedUnit===u) deselect();
         return false;
@@ -1217,7 +1244,7 @@ function newGame(chosenId){
   for(let i=0;i<WORM_COUNT;i++){
     let x,y,tries=0;
     do{ x=Math.floor(Math.random()*MAPW); y=Math.floor(Math.random()*MAPH); tries++; }
-    while(tries<50 && (!passable(x,y) || isNearBase(x,y,10)));
+    while(tries<50 && (!wormPassable(x,y) || isNearBase(x,y,10)));
     state.worms.push({x,y,rest:0,dir:0,frame:0,sprite:null});
   }
 }
