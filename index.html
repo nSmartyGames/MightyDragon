@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Galacticus — Spice Throne</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
 <style>
@@ -27,21 +28,34 @@
   #boardWrap{ padding:10px; position:relative; flex:1 1 100%; display:flex; flex-direction:column; min-width:0; }
   h1{ font-size:19px; letter-spacing:3px; text-transform:uppercase; color:var(--spice); margin:0 0 2px 0; text-shadow:0 0 12px rgba(224,82,42,.5); }
   .sub{ font-size:11px; color:var(--sand-2); letter-spacing:1px; margin-bottom:8px; display:flex; justify-content:space-between;}
-  #boardHost{ border-radius:3px; border:1px solid #000; overflow:hidden; line-height:0; flex:1; min-height:0; cursor:grab; position:relative; }
+  #boardHost{ border-radius:3px; border:1px solid #000; overflow:hidden; line-height:0; flex:1; min-height:0; cursor:grab; position:relative; touch-action:none; }
   #boardHost.dragging{cursor:grabbing;}
   #hud{
-    position:absolute; top:10px; right:10px; width:230px; max-height:calc(100% - 20px);
-    overflow-y:auto; background:rgba(20,12,4,.9); border:1px solid var(--sand-3); border-radius:8px;
-    padding:10px 12px; z-index:20; box-shadow:0 6px 18px rgba(0,0,0,.5); pointer-events:auto;
-    line-height:normal;
+    position:absolute; top:10px; right:10px; width:10vw; min-width:60px; max-width:120px;
+    max-height:calc(100% - 20px);
+    overflow-y:auto; overflow-x:hidden; background:rgba(20,12,4,.9); border:1px solid var(--sand-3); border-radius:8px;
+    padding:8px 5px; z-index:20; box-shadow:0 6px 18px rgba(0,0,0,.5); pointer-events:auto;
+    line-height:normal; display:flex; flex-direction:column; align-items:center;
   }
+  #hud .section-title{ font-size:9px; text-align:center; width:100%; }
   #actionBar{
-    position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
-    display:flex; gap:8px; z-index:20; background:rgba(20,12,4,.9); padding:8px;
-    border-radius:10px; border:1px solid var(--rust); box-shadow:0 6px 18px rgba(0,0,0,.5);
-    line-height:normal;
+    position:absolute; left:0; right:0; bottom:0; width:100%;
+    display:flex; gap:2px; z-index:20; background:rgba(20,12,4,.9); padding:8px;
+    border-radius:0; border-top:1px solid var(--rust); box-shadow:0 -6px 18px rgba(0,0,0,.4);
+    line-height:normal; opacity:.4; transition:opacity .15s ease;
   }
-  .statRow{ display:flex; align-items:center; gap:10px; font-size:13px; padding:3px 0; border-bottom:1px dashed #4a3520; }
+  #actionBar:hover, #actionBar:focus-within{ opacity:1; }
+  .statCol{
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    font-size:10px; padding:5px 0; border-bottom:1px dashed #4a3520; width:100%;
+  }
+  .statCol .letter{
+    display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
+    width:20px; height:20px; background:var(--rust); color:#fff; font-weight:bold;
+    border-radius:3px; font-size:11px; letter-spacing:0;
+  }
+  .statCol .val{color:var(--paper); font-weight:bold; font-size:10px;}
+  .statRow{ display:flex; align-items:center; gap:8px; font-size:13px; padding:3px 0; border-bottom:1px dashed #4a3520; }
   .statRow .letter{
     display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
     width:18px; height:18px; background:var(--rust); color:#fff; font-weight:bold;
@@ -50,7 +64,7 @@
   .statRow .val{color:var(--paper); font-weight:bold;}
   .statRow b.val{color:var(--spice);}
   #actionBar button.iconBtn{
-    width:60px; height:60px; padding:0; position:relative;
+    flex:1 1 0; width:auto; height:60px; padding:0; position:relative;
     background-size:34px 34px; background-position:center; background-repeat:no-repeat;
   }
   #buildHarvester{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVR4nN1SyxHFIAiETBqxrvSglKL0kLZohXd4ISPxM87klj0hLLCrIgwQY1SLmRlHvG1UWMXrATvAutwe1ykgIhARFRGt85YTESUiN7BrIec8PTcWDCEEp6YeUNdqOL+qqiml7gAAgFLKvwnx7mssGGk137zCc2sPxmdmdHeAiMeDeDLzcZFd3uLpR7LmGZyCa+PyR/oIfs7ATUgSh/exAAAAAElFTkSuQmCC'); }
@@ -116,10 +130,10 @@
     body{ align-items:flex-start; }
     #app{ width:98vw; height:auto; max-width:none; }
     #boardHost{ min-height:360px; height:74vh; }
-    #hud{ width:172px; font-size:9px; max-height:44%; padding:8px 9px; }
-    #hud .section-title{ font-size:9px; margin-top:4px; }
-    #actionBar{ flex-wrap:wrap; justify-content:center; max-width:96%; gap:5px; padding:6px; bottom:6px; }
-    #actionBar button.iconBtn{ width:46px; height:46px; background-size:26px 26px; }
+    #hud{ font-size:9px; max-height:44%; padding:6px 4px; }
+    #hud .section-title{ font-size:8px; margin-top:4px; }
+    #actionBar{ gap:2px; padding:5px; }
+    #actionBar button.iconBtn{ height:48px; background-size:26px 26px; }
     .costBadge{ font-size:8px; }
   }
 </style>
@@ -135,11 +149,11 @@
     <div id="boardHost">
       <div id="hud">
         <div class="section-title" id="playerHouseTitle">Your holdings</div>
-        <div class="statRow" title="Spice bank"><span class="letter">S</span><b id="pSpice" class="val">0</b></div>
-        <div class="statRow" title="Silo capacity"><span class="letter">C</span><span id="pCap" class="val">100</span></div>
-        <div class="statRow" title="Power"><span class="letter">P</span><span id="pPower" class="val">0</span></div>
-        <div class="statRow" title="Army (troopers)"><span class="letter">A</span><span id="pArmy" class="val">0</span></div>
-        <div class="statRow" title="Stronghold"><span class="letter">H</span><span id="pStronghold" class="val">160 / 160</span></div>
+        <div class="statCol" title="Spice bank"><span class="letter">S</span><b id="pSpice" class="val">0</b></div>
+        <div class="statCol" title="Silo capacity"><span class="letter">C</span><span id="pCap" class="val">100</span></div>
+        <div class="statCol" title="Power"><span class="letter">P</span><span id="pPower" class="val">0</span></div>
+        <div class="statCol" title="Army (troopers)"><span class="letter">A</span><span id="pArmy" class="val">0</span></div>
+        <div class="statCol" title="Stronghold"><span class="letter">H</span><span id="pStronghold" class="val">160/160</span></div>
 
         <div class="section-title">Rival houses</div>
         <div id="rivalsContainer"></div>
@@ -259,27 +273,53 @@ const layerFx = new PIXI.Container();
 world.addChild(layerGround, layerBuildings, layerUnits, layerFx, layerFog);
 app.stage.addChild(world);
 
-// Map resizes only on an explicit double-click, not on every window resize
-// event (which fires constantly on mobile from address-bar/keyboard changes).
-// This never touches the action bar or HUD, which are fixed-size CSS.
-boardHost.addEventListener('dblclick', (e)=>{
-  e.preventDefault();
+// ================= camera / zoom =================
+const cam={x:0,y:0};
+let zoomFactor=1;
+const ZOOM_STEP=2;
+
+// A double-click (desktop) or double-tap (touch) re-fits the canvas to its
+// container (in case it changed since last render, e.g. rotation) and toggles
+// a 2x zoom centered on the point that was double-clicked/tapped.
+function zoomAt(clientX, clientY){
   vs=viewSize();
   app.renderer.resize(vs.w, vs.h);
+  const rect=app.view.getBoundingClientRect();
+  const sx=clientX-rect.left, sy=clientY-rect.top;
+  const wx=cam.x+sx/zoomFactor, wy=cam.y+sy/zoomFactor;
+  zoomFactor = zoomFactor>1 ? 1 : ZOOM_STEP;
+  world.scale.set(zoomFactor);
+  cam.x=wx-sx/zoomFactor; cam.y=wy-sy/zoomFactor;
   clampCamera();
+}
+boardHost.addEventListener('dblclick', (e)=>{
+  e.preventDefault();
+  zoomAt(e.clientX, e.clientY);
+});
+let lastTapTime=0, lastTapX=0, lastTapY=0;
+boardHost.addEventListener('touchend', (e)=>{
+  if(e.changedTouches.length!==1) return;
+  const t=e.changedTouches[0];
+  const now=Date.now();
+  const dx=t.clientX-lastTapX, dy=t.clientY-lastTapY;
+  if(now-lastTapTime<350 && Math.abs(dx)<30 && Math.abs(dy)<30){
+    e.preventDefault();
+    zoomAt(t.clientX, t.clientY);
+    lastTapTime=0;
+  } else {
+    lastTapTime=now; lastTapX=t.clientX; lastTapY=t.clientY;
+  }
 });
 
-// ================= camera =================
-const cam={x:0,y:0};
 function clampCamera(){
-  const maxX=Math.max(0, MAPW*SZ - vs.w);
-  const maxY=Math.max(0, MAPH*SZ - vs.h);
+  const maxX=Math.max(0, MAPW*SZ - vs.w/zoomFactor);
+  const maxY=Math.max(0, MAPH*SZ - vs.h/zoomFactor);
   cam.x=Math.max(0,Math.min(maxX,cam.x));
   cam.y=Math.max(0,Math.min(maxY,cam.y));
-  world.x=-cam.x; world.y=-cam.y;
+  world.x=-cam.x*zoomFactor; world.y=-cam.y*zoomFactor;
 }
 function centerCameraOn(tx,ty){
-  cam.x=tx*SZ - vs.w/2; cam.y=ty*SZ - vs.h/2; clampCamera();
+  cam.x=tx*SZ - (vs.w/zoomFactor)/2; cam.y=ty*SZ - (vs.h/zoomFactor)/2; clampCamera();
 }
 const KEYS={};
 document.addEventListener('keydown',e=>{ KEYS[e.key]=true; if(e.key==='Escape') deselect(); });
@@ -608,7 +648,7 @@ function renderStats(){
   document.getElementById('pCap').textContent=ph.cap;
   document.getElementById('pPower').textContent=ph.power;
   document.getElementById('pArmy').textContent=ph.units.filter(u=>u.type==='trooper').length;
-  document.getElementById('pStronghold').textContent=Math.max(0,Math.ceil(ph.baseHp))+' / '+ph.baseHpMax;
+  document.getElementById('pStronghold').textContent=Math.max(0,Math.ceil(ph.baseHp))+'/'+ph.baseHpMax;
 
   const rivalsEl=document.getElementById('rivalsContainer');
   rivalsEl.innerHTML='';
@@ -1053,8 +1093,8 @@ function deselect(){
 function selectUnit(u){ state.selectedUnit=u; uiMode=null; updateSelectionRing(); openCtxMenuFor(u); }
 function openCtxMenuFor(u){
   const rect=app.view.getBoundingClientRect();
-  let sx=rect.left+window.scrollX+(u.x*SZ-cam.x)+SZ+6;
-  let sy=rect.top+window.scrollY+(u.y*SZ-cam.y);
+  let sx=rect.left+window.scrollX+(u.x*SZ-cam.x)*zoomFactor+SZ*zoomFactor+6;
+  let sy=rect.top+window.scrollY+(u.y*SZ-cam.y)*zoomFactor;
   document.getElementById('ctxTitle').textContent=(u.type==='harvester'?'Harvester':'Trooper')+' #'+u.id;
   document.getElementById('ctxAttack').style.display=u.type==='trooper'?'flex':'none';
   document.getElementById('ctxEngage').style.display=u.type==='trooper'?'flex':'none';
@@ -1086,7 +1126,7 @@ document.getElementById('ctxCancel').onclick=()=>{ deselect(); };
 
 function tileFromEvent(e){
   const rect=app.view.getBoundingClientRect();
-  const px=e.clientX-rect.left+cam.x, py=e.clientY-rect.top+cam.y;
+  const px=(e.clientX-rect.left)/zoomFactor+cam.x, py=(e.clientY-rect.top)/zoomFactor+cam.y;
   return {x:Math.floor(px/SZ), y:Math.floor(py/SZ)};
 }
 
@@ -1100,7 +1140,7 @@ app.view.addEventListener('pointermove',(e)=>{
   if(Math.abs(dx)>4 || Math.abs(dy)>4){
     dragState.moved=true;
     boardHost.classList.add('dragging');
-    cam.x=dragState.camX-dx; cam.y=dragState.camY-dy; clampCamera();
+    cam.x=dragState.camX-dx/zoomFactor; cam.y=dragState.camY-dy/zoomFactor; clampCamera();
   }
 });
 window.addEventListener('pointerup',(e)=>{
