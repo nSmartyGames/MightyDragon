@@ -133,6 +133,7 @@
         <button id="buildHarvester">Harvester<small>60 spice</small></button>
         <button id="buildTurbine">Wind turbine<small>50 spice</small></button>
         <button id="buildSilo">Silo<small>70 spice</small></button>
+        <button id="buildRefinery">Refinery<small>110 spice</small></button>
         <button id="recruitTroop">Recruit trooper<small>25 spice</small></button>
       </div>
     </div>
@@ -144,7 +145,7 @@
       <span><i class="swatch" style="background:#e0522a"></i>Spice deposit</span>
       <span><i class="swatch" style="background:#111"></i>Unexplored (fog)</span>
     </div>
-    <div class="hint">Click a vehicle to select it, then Move / Attack / Retreat from the menu. Building buttons ask for a grass or desert tile to place on. Drag the map or use arrow keys to scroll — fog clears as your units explore. Troopers that reach a rival stronghold steal spice and damage it; reduce a stronghold to 0 to eliminate that House.</div>
+    <div class="hint">Click a vehicle to select it, then Move / Attack / Search &amp; Engage / Retreat from the menu — Search &amp; Engage sends a trooper hunting for any nearby enemy on its own. Building buttons ask for a grass or desert tile to place on. Drag the map or use arrow keys to scroll — fog clears as your units explore. Troopers that reach a rival stronghold steal spice and damage it; reduce a stronghold to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted.</div>
   </div>
 </div>
 
@@ -152,6 +153,7 @@
   <div class="ctx-title" id="ctxTitle">Unit</div>
   <button id="ctxMove">Move</button>
   <button id="ctxAttack">Attack</button>
+  <button id="ctxEngage">Search &amp; Engage</button>
   <button id="ctxRetreat">Retreat</button>
   <button id="ctxCancel">Cancel</button>
 </div>
@@ -186,6 +188,7 @@ const MAPW=100, MAPH=100, TILE=16, ZOOM=2, SZ=TILE*ZOOM; // 32px on-screen tile
 const SPICE_TARGET=600;
 const START_SPICE=140, START_CAP=100;
 const HARVESTER_COST=60, TURBINE_COST=50, SILO_COST=70, TROOP_COST=25;
+const REFINERY_COST=110, REFINERY_CAP_BONUS=150;
 const HARVESTER_CAP=30, HARVEST_RATE=12;
 const WORM_COUNT=15;
 const MOVE_MS=380;
@@ -199,6 +202,7 @@ const ATTACK_COOLDOWN_MS=900;
 const AI_THINK_INTERVAL_MS=4000;
 const WORM_MOVE_INTERVAL_MS=900;
 const SPICE_SPAWN_INTERVAL_MS=6000;
+const SEARCH_RADIUS=8;
 
 // ================= the three Great Houses =================
 const HOUSE_DEFS=[
@@ -279,23 +283,6 @@ function dirIndexFromDelta(dx,dy){
   let ang=Math.atan2(dx,-dy); if(ang<0) ang+=Math.PI*2;
   return Math.round(ang/(Math.PI/4))%8;
 }
-// Unit textures are drawn neutral (white/light-grey) and tinted per-house at render time,
-// so every House shares one texture set instead of three near-identical ones.
-function vehicleCanvas(cx,size,frame,angle,isHarvester){
-  cx.save(); cx.translate(size/2,size/2); cx.rotate(angle); cx.translate(-size/2,-size/2);
-  if(isHarvester){
-    cx.fillStyle='#ffffff'; cx.fillRect(3,4,size-6,size-7);
-    cx.fillStyle='#dcdcdc'; cx.fillRect(4,5,size-8,3);
-    cx.fillStyle= frame===0 ? 'rgba(0,0,0,.35)' : 'rgba(0,0,0,.15)';
-    cx.fillRect(2,size-5,size-4,2);
-    cx.fillStyle='#dcdcdc'; cx.beginPath(); cx.moveTo(size/2-3,4); cx.lineTo(size/2+3,4); cx.lineTo(size/2,1); cx.closePath(); cx.fill();
-  } else {
-    cx.fillStyle='#ffffff';
-    cx.beginPath(); cx.moveTo(size/2,2); cx.lineTo(size-4,size-4); cx.lineTo(size/2,size-7+(frame===0?0:1)); cx.lineTo(4,size-4); cx.closePath(); cx.fill();
-    cx.fillStyle='#dcdcdc'; cx.fillRect(size/2-1,4,2,5);
-  }
-  cx.restore();
-}
 function wormCanvas(cx,size,frame,angle){
   cx.save(); cx.translate(size/2,size/2); cx.rotate(angle); cx.translate(-size/2,-size/2);
   const wiggle=frame===0?0:1.4;
@@ -304,23 +291,36 @@ function wormCanvas(cx,size,frame,angle){
   cx.fillStyle='#2c1c0d'; cx.beginPath(); cx.arc(size/2,3,1.1,0,Math.PI*2); cx.fill();
   cx.restore();
 }
-function buildUnitTextureSet(isHarvester){
-  const set=[];
-  for(let d=0;d<DIRS;d++) set.push([0,1].map(frame=>canvasTexture(TILE,(cx,size)=>vehicleCanvas(cx,size,frame,dirAngle(d),isHarvester))));
-  return set;
-}
 function buildWormTextures(){
   const set=[];
   for(let d=0;d<DIRS;d++) set.push([0,1].map(frame=>canvasTexture(TILE,(cx,size)=>wormCanvas(cx,size,frame,dirAngle(d)))));
   return set;
 }
+// Hand-drawn image tiles (base64 PNG, neutral white/light-grey so the existing
+// per-house tint-at-render still works). Trooper/tank are single static
+// sprites rotated via sprite.rotation instead of pre-baked per-direction frames.
+const TILE_PNG = {
+  trooper: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAjElEQVR4nL2QQQ4DIQhFP03P5sqzEI9CvAtXcclV6GqMrVhnMmlfYmTB/3wAfg0z+/h/QjvhSK116n9+m15K6bWIhD2P3fRRuFojhJndzPo7fQMz81XklBIAIOfcdUuDAxHpt2it7Q0AwN3DuKo6GYRHvMKlBABARG+a2wlCAyIiVYWqTvUpg9sJ/soLOuxFz7BoHSIAAAAASUVORK5CYII=',
+  tank: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVR4nN1SyxHFIAiETBqxrvSglKL0kLZohXd4ISPxM87klj0hLLCrIgwQY1SLmRlHvG1UWMXrATvAutwe1ykgIhARFRGt85YTESUiN7BrIec8PTcWDCEEp6YeUNdqOL+qqiml7gAAgFLKvwnx7mssGGk137zCc2sPxmdmdHeAiMeDeDLzcZFd3uLpR7LmGZyCa+PyR/oIfs7ATUgSh/exAAAAAElFTkSuQmCC',
+  outpost: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAi0lEQVR4nN2SsRXDIAxEv/O8CMswDjAKj1moNAgtoziV/QgI7BRpchXijtMhgAVyzseKB9gAnHOD0Fp7rUVEPZxS2vazCCEMglIKIqJyMUYAXqt4s84tBoPTWYPG7f1GG7ePrl1lMDDGTBMA1Fo/6uUMnuAfDbz3U7HGqc/YT7rlbhN8iyvB6gf+FG8TqylG5bxpTQAAAABJRU5ErkJggg==',
+  refinery: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABSklEQVR4nN1W223AIAy8VFmEBYFRgAHxKOmXkcsj4LRJ2p4UiceBT3AmBl7GBgDW2uON4CmlbeeO9/7R4CEEAMDeGwSeE/TxSJQrAuRp3DUGCBO+4YGU0vZ7r6DG6Ai/y9/PJutNZlmi5Q8F8MIY41Ccc64ZW+HXQporGAUnotNgq/z6lLoekJsRUdmM29xnnpbfwFp75JwPa+0xgpzLOV/iyzn+/wxNSEQwxny5a27HGJsj1vIZp1nAkMZZSS8Nv3hAElltz+k8ruVLXleAVG2MATA2TYxRzZc8iaUruOsVnAogoqLeOVfaG0Np+QWchnVq8VjvO0u3GZ/jAIOHiE1jjClfr888LV+iEcDmqsm1geq3XctndD0w2rTHucKfCugtCiFMC1UtH1DUhN57Vf1XB3+9JqyLk79XE96Fpaf4JzDNAu17/2/wCcJQumVBN721AAAAAElFTkSuQmCC'
+};
+function loadImageTexture(dataUri){
+  return new Promise((resolve)=>{
+    const img=new Image();
+    img.onload=()=>resolve(PIXI.Texture.from(img));
+    img.src=dataUri;
+  });
+}
+
 const TEX = {
-  harvester: buildUnitTextureSet(true),
-  trooper:   buildUnitTextureSet(false),
+  harvester: null, // filled in by preloadImageTiles()
+  trooper: null,
+  refinery: null,
   worm: buildWormTextures(),
   spice: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#e0522a'; cx.beginPath(); cx.arc(size/2,size/2,6,0,Math.PI*2); cx.fill(); cx.fillStyle='rgba(255,180,120,.6)'; cx.beginPath(); cx.arc(size/2-1.5,size/2-1.5,2.2,0,Math.PI*2); cx.fill(); }),
   turbine: canvasTexture(TILE,(cx,size)=>{ cx.strokeStyle='#ffffff'; cx.lineWidth=1.4; cx.beginPath(); cx.moveTo(size/2,3); cx.lineTo(size/2,size-2); cx.stroke(); cx.fillStyle='#ffffff'; cx.beginPath(); cx.arc(size/2,4,3,0,Math.PI*2); cx.fill(); }),
-  silo: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.fillRect(size/2-5,3,10,size-6); cx.strokeStyle='#dddddd'; cx.strokeRect(size/2-5,3,10,size-6); }),
+  silo: null,
   base: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.fillRect(2,2,size-4,size-4); cx.strokeStyle='#000'; cx.strokeRect(2,2,size-4,size-4); }),
   grassA: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#5c7a3a'; cx.fillRect(0,0,size,size); }),
   grassB: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#547231'; cx.fillRect(0,0,size,size); }),
@@ -434,7 +434,8 @@ function redrawSpiceAndBuildings(){
     layerBuildings.addChild(label);
   });
   buildingMap.forEach(b=>{
-    const tex = b.type==='turbine'?TEX.turbine:TEX.silo;
+    if(b.primary===false) return; // footprint-only tile of a multi-tile building; drawn once at its origin
+    const tex = b.type==='turbine'?TEX.turbine : b.type==='silo'?TEX.silo : TEX.refinery;
     const sp=new PIXI.Sprite(tex); sp.x=b.x*SZ; sp.y=b.y*SZ; sp.scale.set(ZOOM);
     const owner=houseById(b.owner);
     if(owner) sp.tint=owner.color;
@@ -475,11 +476,12 @@ function playerHouse(){ return state.houses.find(h=>!h.ai); }
 function allUnits(){ return state.houses.flatMap(h=>h.units); }
 function enemyHousesOf(house){ return state.houses.filter(h=>h!==house && h.alive); }
 
-function textureFor(u){ return TEX[u.type][u.dir][u.frame]; }
+function textureFor(u){ return TEX[u.type]; }
 function ensureSprite(u){
   if(!u.sprite){
     u.sprite=new PIXI.Sprite(textureFor(u)); u.sprite.anchor.set(0.5); u.sprite.scale.set(ZOOM);
     u.sprite.tint=houseById(u.owner).color;
+    u.sprite.rotation=dirAngle(u.dir);
     u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; layerUnits.addChild(u.sprite);
   }
 }
@@ -515,12 +517,12 @@ app.ticker.add((delta)=>{
       if(!u.sprite) return;
       u.sprite.texture=textureFor(u);
       u.sprite.tint=h.color;
+      u.sprite.rotation=dirAngle(u.dir);
       if(u.moving){
         const t=Math.min(1,(now-u.moveStart)/MOVE_MS);
         u.sprite.x=u.moveFrom.x+(u.moveTo.x-u.moveFrom.x)*t;
         u.sprite.y=u.moveFrom.y+(u.moveTo.y-u.moveFrom.y)*t;
-        u.frame=Math.floor(now/140)%2;
-        if(t>=1){ u.moving=false; u.frame=0; }
+        if(t>=1){ u.moving=false; }
       } else { u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; }
       u.sprite.visible = (h===ph) || !!(explored[u.y] && explored[u.y][u.x]);
     });
@@ -570,6 +572,7 @@ function renderStats(){
   document.getElementById('buildHarvester').disabled=ph.spice<HARVESTER_COST || gameOver;
   document.getElementById('buildTurbine').disabled=ph.spice<TURBINE_COST || gameOver;
   document.getElementById('buildSilo').disabled=ph.spice<SILO_COST || gameOver;
+  document.getElementById('buildRefinery').disabled=ph.spice<REFINERY_COST || gameOver;
   document.getElementById('recruitTroop').disabled=ph.spice<TROOP_COST || gameOver;
 }
 
@@ -638,9 +641,58 @@ function harvestAt(u){
 // fast timer so units move continuously; a unit only advances once its current
 // step animation (u.moving) has finished, so real movement speed is paced by
 // MOVE_MS regardless of how often this is called.
+// Applies one cooldown-gated trooper attack against a unit or a base. Returns
+// true if the target unit died (caller should clear the attacker's order).
+function applyTrooperAttack(house,u,targetHouse,targetUnit,targetIsBase){
+  const now=performance.now();
+  if(u._lastAttack && now-u._lastAttack<ATTACK_COOLDOWN_MS) return false;
+  u._lastAttack=now;
+  if(targetIsBase){
+    const stolen=Math.min(targetHouse.spice, 10+Math.random()*10);
+    const dmg=10+Math.floor(Math.random()*7);
+    targetHouse.spice-=stolen; house.spice+=stolen;
+    targetHouse.baseHp-=dmg; targetHouse.lastAttacker=house.id;
+    addLog('House '+house.name+"'s trooper strikes House "+targetHouse.name+"'s stronghold — "+Math.floor(stolen)+' spice seized, '+dmg+' damage dealt.');
+    return false;
+  }
+  if(!targetUnit) return false;
+  const dmg=3+Math.floor(Math.random()*4);
+  targetUnit.hp-=dmg;
+  addLog('House '+house.name+"'s trooper hits House "+targetHouse.name+"'s "+targetUnit.type+' for '+dmg+'.');
+  if(targetUnit.hp<=0){
+    addLog("House "+targetHouse.name+"'s "+targetUnit.type+' is destroyed.');
+    const idx=targetHouse.units.indexOf(targetUnit);
+    if(idx>=0){ if(targetUnit.sprite) layerUnits.removeChild(targetUnit.sprite); targetHouse.units.splice(idx,1); }
+    if(state.selectedUnit===targetUnit) deselect();
+    return true;
+  }
+  return false;
+}
+// Nearest living enemy unit or base within range, for the "Search & Engage" stance.
+function findEngageTarget(house,u){
+  let best=null,bd=SEARCH_RADIUS;
+  enemyHousesOf(house).forEach(r=>{
+    r.units.forEach(t=>{
+      const d=Math.max(Math.abs(u.x-t.x),Math.abs(u.y-t.y));
+      if(d<=bd){ bd=d; best={targetHouse:r, targetUnit:t, targetIsBase:false, x:t.x, y:t.y}; }
+    });
+    const bd2=Math.max(Math.abs(u.x-r.base.x),Math.abs(u.y-r.base.y));
+    if(bd2<=bd){ bd=bd2; best={targetHouse:r, targetUnit:null, targetIsBase:true, x:r.base.x, y:r.base.y}; }
+  });
+  return best;
+}
 function stepHouseUnits(house){
   house.units.forEach(u=>{
     if(!u.order || u.moving) return;
+    if(u.order.kind==='engage'){
+      if(u.type!=='trooper'){ u.order=null; return; }
+      const t=findEngageTarget(house,u);
+      if(!t) return; // nothing nearby yet; keep scanning each tick
+      const dist=Math.max(Math.abs(u.x-t.x),Math.abs(u.y-t.y));
+      if(dist<=1) applyTrooperAttack(house,u,t.targetHouse,t.targetUnit,t.targetIsBase);
+      else stepToward(u,t.x,t.y);
+      return; // engage is a standing stance; only Retreat/Cancel clears it
+    }
     if(u.order.kind==='attack'){
       const targetHouse=houseById(u.order.targetHouseId);
       if(!targetHouse || !targetHouse.alive){ u.order=null; return; }
@@ -650,27 +702,8 @@ function stepHouseUnits(house){
       const dist=Math.max(Math.abs(u.x-tx),Math.abs(u.y-ty));
       if(dist<=1){
         if(u.type!=='trooper'){ u.order=null; return; }
-        const now=performance.now();
-        if(u._lastAttack && now-u._lastAttack<ATTACK_COOLDOWN_MS) return;
-        u._lastAttack=now;
-        if(targetIsBase){
-          const stolen=Math.min(targetHouse.spice, 10+Math.random()*10);
-          const dmg=10+Math.floor(Math.random()*7);
-          targetHouse.spice-=stolen; house.spice+=stolen;
-          targetHouse.baseHp-=dmg; targetHouse.lastAttacker=house.id;
-          addLog('House '+house.name+"'s trooper strikes House "+targetHouse.name+"'s stronghold — "+Math.floor(stolen)+' spice seized, '+dmg+' damage dealt.');
-        } else if(targetUnit){
-          const dmg=3+Math.floor(Math.random()*4);
-          targetUnit.hp-=dmg;
-          addLog('House '+house.name+"'s trooper hits House "+targetHouse.name+"'s "+targetUnit.type+' for '+dmg+'.');
-          if(targetUnit.hp<=0){
-            addLog("House "+targetHouse.name+"'s "+targetUnit.type+' is destroyed.');
-            const idx=targetHouse.units.indexOf(targetUnit);
-            if(idx>=0){ if(targetUnit.sprite) layerUnits.removeChild(targetUnit.sprite); targetHouse.units.splice(idx,1); }
-            if(state.selectedUnit===targetUnit) deselect();
-            u.order=null;
-          }
-        }
+        const killed=applyTrooperAttack(house,u,targetHouse,targetUnit,targetIsBase);
+        if(killed) u.order=null;
       } else {
         stepToward(u,tx,ty);
       }
@@ -681,14 +714,39 @@ function stepHouseUnits(house){
     if(u.type==='harvester') harvestAt(u);
   });
 }
+// Harvesters unload at a silo or refinery, not the base. With none built,
+// a full harvester's cargo has nowhere to go and is spilled.
+function nearestDropoff(house,fromX,fromY){
+  let best=null,bd=Infinity;
+  buildingMap.forEach(b=>{
+    if(b.owner!==house.id || b.primary===false) return;
+    if(b.type!=='silo' && b.type!=='refinery') return;
+    const d=Math.abs(b.x-fromX)+Math.abs(b.y-fromY);
+    if(d<bd){ bd=d; best={x:b.x,y:b.y}; }
+  });
+  return best;
+}
+function isDropoffTile(house,x,y){
+  const key=x+','+y;
+  const b=buildingMap.get(key);
+  return !!(b && b.owner===house.id && (b.type==='silo' || b.type==='refinery'));
+}
 function autoHarvestAndReturn(house){
   house.units.forEach(u=>{
     if(u.type!=='harvester') return;
     if(!u.order && u.carrying<HARVESTER_CAP) harvestAt(u);
-    if(u.carrying>=HARVESTER_CAP && !u.order) u.order={kind:'move', x:house.base.x, y:house.base.y};
-    if(u.x===house.base.x && u.y===house.base.y && u.carrying>0){
-      const add=Math.min(u.carrying, house.cap-house.spice);
+    if(u.carrying>=HARVESTER_CAP && !u.order){
+      const dropoff=nearestDropoff(house,u.x,u.y);
+      if(dropoff) u.order={kind:'move', x:dropoff.x, y:dropoff.y};
+      else {
+        addLog('House '+house.name+"'s harvester has no silo to unload at — "+Math.floor(u.carrying)+' spice spilled.');
+        u.carrying=0;
+      }
+    }
+    if(u.carrying>0 && isDropoffTile(house,u.x,u.y)){
+      const add=Math.max(0, Math.min(u.carrying, house.cap-house.spice));
       house.spice+=add; u.carrying-=add;
+      if(u.carrying>0){ addLog('House '+house.name+"'s silo is full — "+Math.floor(u.carrying)+' spice spilled.'); u.carrying=0; }
     }
   });
 }
@@ -940,6 +998,7 @@ function openCtxMenuFor(u){
   let sy=rect.top+window.scrollY+(u.y*SZ-cam.y);
   document.getElementById('ctxTitle').textContent=(u.type==='harvester'?'Harvester':'Trooper')+' #'+u.id;
   document.getElementById('ctxAttack').style.display=u.type==='trooper'?'flex':'none';
+  document.getElementById('ctxEngage').style.display=u.type==='trooper'?'flex':'none';
   ctxMenu.style.left=sx+'px'; ctxMenu.style.top=sy+'px';
   ctxMenu.style.display='flex'; modeHint.style.display='none';
   // clamp so the menu never renders off-screen, regardless of viewport size
@@ -952,6 +1011,12 @@ function openCtxMenuFor(u){
 }
 document.getElementById('ctxMove').onclick=()=>{ uiMode={type:'move', unit:state.selectedUnit}; ctxMenu.style.display='none'; modeHint.textContent='MOVE — choose a tile'; modeHint.style.display='block'; };
 document.getElementById('ctxAttack').onclick=()=>{ uiMode={type:'attack', unit:state.selectedUnit}; ctxMenu.style.display='none'; modeHint.textContent='ATTACK — choose a target'; modeHint.style.display='block'; };
+document.getElementById('ctxEngage').onclick=()=>{
+  const u=state.selectedUnit; const owner=houseById(u.owner);
+  u.order={kind:'engage'};
+  addLog("House "+owner.name+"'s trooper begins searching for targets to engage.");
+  deselect();
+};
 document.getElementById('ctxRetreat').onclick=()=>{
   const u=state.selectedUnit; const owner=houseById(u.owner);
   u.order={kind:'move', x:owner.base.x, y:owner.base.y};
@@ -1010,6 +1075,29 @@ function handleBoardClick(e){
     return;
   }
 
+  if(uiMode && uiMode.type==='place-refinery'){
+    const footprint=[[x,y],[x+1,y],[x,y+1],[x+1,y+1]];
+    const blocked = footprint.some(([fx,fy])=>{
+      if(!inBounds(fx,fy)) return true;
+      if(terrain[fy][fx]==='mountain') return true;
+      if(buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy)) return true;
+      if(!explored[fy][fx]) return true;
+      return false;
+    });
+    if(blocked){ addLog('Not enough clear, explored ground here for a 2x2 refinery.'); }
+    else if(ph.spice>=REFINERY_COST){
+      ph.spice-=REFINERY_COST;
+      footprint.forEach(([fx,fy],i)=>{
+        buildingMap.set(fx+','+fy, {x:fx,y:fy,type:'refinery',owner:ph.id,primary:i===0});
+      });
+      ph.cap+=REFINERY_CAP_BONUS;
+      addLog('Refinery constructed — capacity +'+REFINERY_CAP_BONUS+'.');
+      redrawSpiceAndBuildings();
+    }
+    uiMode=null; modeHint.style.display='none'; renderStats();
+    return;
+  }
+
   if(uiMode){
     const u=uiMode.unit;
     if(uiMode.type==='move'){
@@ -1052,6 +1140,11 @@ document.getElementById('buildSilo').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<SILO_COST || gameOver) return;
   uiMode={type:'place-silo'}; modeHint.textContent='PLACE SILO — choose a grass/desert tile'; modeHint.style.display='block';
+};
+document.getElementById('buildRefinery').onclick=()=>{
+  const ph=playerHouse();
+  if(!ph || ph.spice<REFINERY_COST || gameOver) return;
+  uiMode={type:'place-refinery'}; modeHint.textContent='PLACE REFINERY — choose the top-left of a clear 2x2 area'; modeHint.style.display='block';
 };
 document.getElementById('recruitTroop').onclick=()=>{
   const ph=playerHouse();
@@ -1124,7 +1217,12 @@ function showHouseSelect(){
   });
   el.style.display='flex';
 }
-showHouseSelect();
+Promise.all([
+  loadImageTexture(TILE_PNG.trooper).then(t=>{ TEX.trooper=t; }),
+  loadImageTexture(TILE_PNG.tank).then(t=>{ TEX.harvester=t; }),
+  loadImageTexture(TILE_PNG.outpost).then(t=>{ TEX.silo=t; }),
+  loadImageTexture(TILE_PNG.refinery).then(t=>{ TEX.refinery=t; })
+]).then(showHouseSelect);
 })();
 </script>
 </body>
