@@ -258,9 +258,10 @@ const REFINERY_COST=110, REFINERY_CAP_BONUS=150;
 const HARVESTER_CAP=30, HARVEST_RATE=12;
 const WORM_COUNT=15;
 const MOVE_MS=380;
-const TROOP_HP=10;
+const TROOP_HP=100;
 const VISION_RADIUS=5;
-const BASE_HP_MAX=160;
+const BASE_HP_MAX=1000; // stronghold "power points"
+const TROOP_SHOT_DMG=10; // one trooper shot drains 10 power points, from a base or a unit
 // real-time pacing
 const TICK_MS=150;
 const HARVEST_INTERVAL_MS=500;
@@ -909,14 +910,13 @@ function applyTrooperAttack(house,u,targetHouse,targetUnit,targetIsBase){
   u._lastAttack=now;
   if(targetIsBase){
     const stolen=Math.min(targetHouse.spice, 10+Math.random()*10);
-    const dmg=10+Math.floor(Math.random()*7);
     targetHouse.spice-=stolen; house.spice+=stolen;
-    targetHouse.baseHp-=dmg; targetHouse.lastAttacker=house.id;
-    addLog('House '+house.name+"'s trooper strikes House "+targetHouse.name+"'s stronghold — "+Math.floor(stolen)+' spice seized, '+dmg+' damage dealt.');
+    targetHouse.baseHp-=TROOP_SHOT_DMG; targetHouse.lastAttacker=house.id;
+    addLog('House '+house.name+"'s trooper strikes House "+targetHouse.name+"'s stronghold — "+Math.floor(stolen)+' spice seized, '+TROOP_SHOT_DMG+' power drained.');
     return false;
   }
   if(!targetUnit) return false;
-  const dmg=3+Math.floor(Math.random()*4);
+  const dmg=TROOP_SHOT_DMG;
   targetUnit.hp-=dmg;
   addLog('House '+house.name+"'s trooper hits House "+targetHouse.name+"'s "+targetUnit.type+' for '+dmg+'.');
   if(targetUnit.hp<=0){
@@ -947,10 +947,21 @@ function stepHouseUnits(house){
     if(u.order.kind==='engage'){
       if(u.type!=='trooper'){ u.order=null; return; }
       const t=findEngageTarget(house,u);
-      if(!t) return; // nothing nearby yet; keep scanning each tick
-      const dist=Math.max(Math.abs(u.x-t.x),Math.abs(u.y-t.y));
-      if(dist<=1) applyTrooperAttack(house,u,t.targetHouse,t.targetUnit,t.targetIsBase);
-      else stepToward(u,t.x,t.y);
+      if(t){
+        const dist=Math.max(Math.abs(u.x-t.x),Math.abs(u.y-t.y));
+        if(dist<=1) applyTrooperAttack(house,u,t.targetHouse,t.targetUnit,t.targetIsBase);
+        else stepToward(u,t.x,t.y);
+      } else {
+        // nothing within engage range yet — actively hunt toward the nearest
+        // living rival's stronghold instead of idling, picking up any enemy
+        // it passes within range of along the way
+        const rivals=enemyHousesOf(house);
+        if(rivals.length){
+          let nearest=rivals[0], bd=Infinity;
+          rivals.forEach(r=>{ const d=Math.max(Math.abs(u.x-r.base.x),Math.abs(u.y-r.base.y)); if(d<bd){ bd=d; nearest=r; } });
+          stepToward(u,nearest.base.x,nearest.base.y);
+        }
+      }
       return; // engage is a standing stance; only Retreat/Cancel clears it
     }
     if(u.order.kind==='attack'){
