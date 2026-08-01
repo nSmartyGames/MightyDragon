@@ -1341,7 +1341,9 @@ function handleBoardClick(e){
   // unit under the cursor re-selects instead of stacking a move order onto
   // it; a trooper attacks an enemy unit/stronghold under the cursor;
   // anything else is a move order (non-trooper units always just move,
-  // since they have no attack to execute anyway).
+  // since they have no attack to execute anyway). The unit stays selected
+  // after a command so follow-up orders can be issued right away — only
+  // Cancel, Escape, or selecting something else clears the selection.
   if(state.selectedUnit){
     const u=state.selectedUnit;
     const friendlyAtTile=ph.units.find(o=>o.x===x && o.y===y);
@@ -1351,18 +1353,17 @@ function handleBoardClick(e){
       if(enemyUnit){
         u.order={kind:'attack', targetHouseId:enemyUnit.owner, targetId:enemyUnit.id};
         addLog('Order given: attack House '+houseById(enemyUnit.owner).name+"'s "+enemyUnit.type+'.');
-        deselect(); return;
+        return;
       }
       const targetHouse=state.houses.find(h=>h!==ph && h.alive && h.base.x===x && h.base.y===y);
       if(targetHouse){
         u.order={kind:'attack', targetHouseId:targetHouse.id, targetId:'base'};
         addLog('Order given: attack House '+targetHouse.name+"'s stronghold.");
-        deselect(); return;
+        return;
       }
     }
     if(passable(x,y)){ u.order={kind:'move', x, y}; addLog('Order given: move to ('+x+','+y+').'); }
     else addLog('Rocky mountains block that route.');
-    deselect();
     return;
   }
 
