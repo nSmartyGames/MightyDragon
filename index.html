@@ -30,14 +30,21 @@
   .sub{ font-size:11px; color:var(--sand-2); letter-spacing:1px; margin-bottom:8px; display:flex; justify-content:space-between;}
   #boardHost{ border-radius:3px; border:1px solid #000; overflow:hidden; line-height:0; flex:1; min-height:0; cursor:grab; position:relative; touch-action:none; }
   #boardHost.dragging{cursor:grabbing;}
-  #hud{
-    position:absolute; top:10px; right:10px; width:10vw; min-width:60px; max-width:120px;
-    max-height:calc(100% - 20px);
-    overflow-y:auto; overflow-x:hidden; background:rgba(20,12,4,.9); border:1px solid var(--sand-3); border-radius:8px;
-    padding:8px 5px; z-index:20; box-shadow:0 6px 18px rgba(0,0,0,.5); pointer-events:auto;
-    line-height:normal; display:flex; flex-direction:column; align-items:center;
+  #hudBar{
+    display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap;
+    padding:8px 12px; margin-bottom:8px; font-size:11px; line-height:normal;
   }
-  #hud .section-title{ font-size:9px; text-align:center; width:100%; }
+  .hudGroup{ display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .hudGroup.holdings{ flex:1 1 260px; }
+  .hudGroup.rivals{ flex:2 1 320px; }
+  .hudGroup.logGroup{ flex:1 1 200px; }
+  .hudGroup h4{ margin:0; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--sand-2); border-bottom:1px solid var(--sand-3); padding-bottom:2px; }
+  .statLine{ display:flex; gap:12px; flex-wrap:wrap; }
+  .stat{ display:flex; align-items:baseline; gap:4px; font-size:11px; }
+  .stat .label{ color:var(--sand-2); font-size:9px; text-transform:uppercase; letter-spacing:.5px; }
+  .stat .val{ color:var(--paper); font-weight:bold; }
+  .stat b.val{ color:var(--spice); }
+  #rivalsContainer{ display:flex; gap:8px; flex-wrap:wrap; }
   #actionBar{
     position:absolute; left:0; right:0; bottom:0; width:100%;
     display:flex; gap:2px; z-index:20; background:rgba(20,12,4,.9); padding:8px;
@@ -45,22 +52,8 @@
     line-height:normal; opacity:.4; transition:opacity .15s ease;
   }
   #actionBar:hover, #actionBar:focus-within{ opacity:1; }
-  .statCol{
-    display:flex; flex-direction:column; align-items:center; gap:2px;
-    font-size:10px; padding:5px 0; border-bottom:1px dashed #4a3520; width:100%;
-  }
-  .statCol .letter{
-    display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
-    width:20px; height:20px; background:var(--rust); color:#fff; font-weight:bold;
-    border-radius:3px; font-size:11px; letter-spacing:0;
-  }
-  .statCol .val{color:var(--paper); font-weight:bold; font-size:10px;}
-  .statRow{ display:flex; align-items:center; gap:8px; font-size:13px; padding:3px 0; border-bottom:1px dashed #4a3520; }
-  .statRow .letter{
-    display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
-    width:18px; height:18px; background:var(--rust); color:#fff; font-weight:bold;
-    border-radius:3px; font-size:11px; letter-spacing:0;
-  }
+  .statRow{ display:flex; justify-content:space-between; gap:8px; font-size:10px; padding:1px 0; }
+  .statRow .label{ color:var(--sand-2); font-size:9px; text-transform:uppercase; letter-spacing:.5px; }
   .statRow .val{color:var(--paper); font-weight:bold;}
   .statRow b.val{color:var(--spice);}
   #actionBar button.iconBtn{
@@ -71,12 +64,11 @@
   #buildTurbine{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaklEQVR4nM2SQQrAIAwEN6XvTb4SP+hXtpdaaNFEsIXOSYkZNioQwJPozBYVZ1gWyKiQRRcRAYB91Gxm176UMheHD1Q1vcRQQJK11lBwG6HN1ciagT8843cCVWVv/XqC7kdquHsqWE6wzAGHm0qrAAzDnwAAAABJRU5ErkJggg=='); }
   #buildSilo{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAi0lEQVR4nN2SsRXDIAxEv/O8CMswDjAKj1moNAgtoziV/QgI7BRpchXijtMhgAVyzseKB9gAnHOD0Fp7rUVEPZxS2vazCCEMglIKIqJyMUYAXqt4s84tBoPTWYPG7f1GG7ePrl1lMDDGTBMA1Fo/6uUMnuAfDbz3U7HGqc/YT7rlbhN8iyvB6gf+FG8TqylG5bxpTQAAAABJRU5ErkJggg=='); }
   #buildRefinery{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABSklEQVR4nN1W223AIAy8VFmEBYFRgAHxKOmXkcsj4LRJ2p4UiceBT3AmBl7GBgDW2uON4CmlbeeO9/7R4CEEAMDeGwSeE/TxSJQrAuRp3DUGCBO+4YGU0vZ7r6DG6Ai/y9/PJutNZlmi5Q8F8MIY41Ccc64ZW+HXQporGAUnotNgq/z6lLoekJsRUdmM29xnnpbfwFp75JwPa+0xgpzLOV/iyzn+/wxNSEQwxny5a27HGJsj1vIZp1nAkMZZSS8Nv3hAElltz+k8ruVLXleAVG2MATA2TYxRzZc8iaUruOsVnAogoqLeOVfaG0Np+QWchnVq8VjvO0u3GZ/jAIOHiE1jjClfr888LV+iEcDmqsm1geq3XctndD0w2rTHucKfCugtCiFMC1UtH1DUhN57Vf1XB3+9JqyLk79XE96Fpaf4JzDNAu17/2/wCcJQumVBN721AAAAAElFTkSuQmCC'); }
-  #recruitTroop{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAjElEQVR4nL2QQQ4DIQhFP03P5sqzEI9CvAtXcclV6GqMrVhnMmlfYmTB/3wAfg0z+/h/QjvhSK116n9+m15K6bWIhD2P3fRRuFojhJndzPo7fQMz81XklBIAIOfcdUuDAxHpt2it7Q0AwN3DuKo6GYRHvMKlBABARG+a2wlCAyIiVYWqTvUpg9sJ/soLOuxFz7BoHSIAAAAASUVORK5CYII='); }
+  #recruitTroop{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAe0lEQVR4nL2SwQ3AIAhFpaM4Ft1BtuoEnhwGR6GXmlSKcjD1J56ePswPIexISklG7FiVTwUiIsw8nO4Kaq1rP4gxgmuYRZ7knDeV6JSGFu8ErbR2iYgCAJylFJObYWZ5LQ6qo3kfrzSL/7qJ6LzFj0CXpmNxvWl66uXxGwkoZYzxn0+NAAAAAElFTkSuQmCC'); }
   .costBadge{
     position:absolute; right:2px; bottom:1px; font-size:9px; color:var(--sand-2);
     background:rgba(10,6,2,.75); padding:1px 3px; border-radius:3px; line-height:1.2;
   }
-  .section-title{ font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--sand-2); margin-top:6px; border-bottom:1px solid var(--sand-3); padding-bottom:3px; }
   button{
     font-family:inherit; background:linear-gradient(180deg,#4a3220,#2c1c0d); color:var(--paper);
     border:1px solid var(--sand-3); border-radius:4px; padding:8px 10px; font-size:12px; cursor:pointer;
@@ -122,16 +114,15 @@
   .houseCard .bar{ height:6px; border-radius:3px; margin-bottom:10px; }
   .houseCard h3{ margin:0 0 6px 0; font-size:14px; letter-spacing:2px; text-transform:uppercase; }
   .houseCard p{ font-size:11px; color:var(--sand-2); line-height:1.5; margin:0; }
-  .rivalPanel{ border:1px solid var(--sand-3); border-left-width:4px; border-left-style:solid; border-radius:4px; padding:5px 8px; margin-bottom:6px; }
-  .rivalPanel .rname{ font-size:12px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; margin-bottom:2px; }
-  .rivalPanel .statRow{ font-size:11px; padding:1px 0; }
+  .rivalPanel{ border:1px solid var(--sand-3); border-left-width:4px; border-left-style:solid; border-radius:4px; padding:5px 8px; width:150px; flex:0 0 auto; }
+  .rivalPanel .rname{ font-size:11px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; margin-bottom:2px; }
   .rivalPanel.eliminated{ opacity:.45; }
   @media (max-width:700px){
     body{ align-items:flex-start; }
     #app{ width:98vw; height:auto; max-width:none; }
     #boardHost{ min-height:360px; height:74vh; }
-    #hud{ font-size:9px; max-height:44%; padding:6px 4px; }
-    #hud .section-title{ font-size:8px; margin-top:4px; }
+    #hudBar{ font-size:9px; padding:6px 8px; gap:8px; max-height:34vh; overflow-y:auto; }
+    .hudGroup h4{ font-size:9px; }
     #actionBar{ gap:2px; padding:5px; }
     #actionBar button.iconBtn{ height:48px; background-size:26px 26px; }
     .costBadge{ font-size:8px; }
@@ -146,21 +137,27 @@
   <div class="panel" id="boardWrap">
     <h1>Galacticus</h1>
     <div class="sub"><span>Spice Throne — <span id="gameClock">00:00</span></span><span id="camHint">drag map / arrow keys to scroll</span></div>
-    <div id="boardHost">
-      <div id="hud">
-        <div class="section-title" id="playerHouseTitle">Your holdings</div>
-        <div class="statCol" title="Spice bank"><span class="letter">S</span><b id="pSpice" class="val">0</b></div>
-        <div class="statCol" title="Silo capacity"><span class="letter">C</span><span id="pCap" class="val">100</span></div>
-        <div class="statCol" title="Power"><span class="letter">P</span><span id="pPower" class="val">0</span></div>
-        <div class="statCol" title="Army (troopers)"><span class="letter">A</span><span id="pArmy" class="val">0</span></div>
-        <div class="statCol" title="Stronghold"><span class="letter">H</span><span id="pStronghold" class="val">160/160</span></div>
-
-        <div class="section-title">Rival houses</div>
+    <div id="hudBar" class="panel">
+      <div class="hudGroup holdings">
+        <h4 id="playerHouseTitle">Your Holdings</h4>
+        <div class="statLine">
+          <span class="stat" title="Spice bank"><span class="label">Spice</span><b id="pSpice" class="val">0</b></span>
+          <span class="stat" title="Silo capacity"><span class="label">Capacity</span><span id="pCap" class="val">100</span></span>
+          <span class="stat" title="Power"><span class="label">Power</span><span id="pPower" class="val">0</span></span>
+          <span class="stat" title="Army (troopers)"><span class="label">Army</span><span id="pArmy" class="val">0</span></span>
+          <span class="stat" title="Stronghold"><span class="label">Stronghold</span><span id="pStronghold" class="val">160/160</span></span>
+        </div>
+      </div>
+      <div class="hudGroup rivals">
+        <h4>Rival Houses</h4>
         <div id="rivalsContainer"></div>
-
-        <div class="section-title">Log</div>
+      </div>
+      <div class="hudGroup logGroup">
+        <h4>Log</h4>
         <div id="log"></div>
       </div>
+    </div>
+    <div id="boardHost">
       <div id="actionBar">
         <button id="buildHarvester" class="iconBtn" title="Harvester — 60 spice"><span class="costBadge">60</span></button>
         <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice"><span class="costBadge">50</span></button>
@@ -377,7 +374,7 @@ function wormMouthCanvas(cx,size){
 // per-house tint-at-render still works). Trooper/tank are single static
 // sprites rotated via sprite.rotation instead of pre-baked per-direction frames.
 const TILE_PNG = {
-  trooper: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAjElEQVR4nL2QQQ4DIQhFP03P5sqzEI9CvAtXcclV6GqMrVhnMmlfYmTB/3wAfg0z+/h/QjvhSK116n9+m15K6bWIhD2P3fRRuFojhJndzPo7fQMz81XklBIAIOfcdUuDAxHpt2it7Q0AwN3DuKo6GYRHvMKlBABARG+a2wlCAyIiVYWqTvUpg9sJ/soLOuxFz7BoHSIAAAAASUVORK5CYII=',
+  trooper: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAe0lEQVR4nL2SwQ3AIAhFpaM4Ft1BtuoEnhwGR6GXmlSKcjD1J56ePswPIexISklG7FiVTwUiIsw8nO4Kaq1rP4gxgmuYRZ7knDeV6JSGFu8ErbR2iYgCAJylFJObYWZ5LQ6qo3kfrzSL/7qJ6LzFj0CXpmNxvWl66uXxGwkoZYzxn0+NAAAAAElFTkSuQmCC',
   tank: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVR4nN1SyxHFIAiETBqxrvSglKL0kLZohXd4ISPxM87klj0hLLCrIgwQY1SLmRlHvG1UWMXrATvAutwe1ykgIhARFRGt85YTESUiN7BrIec8PTcWDCEEp6YeUNdqOL+qqiml7gAAgFLKvwnx7mssGGk137zCc2sPxmdmdHeAiMeDeDLzcZFd3uLpR7LmGZyCa+PyR/oIfs7ATUgSh/exAAAAAElFTkSuQmCC',
   outpost: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAi0lEQVR4nN2SsRXDIAxEv/O8CMswDjAKj1moNAgtoziV/QgI7BRpchXijtMhgAVyzseKB9gAnHOD0Fp7rUVEPZxS2vazCCEMglIKIqJyMUYAXqt4s84tBoPTWYPG7f1GG7ePrl1lMDDGTBMA1Fo/6uUMnuAfDbz3U7HGqc/YT7rlbhN8iyvB6gf+FG8TqylG5bxpTQAAAABJRU5ErkJggg==',
   refinery: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABSklEQVR4nN1W223AIAy8VFmEBYFRgAHxKOmXkcsj4LRJ2p4UiceBT3AmBl7GBgDW2uON4CmlbeeO9/7R4CEEAMDeGwSeE/TxSJQrAuRp3DUGCBO+4YGU0vZ7r6DG6Ai/y9/PJutNZlmi5Q8F8MIY41Ccc64ZW+HXQporGAUnotNgq/z6lLoekJsRUdmM29xnnpbfwFp75JwPa+0xgpzLOV/iyzn+/wxNSEQwxny5a27HGJsj1vIZp1nAkMZZSS8Nv3hAElltz+k8ruVLXleAVG2MATA2TYxRzZc8iaUruOsVnAogoqLeOVfaG0Np+QWchnVq8VjvO0u3GZ/jAIOHiE1jjClfr888LV+iEcDmqsm1geq3XctndD0w2rTHucKfCugtCiFMC1UtH1DUhN57Vf1XB3+9JqyLk79XE96Fpaf4JzDNAu17/2/wCcJQumVBN721AAAAAElFTkSuQmCC'
@@ -643,7 +640,7 @@ app.ticker.add((delta)=>{
 function renderLog(){ const el=document.getElementById('log'); el.innerHTML=state.log.map(m=>'<div>'+m+'</div>').join(''); el.scrollTop=el.scrollHeight; }
 function renderStats(){
   const ph=playerHouse();
-  document.getElementById('playerHouseTitle').textContent='Your holdings — House '+ph.name;
+  document.getElementById('playerHouseTitle').textContent='Your Holdings — House '+ph.name;
   document.getElementById('pSpice').textContent=Math.floor(ph.spice);
   document.getElementById('pCap').textContent=ph.cap;
   document.getElementById('pPower').textContent=ph.power;
@@ -658,9 +655,9 @@ function renderStats(){
     div.style.borderLeftColor=h.colorCss;
     div.innerHTML =
       '<div class="rname" style="color:'+h.colorCss+'">'+h.name+(h.alive?'':' — Eliminated')+'</div>'+
-      '<div class="statRow" title="Spice"><span class="letter">S</span><span class="val">'+Math.floor(h.spice)+'</span></div>'+
-      '<div class="statRow" title="Army"><span class="letter">A</span><span class="val">'+h.units.filter(u=>u.type==='trooper').length+'</span></div>'+
-      '<div class="statRow" title="Stronghold"><span class="letter">H</span><span class="val">'+Math.max(0,Math.ceil(h.baseHp))+' / '+h.baseHpMax+'</span></div>';
+      '<div class="statRow"><span class="label">Spice</span><span class="val">'+Math.floor(h.spice)+'</span></div>'+
+      '<div class="statRow"><span class="label">Army</span><span class="val">'+h.units.filter(u=>u.type==='trooper').length+'</span></div>'+
+      '<div class="statRow"><span class="label">Stronghold</span><span class="val">'+Math.max(0,Math.ceil(h.baseHp))+'/'+h.baseHpMax+'</span></div>';
     rivalsEl.appendChild(div);
   });
 
