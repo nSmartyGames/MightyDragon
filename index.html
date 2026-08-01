@@ -29,7 +29,13 @@
   h1{ font-size:19px; letter-spacing:3px; text-transform:uppercase; color:var(--spice); margin:0 0 2px 0; text-shadow:0 0 12px rgba(224,82,42,.5); }
   .sub{ font-size:11px; color:var(--sand-2); letter-spacing:1px; margin-bottom:8px; display:flex; justify-content:space-between;}
   #boardHost{ border-radius:3px; border:1px solid #000; overflow:hidden; line-height:0; flex:1; min-height:0; cursor:grab; position:relative; touch-action:none; }
+  #boardHost.targeting{ cursor:crosshair; }
   #boardHost.dragging{cursor:grabbing;}
+  #minimap{
+    position:absolute; top:8px; right:8px; width:150px; height:150px; z-index:18;
+    border:1px solid var(--rust); border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,.6);
+    image-rendering:pixelated; background:#000; cursor:pointer;
+  }
   /* Full-width header strip above the whole game panel: line 1 is the stat
      cards + house tag + rival summaries, line 2 is the compact 2-line log. */
   #hudBar{
@@ -99,10 +105,13 @@
   .legend{ display:flex; gap:10px; font-size:10px; color:var(--sand-2); margin-top:6px; flex-wrap:wrap; }
   .legend span{display:flex; align-items:center; gap:4px;}
   .swatch{width:9px; height:9px; border-radius:2px; display:inline-block;}
+  /* Fixed to the board's top-left corner rather than anchored next to the
+     selected unit, so it never covers the nearby tiles/enemies the new
+     click-to-move-or-attack interaction relies on clicking. */
   #ctxMenu{
-    position:absolute; display:none; flex-direction:column;
+    position:absolute; top:8px; left:8px; display:none; flex-direction:column;
     background:#241609; border:1px solid var(--rust); border-radius:4px;
-    box-shadow:0 6px 18px rgba(0,0,0,.6); z-index:15; overflow:hidden; min-width:110px;
+    box-shadow:0 6px 18px rgba(0,0,0,.6); z-index:19; overflow:hidden; min-width:110px;
   }
   #ctxMenu button{ border:none; border-bottom:1px solid #3a2712; border-radius:0; justify-content:flex-start; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
   #ctxMenu button:last-child{border-bottom:none;}
@@ -133,6 +142,7 @@
     #actionBar{ gap:2px; padding:5px; }
     #actionBar button.iconBtn{ height:48px; background-size:26px 26px; }
     .costBadge{ font-size:8px; }
+    #minimap{ width:90px; height:90px; top:5px; right:5px; }
   }
 </style>
 </head>
@@ -179,6 +189,13 @@
     <h1>Galacticus</h1>
     <div class="sub"><span>Spice Throne — <span id="gameClock">00:00</span></span><span id="camHint">drag map / arrow keys to scroll</span></div>
     <div id="boardHost">
+      <canvas id="minimap" width="100" height="100" title="Click to jump the camera"></canvas>
+      <div id="ctxMenu">
+        <div class="ctx-title" id="ctxTitle">Unit</div>
+        <button id="ctxEngage">Search &amp; Destroy</button>
+        <button id="ctxRetreat">Retreat</button>
+        <button id="ctxCancel">Cancel</button>
+      </div>
       <div id="actionBar">
         <button id="buildHarvester" class="iconBtn" title="Harvester — 60 spice"><span class="costBadge">60</span></button>
         <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice"><span class="costBadge">50</span></button>
@@ -195,17 +212,8 @@
       <span><i class="swatch" style="background:#e0522a"></i>Spice deposit</span>
       <span><i class="swatch" style="background:#111"></i>Unexplored (fog)</span>
     </div>
-    <div class="hint">Click a vehicle to select it, then Move / Attack / Search &amp; Engage / Retreat from the menu — Search &amp; Engage sends a trooper hunting for any nearby enemy on its own. Building buttons ask for a grass or desert tile to place on. Drag the map or use arrow keys to scroll — fog clears as your units explore. Troopers that reach a rival stronghold steal spice and damage it; reduce a stronghold to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted.</div>
+    <div class="hint">Click a vehicle to select it — the cursor becomes a target reticle. Click a tile to move there, or click an enemy to attack it. Search &amp; Destroy sends a trooper hunting for any nearby enemy on its own. Building buttons ask for a grass or desert tile to place on. Drag the map or use arrow keys to scroll, or click the minimap to jump there — fog clears as your units explore. Troopers that reach a rival stronghold steal spice and damage it; reduce a stronghold to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted.</div>
   </div>
-</div>
-
-<div id="ctxMenu">
-  <div class="ctx-title" id="ctxTitle">Unit</div>
-  <button id="ctxMove">Move</button>
-  <button id="ctxAttack">Attack</button>
-  <button id="ctxEngage">Search &amp; Engage</button>
-  <button id="ctxRetreat">Retreat</button>
-  <button id="ctxCancel">Cancel</button>
 </div>
 
 <div id="houseOverlay" class="overlay-base">
@@ -347,6 +355,58 @@ function clampCamera(){
 function centerCameraOn(tx,ty){
   cam.x=tx*SZ - (vs.w/zoomFactor)/2; cam.y=ty*SZ - (vs.h/zoomFactor)/2; clampCamera();
 }
+
+// ================= minimap =================
+// One canvas pixel per map tile (fog = black, otherwise terrain color),
+// upscaled with image-rendering:pixelated to a small on-screen panel, plus
+// house/unit dots and the current viewport rectangle drawn on top. Units use
+// the same explored-tile visibility rule as the main map, so the minimap
+// never shows anything the player couldn't also see on the board itself.
+const minimapCanvas=document.getElementById('minimap');
+const minimapCtx=minimapCanvas.getContext('2d');
+let minimapImageData=null;
+const MINI_TERRAIN_COLOR={ mountain:[0x3a,0x2f,0x22], grass:[0x5c,0x7a,0x3a], desert:[0xca,0xa4,0x6a] };
+function renderMinimap(){
+  if(!state || !terrain) return;
+  if(!minimapImageData) minimapImageData=minimapCtx.createImageData(MAPW,MAPH);
+  const data=minimapImageData.data;
+  for(let y=0;y<MAPH;y++){
+    const row=terrain[y], erow=explored[y];
+    for(let x=0;x<MAPW;x++){
+      const i=(y*MAPW+x)*4;
+      if(!erow[x]){ data[i]=0; data[i+1]=0; data[i+2]=0; data[i+3]=255; continue; }
+      const c=MINI_TERRAIN_COLOR[row[x]] || MINI_TERRAIN_COLOR.desert;
+      data[i]=c[0]; data[i+1]=c[1]; data[i+2]=c[2]; data[i+3]=255;
+    }
+  }
+  minimapCtx.putImageData(minimapImageData,0,0);
+  const ph=playerHouse();
+  state.houses.forEach(h=>{
+    if(!h.alive) return;
+    const baseVisible=(h===ph) || !!(explored[h.base.y] && explored[h.base.y][h.base.x]);
+    if(baseVisible){
+      minimapCtx.fillStyle=h.colorCss;
+      minimapCtx.fillRect(Math.max(0,h.base.x-1), Math.max(0,h.base.y-1), 3, 3);
+    }
+    h.units.forEach(u=>{
+      const visible=(h===ph) || !!(explored[u.y] && explored[u.y][u.x]);
+      if(!visible) return;
+      minimapCtx.fillStyle=h.colorCss;
+      minimapCtx.fillRect(u.x,u.y,1,1);
+    });
+  });
+  minimapCtx.strokeStyle='#ffffff'; minimapCtx.lineWidth=1;
+  const vx=cam.x/SZ, vy=cam.y/SZ, vw=(vs.w/zoomFactor)/SZ, vh=(vs.h/zoomFactor)/SZ;
+  minimapCtx.strokeRect(vx+0.5, vy+0.5, Math.max(1,vw), Math.max(1,vh));
+}
+minimapCanvas.addEventListener('click',(e)=>{
+  if(!state) return;
+  const rect=minimapCanvas.getBoundingClientRect();
+  const mx=Math.floor((e.clientX-rect.left)/rect.width*MAPW);
+  const my=Math.floor((e.clientY-rect.top)/rect.height*MAPH);
+  if(inBounds(mx,my)){ centerCameraOn(mx,my); renderMinimap(); }
+});
+
 const KEYS={};
 document.addEventListener('keydown',e=>{ KEYS[e.key]=true; if(e.key==='Escape') deselect(); });
 document.addEventListener('keyup',e=>{ KEYS[e.key]=false; });
@@ -709,16 +769,75 @@ function beginStep(u,nx,ny){
   u.moveFrom={x:u.x*SZ+SZ/2,y:u.y*SZ+SZ/2}; u.x=nx; u.y=ny;
   u.moveTo={x:u.x*SZ+SZ/2,y:u.y*SZ+SZ/2}; u.moveStart=performance.now(); u.moving=true;
 }
-function stepToward(u,tx,ty){
-  const dx=Math.sign(tx-u.x), dy=Math.sign(ty-u.y);
-  if(dx===0&&dy===0) return false;
-  const cand=[[dx,dy],[dx,0],[0,dy]];
-  for(const [cx,cy] of cand){
-    if(cx===0&&cy===0) continue;
-    const nx=u.x+cx, ny=u.y+cy;
-    if(passable(nx,ny)){ beginStep(u,nx,ny); return true; }
+// 8-directional A* over the terrain grid (mountains impassable, diagonal
+// corner-cutting blocked) so units route around rock instead of stalling
+// against it. Octile-distance heuristic, node cap as a safety valve on a
+// 100x100 grid.
+const PATH_MAX_NODES=3000;
+function octileH(x,y,tx,ty){ const dx=Math.abs(x-tx),dy=Math.abs(y-ty); return Math.max(dx,dy)+0.4142*Math.min(dx,dy); }
+const PATH_DIRS8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+function findPath(sx,sy,tx,ty){
+  if(sx===tx && sy===ty) return [];
+  if(!inBounds(tx,ty) || !passable(tx,ty)) return null;
+  const key=(x,y)=>y*MAPW+x;
+  const nodes=[{x:sx,y:sy,g:0,parent:-1}];
+  const fScore=[octileH(sx,sy,tx,ty)];
+  const bestIndexForKey=new Map([[key(sx,sy),0]]);
+  const open=[0];
+  const closed=new Set();
+  let expanded=0;
+  while(open.length){
+    let bi=0;
+    for(let i=1;i<open.length;i++) if(fScore[open[i]]<fScore[open[bi]]) bi=i;
+    const ni=open.splice(bi,1)[0];
+    const cur=nodes[ni];
+    const ck=key(cur.x,cur.y);
+    if(closed.has(ck)) continue;
+    closed.add(ck);
+    if(cur.x===tx && cur.y===ty){
+      const path=[]; let idx=ni;
+      while(nodes[idx].parent!==-1){ path.push({x:nodes[idx].x,y:nodes[idx].y}); idx=nodes[idx].parent; }
+      path.reverse();
+      return path;
+    }
+    if(++expanded>PATH_MAX_NODES) return null;
+    for(const [dx,dy] of PATH_DIRS8){
+      const nx=cur.x+dx, ny=cur.y+dy;
+      if(!inBounds(nx,ny) || !passable(nx,ny)) continue;
+      if(dx!==0 && dy!==0 && (!passable(cur.x+dx,cur.y) || !passable(cur.x,cur.y+dy))) continue;
+      const nkKey=key(nx,ny);
+      if(closed.has(nkKey)) continue;
+      const stepCost=(dx!==0 && dy!==0) ? 1.4142 : 1;
+      const ng=cur.g+stepCost;
+      const existingIdx=bestIndexForKey.get(nkKey);
+      if(existingIdx!==undefined && nodes[existingIdx].g<=ng) continue;
+      const newIdx=nodes.length;
+      nodes.push({x:nx,y:ny,g:ng,parent:ni});
+      bestIndexForKey.set(nkKey,newIdx);
+      fScore[newIdx]=ng+octileH(nx,ny,tx,ty);
+      open.push(newIdx);
+    }
   }
-  return false;
+  return null;
+}
+// Cached per-unit: a path is only recomputed when the target moves (throttled,
+// since attack/engage targets shift every tick) or once the cached path runs
+// dry, so chasing a moving enemy doesn't re-run A* every single tick.
+const PATH_RECALC_MS=600;
+function stepToward(u,tx,ty){
+  const now=performance.now();
+  const targetMoved=!u._pathTarget || u._pathTarget.x!==tx || u._pathTarget.y!==ty;
+  const stale=!u._path || u._path.length===0;
+  const dueForRecalc=!u._lastPathCalc || now-u._lastPathCalc>=PATH_RECALC_MS;
+  if(stale || (targetMoved && dueForRecalc)){
+    u._path=findPath(u.x,u.y,tx,ty) || [];
+    u._pathTarget={x:tx,y:ty};
+    u._lastPathCalc=now;
+  }
+  if(u._path.length===0) return false;
+  const step=u._path.shift();
+  beginStep(u,step.x,step.y);
+  return true;
 }
 function beginWormStep(w,nx,ny){
   const dIdx=dirIndexFromDelta(nx-w.x, ny-w.y); if(dIdx!==null) w.dir=dIdx;
@@ -1105,6 +1224,7 @@ function gameTick(){
   const result=checkGameEnd();
   updateClock();
   renderStats();
+  renderMinimap();
   if(result){ stopSim(); endGame(result); }
 }
 
@@ -1116,32 +1236,24 @@ function deselect(){
   if(!state) return;
   state.selectedUnit=null; uiMode=null;
   ctxMenu.style.display='none'; modeHint.style.display='none';
+  boardHost.classList.remove('targeting');
   updateSelectionRing();
 }
-function selectUnit(u){ state.selectedUnit=u; uiMode=null; updateSelectionRing(); openCtxMenuFor(u); }
+// Selecting a unit puts the board in "targeting" mode: the cursor becomes a
+// crosshair, and the next map click issued via handleBoardClick moves the
+// unit there (or attacks, if the tile holds an enemy) — no explicit
+// Move/Attack menu step needed. The context menu only offers the standing
+// stances that aren't a single click target: Search & Destroy and Retreat.
+function selectUnit(u){ state.selectedUnit=u; uiMode=null; updateSelectionRing(); boardHost.classList.add('targeting'); openCtxMenuFor(u); }
 function openCtxMenuFor(u){
-  const rect=app.view.getBoundingClientRect();
-  let sx=rect.left+window.scrollX+(u.x*SZ-cam.x)*zoomFactor+SZ*zoomFactor+6;
-  let sy=rect.top+window.scrollY+(u.y*SZ-cam.y)*zoomFactor;
   document.getElementById('ctxTitle').textContent=(u.type==='harvester'?'Harvester':'Trooper')+' #'+u.id;
-  document.getElementById('ctxAttack').style.display=u.type==='trooper'?'flex':'none';
   document.getElementById('ctxEngage').style.display=u.type==='trooper'?'flex':'none';
-  ctxMenu.style.left=sx+'px'; ctxMenu.style.top=sy+'px';
-  ctxMenu.style.display='flex'; modeHint.style.display='none';
-  // clamp so the menu never renders off-screen, regardless of viewport size
-  const menuRect=ctxMenu.getBoundingClientRect();
-  const maxLeft=window.scrollX+window.innerWidth-menuRect.width-6;
-  const maxTop=window.scrollY+window.innerHeight-menuRect.height-6;
-  sx=Math.max(window.scrollX+6, Math.min(sx, maxLeft));
-  sy=Math.max(window.scrollY+6, Math.min(sy, maxTop));
-  ctxMenu.style.left=sx+'px'; ctxMenu.style.top=sy+'px';
+  ctxMenu.style.display='flex'; modeHint.textContent='Click a tile to move, or an enemy to attack'; modeHint.style.display='block';
 }
-document.getElementById('ctxMove').onclick=()=>{ uiMode={type:'move', unit:state.selectedUnit}; ctxMenu.style.display='none'; modeHint.textContent='MOVE — choose a tile'; modeHint.style.display='block'; };
-document.getElementById('ctxAttack').onclick=()=>{ uiMode={type:'attack', unit:state.selectedUnit}; ctxMenu.style.display='none'; modeHint.textContent='ATTACK — choose a target'; modeHint.style.display='block'; };
 document.getElementById('ctxEngage').onclick=()=>{
   const u=state.selectedUnit; const owner=houseById(u.owner);
   u.order={kind:'engage'};
-  addLog("House "+owner.name+"'s trooper begins searching for targets to engage.");
+  addLog("House "+owner.name+"'s trooper begins searching the map for enemies to destroy.");
   deselect();
 };
 document.getElementById('ctxRetreat').onclick=()=>{
@@ -1225,20 +1337,31 @@ function handleBoardClick(e){
     return;
   }
 
-  if(uiMode){
-    const u=uiMode.unit;
-    if(uiMode.type==='move'){
-      if(passable(x,y)){ u.order={kind:'move', x, y}; addLog('Order given: move to ('+x+','+y+').'); }
-      else addLog('Rocky mountains block that route.');
-    } else if(uiMode.type==='attack'){
+  // A unit is selected: clicking the map commands it directly. A friendly
+  // unit under the cursor re-selects instead of stacking a move order onto
+  // it; a trooper attacks an enemy unit/stronghold under the cursor;
+  // anything else is a move order (non-trooper units always just move,
+  // since they have no attack to execute anyway).
+  if(state.selectedUnit){
+    const u=state.selectedUnit;
+    const friendlyAtTile=ph.units.find(o=>o.x===x && o.y===y);
+    if(friendlyAtTile && friendlyAtTile!==u){ selectUnit(friendlyAtTile); return; }
+    if(u.type==='trooper'){
       const enemyUnit=state.houses.filter(h=>h!==ph).flatMap(h=>h.units).find(t=>t.x===x&&t.y===y);
-      if(enemyUnit){ u.order={kind:'attack', targetHouseId:enemyUnit.owner, targetId:enemyUnit.id}; addLog('Order given: attack House '+houseById(enemyUnit.owner).name+"'s "+enemyUnit.type+'.'); }
-      else {
-        const targetHouse=state.houses.find(h=>h!==ph && h.alive && h.base.x===x && h.base.y===y);
-        if(targetHouse){ u.order={kind:'attack', targetHouseId:targetHouse.id, targetId:'base'}; addLog('Order given: attack House '+targetHouse.name+"'s stronghold."); }
-        else addLog('No target there — attack cancelled.');
+      if(enemyUnit){
+        u.order={kind:'attack', targetHouseId:enemyUnit.owner, targetId:enemyUnit.id};
+        addLog('Order given: attack House '+houseById(enemyUnit.owner).name+"'s "+enemyUnit.type+'.');
+        deselect(); return;
+      }
+      const targetHouse=state.houses.find(h=>h!==ph && h.alive && h.base.x===x && h.base.y===y);
+      if(targetHouse){
+        u.order={kind:'attack', targetHouseId:targetHouse.id, targetId:'base'};
+        addLog('Order given: attack House '+targetHouse.name+"'s stronghold.");
+        deselect(); return;
       }
     }
+    if(passable(x,y)){ u.order={kind:'move', x, y}; addLog('Order given: move to ('+x+','+y+').'); }
+    else addLog('Rocky mountains block that route.');
     deselect();
     return;
   }
@@ -1338,7 +1461,7 @@ async function start(chosenId, rivalId){
   syncAllSprites();
   revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
   centerCameraOn(ph.base.x, ph.base.y);
-  renderStats(); renderLog(); updateClock();
+  renderStats(); renderLog(); updateClock(); renderMinimap();
   simHandle=setInterval(gameTick, TICK_MS);
 }
 function showRivalSelect(chosenId){
