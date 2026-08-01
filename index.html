@@ -667,15 +667,21 @@ function syncAllSprites(){
   state.worms.forEach(ensureWormSprite);
 }
 
-let selectionRing=null;
+let selectionRing=null, selectionLight=null;
 function updateSelectionRing(){
   if(selectionRing){ layerFx.removeChild(selectionRing); selectionRing=null; }
+  if(selectionLight){ layerFx.removeChild(selectionLight); selectionLight=null; }
   if(state.selectedUnit){
     const u=state.selectedUnit;
     selectionRing=new PIXI.Graphics();
     selectionRing.lineStyle(2,0xffffff,0.9); selectionRing.drawCircle(0,0,SZ*0.4);
     selectionRing.x=u.x*SZ+SZ/2; selectionRing.y=u.y*SZ+SZ/2;
     layerFx.addChild(selectionRing);
+    // A fast-blinking light pinned to the selected unit's corner, echoing the
+    // stronghold's blinking light so the selection reads at a glance.
+    selectionLight=new PIXI.Sprite(TEX.light); selectionLight.anchor.set(0.5);
+    selectionLight.scale.set(ZOOM*0.55);
+    layerFx.addChild(selectionLight);
   }
 }
 
@@ -720,9 +726,18 @@ app.ticker.add((delta)=>{
     if(c._pulse!==undefined){ c._pulse+=0.04*delta; c.alpha=0.85+0.15*Math.sin(c._pulse); }
     else if(c._isBaseLight){ c.tint = Math.floor(now/1000)%2===0 ? 0x33ff66 : 0x3388ff; }
   });
-  if(selectionRing && state.selectedUnit){
-    selectionRing.x=state.selectedUnit.x*SZ+SZ/2; selectionRing.y=state.selectedUnit.y*SZ+SZ/2;
+  if(selectionRing && state.selectedUnit && state.selectedUnit.sprite){
+    const sp=state.selectedUnit.sprite;
+    selectionRing.x=sp.x; selectionRing.y=sp.y;
     selectionRing.rotation+=0.02*delta;
+  }
+  if(selectionLight && state.selectedUnit && state.selectedUnit.sprite){
+    const sp=state.selectedUnit.sprite;
+    selectionLight.x=sp.x+SZ*0.32; selectionLight.y=sp.y-SZ*0.32;
+    // fast blink, distinct from the slower ambient stronghold light
+    const on=Math.floor(now/220)%2===0;
+    selectionLight.visible=on;
+    selectionLight.tint=0xffffff;
   }
 });
 
