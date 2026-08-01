@@ -211,8 +211,16 @@
 <div id="houseOverlay" class="overlay-base">
   <div class="card wide">
     <h2>Choose Your House</h2>
-    <p class="sub2">Three Great Houses vie for dominion over the Deep Desert and its Spice Throne. Pick your allegiance — the other two will fight you, and each other, for it.</p>
+    <p class="sub2">Three Great Houses vie for dominion over the Deep Desert and its Spice Throne. Pick your allegiance, then choose the one rival House that will contest you.</p>
     <div id="houseCards" class="houseCards"></div>
+  </div>
+</div>
+
+<div id="rivalOverlay" class="overlay-base">
+  <div class="card wide">
+    <h2>Choose Your Rival</h2>
+    <p class="sub2" id="rivalSub"></p>
+    <div id="rivalCards" class="houseCards"></div>
   </div>
 </div>
 
@@ -1277,15 +1285,19 @@ document.getElementById('recruitTroop').onclick=()=>{
 document.getElementById('restartBtn').onclick=()=>{ showHouseSelect(); };
 
 // ================= boot =================
-function newGame(chosenId){
+// A game is always a duel: the player's chosen House plus exactly one chosen
+// rival. The third House sits the match out entirely (never created), which
+// also roughly halves the per-tick AI/unit workload versus a 3-way melee.
+function newGame(chosenId, rivalId){
+  const activeDefs=HOUSE_DEFS.filter(hd=>hd.id===chosenId || hd.id===rivalId);
   generateTerrain();
-  HOUSE_DEFS.forEach(hd=>{ const sp=HOUSE_SPAWNS[hd.id]; carveGrassArea(sp.x,sp.y,7); });
+  activeDefs.forEach(hd=>{ const sp=HOUSE_SPAWNS[hd.id]; carveGrassArea(sp.x,sp.y,7); });
   buildingMap=new Map();
   explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(false));
   state={
     startTime:performance.now(), log:[], selectedUnit:null,
     worms:[],
-    houses: HOUSE_DEFS.map(hd=>({
+    houses: activeDefs.map(hd=>({
       id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss,
       ai: hd.id!==chosenId,
       base:{...HOUSE_SPAWNS[hd.id]}, baseHp:BASE_HP_MAX, baseHpMax:BASE_HP_MAX,
@@ -1308,18 +1320,19 @@ function newGame(chosenId){
     state.worms.push({x,y,rest:0,dir:0,frame:0,sprite:null});
   }
 }
-async function start(chosenId){
+async function start(chosenId, rivalId){
   stopSim();
   lastAiThink={}; lastWormMove=0; lastSpiceSpawn=0;
   gameOver=false;
   document.getElementById('overlay').style.display='none';
   document.getElementById('houseOverlay').style.display='none';
-  newGame(chosenId);
+  document.getElementById('rivalOverlay').style.display='none';
+  newGame(chosenId, rivalId);
   state.houses.forEach(h=>{ h.units.push(makeUnit(h.id,'harvester', h.base.x, h.base.y)); });
   learning=await loadLearning();
   const ph=playerHouse();
   const rivalNames=state.houses.filter(h=>h!==ph).map(h=>h.name+' (played '+learning[h.id].games+' game(s))').join(' and House ');
-  addLog('House '+ph.name+' begins its expedition into the Deep Desert. Rivals: House '+rivalNames+'.');
+  addLog('House '+ph.name+' begins its expedition into the Deep Desert. Rival: House '+rivalNames+'.');
   buildWorldVisuals();
   layerUnits.removeChildren();
   syncAllSprites();
@@ -1328,9 +1341,26 @@ async function start(chosenId){
   renderStats(); renderLog(); updateClock();
   simHandle=setInterval(gameTick, TICK_MS);
 }
+function showRivalSelect(chosenId){
+  document.getElementById('houseOverlay').style.display='none';
+  const chosen=HOUSE_DEFS.find(hd=>hd.id===chosenId);
+  document.getElementById('rivalSub').textContent='House '+chosen.name+' will face a single rival in a two-House duel for the Spice Throne — the third House sits this one out.';
+  const el=document.getElementById('rivalOverlay');
+  const cardsEl=document.getElementById('rivalCards');
+  cardsEl.innerHTML='';
+  HOUSE_DEFS.filter(hd=>hd.id!==chosenId).forEach(hd=>{
+    const card=document.createElement('div');
+    card.className='houseCard';
+    card.innerHTML='<div class="bar" style="background:'+hd.colorCss+'"></div><h3 style="color:'+hd.colorCss+'">'+hd.name+'</h3><p>'+hd.tagline+'</p>';
+    card.onclick=()=>{ start(chosenId, hd.id); };
+    cardsEl.appendChild(card);
+  });
+  el.style.display='flex';
+}
 function showHouseSelect(){
   stopSim();
   document.getElementById('overlay').style.display='none';
+  document.getElementById('rivalOverlay').style.display='none';
   const el=document.getElementById('houseOverlay');
   const cardsEl=document.getElementById('houseCards');
   cardsEl.innerHTML='';
@@ -1338,7 +1368,7 @@ function showHouseSelect(){
     const card=document.createElement('div');
     card.className='houseCard';
     card.innerHTML='<div class="bar" style="background:'+hd.colorCss+'"></div><h3 style="color:'+hd.colorCss+'">'+hd.name+'</h3><p>'+hd.tagline+'</p>';
-    card.onclick=()=>{ start(hd.id); };
+    card.onclick=()=>{ showRivalSelect(hd.id); };
     cardsEl.appendChild(card);
   });
   el.style.display='flex';
