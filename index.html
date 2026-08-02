@@ -663,6 +663,12 @@ function ensureSprite(u){
     u.sprite.rotation=dirAngle(u.dir);
     u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; layerUnits.addChild(u.sprite);
   }
+  // Combat units get a floating health bar, shown only while recently in a
+  // fight (see COMBAT_ENGAGED_MS), so the map isn't cluttered with bars over
+  // idle troops/tanks.
+  if(isCombatUnit(u) && !u._hpBar){
+    u._hpBar=new PIXI.Graphics(); u._hpBar.visible=false; layerFx.addChild(u._hpBar);
+  }
 }
 function ensureWormSprite(w){
   if(!w.sprite){
@@ -693,6 +699,82 @@ function updateSelectionRing(){
   }
 }
 
+// ================= combat FX (lasers, bombs, sparks, health bars, death) ==
+const COMBAT_ENGAGED_MS=3000; // how long a unit keeps showing its health bar after being hit or hitting something
+let activeFx=[];
+function spawnFx(kind, props, life){
+  const g=new PIXI.Graphics();
+  Object.assign(g, props.gfxProps||{});
+  if(props.x!==undefined) g.x=props.x;
+  if(props.y!==undefined) g.y=props.y;
+  layerFx.addChild(g);
+  activeFx.push(Object.assign({ g, kind, born:performance.now(), life }, props));
+}
+// Trooper shot: a quick laser line attacker->target with a spark burst on impact.
+function spawnLaserFx(fromX,fromY,toX,toY){
+  spawnFx('laser', { fromX, fromY, toX, toY }, 160);
+  spawnFx('spark', { x:toX, y:toY }, 260);
+}
+// Tank shot: a shell lobbed in from above that bursts on the target.
+function spawnBombFx(toX,toY){
+  spawnFx('bomb', { x:toX, y:toY-46, targetX:toX, targetY:toY }, 480);
+}
+function spawnExplosionFx(x,y){ spawnFx('explosion', { x, y }, 550); }
+function spawnDeadFx(x,y){ spawnFx('dead', { x, y }, 1000); }
+function updateActiveFx(now){
+  activeFx=activeFx.filter(fx=>{
+    const t=(now-fx.born)/fx.life;
+    if(t>=1){ layerFx.removeChild(fx.g); return false; }
+    const g=fx.g;
+    if(fx.kind==='laser'){
+      g.clear(); g.lineStyle(2,0xff3b30,1-t);
+      g.moveTo(fx.fromX,fx.fromY); g.lineTo(fx.toX,fx.toY);
+    } else if(fx.kind==='spark'){
+      g.clear();
+      const r=2+t*5;
+      g.beginFill(0xfff2a8,1-t); g.drawCircle(0,0,r); g.endFill();
+      g.beginFill(0xff9d2e,(1-t)*0.7); g.drawCircle(0,0,r*1.8); g.endFill();
+    } else if(fx.kind==='bomb'){
+      if(t<0.65){
+        const ft=t/0.65;
+        g.clear(); g.beginFill(0x1a1a1a); g.drawCircle(0,0,3); g.endFill();
+        g.y=fx.y+(fx.targetY-fx.y)*ft; g.alpha=1;
+      } else {
+        const bt=(t-0.65)/0.35;
+        g.clear();
+        const r=4+bt*16;
+        g.beginFill(0xffb020,1-bt); g.drawCircle(0,0,r); g.endFill();
+        g.beginFill(0xff4020,(1-bt)*0.8); g.drawCircle(0,0,r*0.55); g.endFill();
+        g.y=fx.targetY; g.alpha=1;
+      }
+    } else if(fx.kind==='explosion'){
+      g.clear();
+      const r=4+t*18;
+      g.beginFill(0xffcc55,(1-t)*0.9); g.drawCircle(0,0,r); g.endFill();
+      g.beginFill(0xff5522,(1-t)); g.drawCircle(0,0,r*0.6); g.endFill();
+      g.beginFill(0x3a2a1a,(1-t)*0.6); g.drawCircle(0,0,r*0.3); g.endFill();
+    } else if(fx.kind==='dead'){
+      g.clear(); g.lineStyle(2,0x1a1a1a,1-t);
+      g.moveTo(-6,-6); g.lineTo(6,6); g.moveTo(6,-6); g.lineTo(-6,6);
+    }
+    return true;
+  });
+}
+function updateHealthBar(u,now){
+  const bar=u._hpBar; if(!bar) return;
+  const engaged=u._lastCombatAt && (now-u._lastCombatAt)<COMBAT_ENGAGED_MS;
+  bar.visible=!!(engaged && u.sprite && u.sprite.visible);
+  if(!bar.visible) return;
+  const max=UNIT_HP[u.type]||1;
+  const frac=Math.max(0,Math.min(1,u.hp/max));
+  const w=22,h=3;
+  bar.clear();
+  bar.beginFill(0x000000,0.6); bar.drawRect(-w/2-1,-h/2-1,w+2,h+2); bar.endFill();
+  const color=frac>0.5?0x4ad34a:(frac>0.25?0xe0c020:0xe03a2a);
+  bar.beginFill(color,1); bar.drawRect(-w/2,-h/2,Math.max(0,w*frac),h); bar.endFill();
+  bar.x=u.sprite.x; bar.y=u.sprite.y-SZ*0.68;
+}
+
 app.ticker.add((delta)=>{
   if(!state) return;
   const now=performance.now();
@@ -710,8 +792,10 @@ app.ticker.add((delta)=>{
         if(t>=1){ u.moving=false; }
       } else { u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; }
       u.sprite.visible = (h===ph) || !!(explored[u.y] && explored[u.y][u.x]);
+      if(u._hpBar) updateHealthBar(u,now);
     });
   });
+  updateActiveFx(now);
   state.worms.forEach(w=>{
     if(!w.sprite) return;
     const surfacing=!!(w.surfaceUntil && now<w.surfaceUntil);
@@ -917,6 +1001,16 @@ const COMBAT_STATS={
   tank:{ dmg:TANK_SHOT_DMG, cooldown:TANK_ATTACK_COOLDOWN_MS },
 };
 function isCombatUnit(u){ return !!COMBAT_STATS[u.type]; }
+function removeUnitVisuals(u){
+  if(u.sprite) layerUnits.removeChild(u.sprite);
+  if(u._hpBar) layerFx.removeChild(u._hpBar);
+}
+// Fires the attacker's shot FX at the target's current screen position:
+// a laser+spark for troopers, a lobbed bomb burst for tanks.
+function spawnAttackFx(u,targetX,targetY){
+  if(u.type==='tank') spawnBombFx(targetX,targetY);
+  else if(u.sprite) spawnLaserFx(u.sprite.x,u.sprite.y,targetX,targetY);
+}
 // Applies one cooldown-gated attack against a unit or a base, using the
 // attacker's own type's damage/cooldown. Returns true if the target unit
 // died (caller should clear the attacker's order).
@@ -925,22 +1019,27 @@ function applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase){
   if(!stats) return false;
   const now=performance.now();
   if(u._lastAttack && now-u._lastAttack<stats.cooldown) return false;
-  u._lastAttack=now;
+  u._lastAttack=now; u._lastCombatAt=now;
   if(targetIsBase){
     const stolen=Math.min(targetHouse.spice, 10+Math.random()*10);
     targetHouse.spice-=stolen; house.spice+=stolen;
     targetHouse.baseHp-=stats.dmg; targetHouse.lastAttacker=house.id;
     addLog('House '+house.name+"'s "+u.type+" strikes House "+targetHouse.name+"'s stronghold — "+Math.floor(stolen)+' spice seized, '+stats.dmg+' power drained.');
+    spawnAttackFx(u, targetHouse.base.x*SZ+SZ/2, targetHouse.base.y*SZ+SZ/2);
     return false;
   }
   if(!targetUnit) return false;
   const dmg=stats.dmg;
-  targetUnit.hp-=dmg;
+  targetUnit.hp-=dmg; targetUnit._lastCombatAt=now;
+  const tx=targetUnit.sprite?targetUnit.sprite.x:targetUnit.x*SZ+SZ/2;
+  const ty=targetUnit.sprite?targetUnit.sprite.y:targetUnit.y*SZ+SZ/2;
+  spawnAttackFx(u, tx, ty);
   addLog('House '+house.name+"'s "+u.type+" hits House "+targetHouse.name+"'s "+targetUnit.type+' for '+dmg+'.');
   if(targetUnit.hp<=0){
     addLog("House "+targetHouse.name+"'s "+targetUnit.type+' is destroyed.');
+    if(targetUnit.type==='tank') spawnExplosionFx(tx,ty); else spawnDeadFx(tx,ty);
     const idx=targetHouse.units.indexOf(targetUnit);
-    if(idx>=0){ if(targetUnit.sprite) layerUnits.removeChild(targetUnit.sprite); targetHouse.units.splice(idx,1); }
+    if(idx>=0){ removeUnitVisuals(targetUnit); targetHouse.units.splice(idx,1); }
     if(state.selectedUnit===targetUnit) deselect();
     return true;
   }
@@ -1066,7 +1165,7 @@ function resolveWormStrikes(){
       if(hit){
         addLog((house===ph?'⚠ Your':"House "+house.name+"'s")+' '+u.type+' is swallowed as a sandworm erupts from the dune'+(u.carrying>0?' (lost '+Math.floor(u.carrying)+' spice)':'')+'.');
         state.worms.forEach(w=>{ if(w.x===u.x&&w.y===u.y){ w.rest=2; w.surfaceUntil=now+WORM_SURFACE_MS; } });
-        if(u.sprite) layerUnits.removeChild(u.sprite);
+        removeUnitVisuals(u);
         if(state.selectedUnit===u) deselect();
         return false;
       }
@@ -1151,7 +1250,7 @@ function processEliminations(){
   state.houses.forEach(h=>{
     if(h.alive && h.baseHp<=0){
       h.alive=false;
-      h.units.forEach(u=>{ if(u.sprite) layerUnits.removeChild(u.sprite); });
+      h.units.forEach(removeUnitVisuals);
       h.units=[];
       const finisher=h.lastAttacker?houseById(h.lastAttacker):null;
       addLog("House "+h.name+"'s stronghold has fallen! House "+h.name+' is eliminated.'+(finisher?(' House '+finisher.name+' delivered the final blow.'):''));
@@ -1518,6 +1617,8 @@ async function start(chosenId, rivalId){
   addLog('House '+ph.name+' begins its expedition into the Deep Desert. Rival: House '+rivalNames+'.');
   buildWorldVisuals();
   layerUnits.removeChildren();
+  layerFx.removeChildren();
+  selectionRing=null; selectionLight=null; activeFx=[];
   syncAllSprites();
   revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
   centerCameraOn(ph.base.x, ph.base.y);
