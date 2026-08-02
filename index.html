@@ -289,6 +289,53 @@ const HOUSE_PERSONALITY={
   catarnicus: { econMul:0.90, milMul:1.25, aggroAdd: 0.10 }
 };
 
+// ================= audio =================
+// Synthesized (no external audio assets) via the Web Audio API: a quick
+// laser-zap for every shot fired, and a boom+crackle for every unit or
+// stronghold destroyed. AudioContext needs a user gesture to unlock, so it's
+// created/resumed from the house/rival select clicks.
+let audioCtx=null;
+function ensureAudio(){
+  if(!audioCtx){
+    try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ audioCtx=null; }
+  }
+  if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+}
+function playFireSound(){
+  if(!audioCtx) return;
+  const t0=audioCtx.currentTime;
+  const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+  osc.type='sawtooth';
+  osc.frequency.setValueAtTime(900,t0);
+  osc.frequency.exponentialRampToValueAtTime(180,t0+0.12);
+  gain.gain.setValueAtTime(0.16,t0);
+  gain.gain.exponentialRampToValueAtTime(0.001,t0+0.14);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0+0.16);
+}
+function playDestructionSound(){
+  if(!audioCtx) return;
+  const t0=audioCtx.currentTime;
+  const osc=audioCtx.createOscillator(), oGain=audioCtx.createGain();
+  osc.type='sine';
+  osc.frequency.setValueAtTime(160,t0);
+  osc.frequency.exponentialRampToValueAtTime(38,t0+0.35);
+  oGain.gain.setValueAtTime(0.32,t0);
+  oGain.gain.exponentialRampToValueAtTime(0.001,t0+0.4);
+  osc.connect(oGain); oGain.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0+0.42);
+  const bufSize=Math.floor(audioCtx.sampleRate*0.3);
+  const buf=audioCtx.createBuffer(1,bufSize,audioCtx.sampleRate);
+  const data=buf.getChannelData(0);
+  for(let i=0;i<bufSize;i++) data[i]=(Math.random()*2-1)*(1-i/bufSize);
+  const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+  const nGain=audioCtx.createGain();
+  nGain.gain.setValueAtTime(0.28,t0);
+  nGain.gain.exponentialRampToValueAtTime(0.001,t0+0.3);
+  noise.connect(nGain); nGain.connect(audioCtx.destination);
+  noise.start(t0);
+}
+
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 PIXI.settings.ROUND_PIXELS = true;
 
@@ -1010,6 +1057,7 @@ function removeUnitVisuals(u){
 function spawnAttackFx(u,targetX,targetY){
   if(u.type==='tank') spawnBombFx(targetX,targetY);
   else if(u.sprite) spawnLaserFx(u.sprite.x,u.sprite.y,targetX,targetY);
+  playFireSound();
 }
 // Applies one cooldown-gated attack against a unit or a base, using the
 // attacker's own type's damage/cooldown. Returns true if the target unit
@@ -1038,6 +1086,7 @@ function applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase){
   if(targetUnit.hp<=0){
     addLog("House "+targetHouse.name+"'s "+targetUnit.type+' is destroyed.');
     if(targetUnit.type==='tank') spawnExplosionFx(tx,ty); else spawnDeadFx(tx,ty);
+    playDestructionSound();
     const idx=targetHouse.units.indexOf(targetUnit);
     if(idx>=0){ removeUnitVisuals(targetUnit); targetHouse.units.splice(idx,1); }
     if(state.selectedUnit===targetUnit) deselect();
@@ -1166,6 +1215,7 @@ function resolveWormStrikes(){
         addLog((house===ph?'⚠ Your':"House "+house.name+"'s")+' '+u.type+' is swallowed as a sandworm erupts from the dune'+(u.carrying>0?' (lost '+Math.floor(u.carrying)+' spice)':'')+'.');
         state.worms.forEach(w=>{ if(w.x===u.x&&w.y===u.y){ w.rest=2; w.surfaceUntil=now+WORM_SURFACE_MS; } });
         removeUnitVisuals(u);
+        playDestructionSound();
         if(state.selectedUnit===u) deselect();
         return false;
       }
@@ -1252,6 +1302,8 @@ function processEliminations(){
       h.alive=false;
       h.units.forEach(removeUnitVisuals);
       h.units=[];
+      spawnExplosionFx(h.base.x*SZ+SZ/2, h.base.y*SZ+SZ/2);
+      playDestructionSound();
       const finisher=h.lastAttacker?houseById(h.lastAttacker):null;
       addLog("House "+h.name+"'s stronghold has fallen! House "+h.name+' is eliminated.'+(finisher?(' House '+finisher.name+' delivered the final blow.'):''));
       if(state.selectedUnit && state.selectedUnit.owner===h.id) deselect();
@@ -1603,6 +1655,7 @@ function newGame(chosenId, rivalId){
   }
 }
 async function start(chosenId, rivalId){
+  ensureAudio(); // unlock audio here, inside the click gesture that starts the match
   stopSim();
   lastAiThink={}; lastWormMove=0; lastSpiceSpawn=0;
   gameOver=false;
