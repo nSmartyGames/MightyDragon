@@ -262,13 +262,16 @@ const HARVESTER_CAP=30, HARVEST_RATE=12;
 const WORM_COUNT=15;
 const WORM_EAT_CHANCE=0.2; // a worm sharing a unit's tile only swallows it 1 time in 5 — mostly it's a near-miss
 const MOVE_MS=380;
-const TROOP_HP=100, TANK_HP=300;
+const TROOP_HP=100, TANK_HP=300, HARVESTER_HP=500;
 const VISION_RADIUS=5;
 const BASE_HP_MAX=10000; // stronghold "power points"
 const TROOP_SHOT_DMG=10; // one trooper shot drains 10 power points, from a base or a unit
 const TANK_SHOT_DMG=20; // one tank shot drains 20 power points
 const TANK_ATTACK_COOLDOWN_MS=2000; // tanks fire once every 2 seconds
 const TURBINE_DMG_BONUS=5; // each wind turbine adds +5 damage to every shot the house's units fire
+// Building hit points — much softer than the 10000hp stronghold, so a raid
+// that reaches the interior of a base can actually knock out its economy.
+const BUILDING_HP={ turbine:350, silo:450, refinery:450 };
 // real-time pacing
 const TICK_MS=150;
 const HARVEST_INTERVAL_MS=500;
@@ -278,6 +281,7 @@ const WORM_MOVE_INTERVAL_MS=900;
 const SPICE_SPAWN_INTERVAL_MS=6000;
 const WORM_SURFACE_MS=700;
 const SEARCH_RADIUS=8;
+const DEFEND_ALERT_RADIUS=12; // idle friendly combat units this close to a hit auto-switch to Search & Destroy
 
 // ================= the three Great Houses =================
 const HOUSE_DEFS=[
@@ -668,11 +672,26 @@ function buildWorldVisuals(){
   redrawSpiceAndBuildings();
 }
 let spiceLabels=[];
+// Draws a static (non-updating — redrawSpiceAndBuildings redraws it fresh
+// each cycle) hp bar, same look as the per-unit one, centered at (px,py).
+function drawStaticHpBar(container,px,py,w,hp,hpMax){
+  const h=3;
+  const frac=Math.max(0,Math.min(1,hp/hpMax));
+  const g=new PIXI.Graphics();
+  g.beginFill(0x000000,0.6); g.drawRect(-w/2-1,-h/2-1,w+2,h+2); g.endFill();
+  const color=frac>0.5?0x4ad34a:(frac>0.25?0xe0c020:0xe03a2a);
+  g.beginFill(color,1); g.drawRect(-w/2,-h/2,Math.max(0,w*frac),h); g.endFill();
+  g.x=px; g.y=py;
+  container.addChild(g);
+}
 function redrawSpiceAndBuildings(){
-  // Text sprites own a unique canvas-backed GPU texture each — must be
-  // destroyed explicitly or every redraw (every worm-move tick) leaks one
-  // texture per spice deposit for the rest of the session.
-  layerBuildings.children.forEach(c=>{ if(c instanceof PIXI.Text) c.destroy(true); });
+  // Text/Graphics own unique GPU resources (canvas texture, geometry buffer)
+  // — must be destroyed explicitly or every redraw (every worm-move tick)
+  // leaks them for the rest of the session.
+  layerBuildings.children.forEach(c=>{
+    if(c instanceof PIXI.Text) c.destroy(true);
+    else if(c instanceof PIXI.Graphics) c.destroy();
+  });
   layerBuildings.removeChildren();
   spiceLabels=[];
   spiceMap.forEach(dep=>{
@@ -693,6 +712,8 @@ function redrawSpiceAndBuildings(){
     const owner=houseById(b.owner);
     if(owner) sp.tint=owner.color;
     layerBuildings.addChild(sp);
+    const w=b.type==='refinery'?2:1; // refinery's footprint is 2x2 tiles wide
+    drawStaticHpBar(layerBuildings, b.x*SZ+w*SZ/2, b.y*SZ-4, SZ*w*0.7, b.hp, b.hpMax);
   });
   state.houses.forEach(h=>{
     const sp=new PIXI.Sprite(TEX.base); sp.x=h.base.x*SZ; sp.y=h.base.y*SZ; sp.scale.set(ZOOM);
@@ -703,6 +724,7 @@ function redrawSpiceAndBuildings(){
       light.x=h.base.x*SZ+SZ-8; light.y=h.base.y*SZ+8; light.scale.set(ZOOM*0.6);
       light._isBaseLight=true;
       layerBuildings.addChild(light);
+      drawStaticHpBar(layerBuildings, h.base.x*SZ+SZ/2, h.base.y*SZ-4, SZ*0.9, h.baseHp, h.baseHpMax);
     }
   });
 }
@@ -724,7 +746,7 @@ function revealAround(tx,ty,radius){
 let state, learning, gameOver, uiMode=null;
 let idAcc=1;
 
-const UNIT_HP={ trooper:TROOP_HP, tank:TANK_HP };
+const UNIT_HP={ trooper:TROOP_HP, tank:TANK_HP, harvester:HARVESTER_HP };
 function makeUnit(ownerId,type,x,y){
   return { id:idAcc++, owner:ownerId, type, x,y, hp:UNIT_HP[type]||null, carrying:0,
     order:null, dir:0, frame:0, moving:false, sprite:null, moveFrom:null, moveTo:null, moveStart:0 };
@@ -744,10 +766,9 @@ function ensureSprite(u){
     u.sprite.rotation=dirAngle(u.dir);
     u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; layerUnits.addChild(u.sprite);
   }
-  // Combat units get a floating health bar, shown only while recently in a
-  // fight (see COMBAT_ENGAGED_MS), so the map isn't cluttered with bars over
-  // idle troops/tanks.
-  if(isCombatUnit(u) && !u._hpBar){
+  // Any unit with a real HP pool (troopers/tanks always, harvesters too)
+  // gets a floating health bar shown at all times.
+  if(UNIT_HP[u.type]!=null && !u._hpBar){
     u._hpBar=new PIXI.Graphics(); u._hpBar.visible=false; layerFx.addChild(u._hpBar);
   }
 }
@@ -762,26 +783,30 @@ function syncAllSprites(){
   state.worms.forEach(ensureWormSprite);
 }
 
-let selectionRing=null, selectionLight=null;
+// Four L-shaped corner brackets (no full outline) around a square centered
+// on the selected unit — drawn once, only its visibility blinks per-frame.
+function drawCornerBracket(g,color){
+  const hs=SZ*0.42, cl=SZ*0.22;
+  g.clear();
+  g.lineStyle(2,color,1);
+  g.moveTo(-hs,-hs+cl); g.lineTo(-hs,-hs); g.lineTo(-hs+cl,-hs);
+  g.moveTo(hs-cl,-hs); g.lineTo(hs,-hs); g.lineTo(hs,-hs+cl);
+  g.moveTo(hs,hs-cl); g.lineTo(hs,hs); g.lineTo(hs-cl,hs);
+  g.moveTo(-hs+cl,hs); g.lineTo(-hs,hs); g.lineTo(-hs,hs-cl);
+}
+let selectionRing=null;
 function updateSelectionRing(){
   if(selectionRing){ layerFx.removeChild(selectionRing); selectionRing.destroy(); selectionRing=null; }
-  if(selectionLight){ layerFx.removeChild(selectionLight); selectionLight.destroy(); selectionLight=null; }
   if(state.selectedUnit){
     const u=state.selectedUnit;
     selectionRing=new PIXI.Graphics();
-    selectionRing.lineStyle(2,0xffffff,0.9); selectionRing.drawCircle(0,0,SZ*0.4);
+    drawCornerBracket(selectionRing,0x33ff66);
     selectionRing.x=u.x*SZ+SZ/2; selectionRing.y=u.y*SZ+SZ/2;
     layerFx.addChild(selectionRing);
-    // A fast-blinking light pinned to the selected unit's corner, echoing the
-    // stronghold's blinking light so the selection reads at a glance.
-    selectionLight=new PIXI.Sprite(TEX.light); selectionLight.anchor.set(0.5);
-    selectionLight.scale.set(ZOOM*0.55);
-    layerFx.addChild(selectionLight);
   }
 }
 
 // ================= combat FX (lasers, bombs, sparks, health bars, death) ==
-const COMBAT_ENGAGED_MS=3000; // how long a unit keeps showing its health bar after being hit or hitting something
 let activeFx=[];
 function spawnFx(kind, props, life){
   const g=new PIXI.Graphics();
@@ -843,8 +868,7 @@ function updateActiveFx(now){
 }
 function updateHealthBar(u,now){
   const bar=u._hpBar; if(!bar) return;
-  const engaged=u._lastCombatAt && (now-u._lastCombatAt)<COMBAT_ENGAGED_MS;
-  bar.visible=!!(engaged && u.sprite && u.sprite.visible);
+  bar.visible=!!(u.sprite && u.sprite.visible);
   if(!bar.visible) return;
   const max=UNIT_HP[u.type]||1;
   const frac=Math.max(0,Math.min(1,u.hp/max));
@@ -902,15 +926,7 @@ app.ticker.add((delta)=>{
   if(selectionRing && state.selectedUnit && state.selectedUnit.sprite){
     const sp=state.selectedUnit.sprite;
     selectionRing.x=sp.x; selectionRing.y=sp.y;
-    selectionRing.rotation+=0.02*delta;
-  }
-  if(selectionLight && state.selectedUnit && state.selectedUnit.sprite){
-    const sp=state.selectedUnit.sprite;
-    selectionLight.x=sp.x+SZ*0.32; selectionLight.y=sp.y-SZ*0.32;
-    // fast blink, distinct from the slower ambient stronghold light
-    const on=Math.floor(now/220)%2===0;
-    selectionLight.visible=on;
-    selectionLight.tint=0xffffff;
+    selectionRing.visible = Math.floor(now/300)%2===0; // blink
   }
 });
 
@@ -950,6 +966,7 @@ function renderStats(){
 
 // ================= movement helpers =================
 function passable(x,y){ return inBounds(x,y) && terrain[y][x]!=='mountain'; }
+function isBaseTile(x,y){ return !!state && state.houses.some(h=>h.base.x===x && h.base.y===y); }
 // Worms burrow through sand only — they can't cross grass or rock, so grass
 // near a stronghold is a real safe zone.
 function wormPassable(x,y){ return inBounds(x,y) && terrain[y][x]==='desert'; }
@@ -965,9 +982,15 @@ function beginStep(u,nx,ny){
 const PATH_MAX_NODES=3000;
 function octileH(x,y,tx,ty){ const dx=Math.abs(x-tx),dy=Math.abs(y-ty); return Math.max(dx,dy)+0.4142*Math.min(dx,dy); }
 const PATH_DIRS8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-function findPath(sx,sy,tx,ty){
+// unitType gates which units may end a path ON a building tile (only a
+// harvester may target a silo/refinery, for its dropoff); movingId is
+// excluded from the "occupied by another unit" block so a unit never
+// blocks its own path.
+function findPath(sx,sy,tx,ty,unitType,movingId){
   if(sx===tx && sy===ty) return [];
   if(!inBounds(tx,ty) || !passable(tx,ty)) return null;
+  const occupied=new Set();
+  allUnits().forEach(o=>{ if(o.id!==movingId) occupied.add(o.x+','+o.y); });
   const key=(x,y)=>y*MAPW+x;
   const nodes=[{x:sx,y:sy,g:0,parent:-1}];
   const fScore=[octileH(sx,sy,tx,ty)];
@@ -993,10 +1016,16 @@ function findPath(sx,sy,tx,ty){
     for(const [dx,dy] of PATH_DIRS8){
       const nx=cur.x+dx, ny=cur.y+dy;
       if(!inBounds(nx,ny) || !passable(nx,ny)) continue;
-      // Buildings block routing through them like terrain, except when a
-      // tile is the actual destination (e.g. a harvester's silo/refinery
-      // dropoff) — otherwise units would never be able to path onto one.
-      if(buildingMap.has(nx+','+ny) && !(nx===tx && ny===ty)) continue;
+      const isDest=(nx===tx && ny===ty);
+      // Strongholds always block routing (units approach adjacent to fight,
+      // never stand on the tile — see approachTile). Other buildings block
+      // too, except a harvester may end its path exactly on one (its
+      // silo/refinery dropoff) — troopers/tanks/other units never enter them.
+      if(isBaseTile(nx,ny)) continue;
+      if(buildingMap.has(nx+','+ny) && !(isDest && unitType==='harvester')) continue;
+      // Units block each other's routes like terrain, except a unit may
+      // still step onto its own final destination tile.
+      if(occupied.has(nx+','+ny) && !isDest) continue;
       if(dx!==0 && dy!==0 && (!passable(cur.x+dx,cur.y) || !passable(cur.x,cur.y+dy))) continue;
       const nkKey=key(nx,ny);
       if(closed.has(nkKey)) continue;
@@ -1013,6 +1042,23 @@ function findPath(sx,sy,tx,ty){
   }
   return null;
 }
+// Nearest passable, unoccupied, non-building, non-base tile adjacent to
+// (tx,ty) — combat orders path here instead of onto the target's own tile,
+// since strongholds/buildings are never valid path destinations except a
+// harvester's dropoff. The attacker still fires once within range 1 of the
+// real target, it just never needs to finish the last step onto it.
+function approachTile(fromX,fromY,tx,ty){
+  let best=null,bd=Infinity;
+  for(const [dx,dy] of PATH_DIRS8){
+    const ax=tx+dx, ay=ty+dy;
+    if(!inBounds(ax,ay) || !passable(ax,ay)) continue;
+    if(buildingMap.has(ax+','+ay) || isBaseTile(ax,ay)) continue;
+    if(allUnits().some(o=>o.x===ax && o.y===ay)) continue;
+    const d=Math.max(Math.abs(ax-fromX),Math.abs(ay-fromY));
+    if(d<bd){ bd=d; best={x:ax,y:ay}; }
+  }
+  return best || {x:tx,y:ty};
+}
 // Cached per-unit: a path is only recomputed when the target moves (throttled,
 // since attack/engage targets shift every tick) or once the cached path runs
 // dry, so chasing a moving enemy doesn't re-run A* every single tick.
@@ -1023,7 +1069,7 @@ function stepToward(u,tx,ty){
   const stale=!u._path || u._path.length===0;
   const dueForRecalc=!u._lastPathCalc || now-u._lastPathCalc>=PATH_RECALC_MS;
   if(stale || (targetMoved && dueForRecalc)){
-    u._path=findPath(u.x,u.y,tx,ty) || [];
+    u._path=findPath(u.x,u.y,tx,ty,u.type,u.id) || [];
     u._pathTarget={x:tx,y:ty};
     u._lastPathCalc=now;
   }
@@ -1045,10 +1091,11 @@ function findFreeTileNear(cx,cy){
   }
   return {x:cx,y:cy};
 }
-// Spawns pick a tile with no building AND no other unit already on it, so newly
-// created units land visibly apart instead of stacking invisibly on the base tile.
+// Spawns pick a tile with no building AND no other unit already on it, one
+// ring out from the deploy point (r starts at 1) — never on top of the
+// stronghold/building tile itself, always a free tile right next to it.
 function findFreeSpawnTile(cx,cy){
-  for(let r=0;r<8;r++){
+  for(let r=1;r<8;r++){
     for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
       if(Math.max(Math.abs(dx),Math.abs(dy))!==r) continue;
       const x=cx+dx,y=cy+dy;
@@ -1101,6 +1148,18 @@ function spawnAttackFx(u,targetX,targetY){
   else if(u.sprite) spawnLaserFx(u.sprite.x,u.sprite.y,targetX,targetY);
   playFireSound();
 }
+// Idle (or hunting-without-a-target) friendly combat units within range of a
+// spot that just took a hit switch to Search & Destroy, so a raid on the
+// stronghold or an outlying building pulls in nearby defenders automatically
+// instead of needing a manual order.
+function alertNearbyDefenders(house,x,y){
+  house.units.forEach(u=>{
+    if(!isCombatUnit(u)) return;
+    if(u.order && u.order.kind==='attack') return; // already committed to a specific fight
+    const d=Math.max(Math.abs(u.x-x),Math.abs(u.y-y));
+    if(d<=DEFEND_ALERT_RADIUS) u.order={kind:'engage'};
+  });
+}
 // Applies one cooldown-gated attack against a unit or a base, using the
 // attacker's own type's damage/cooldown. Returns true if the target unit
 // died (caller should clear the attacker's order).
@@ -1119,10 +1178,12 @@ function applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase){
     targetHouse.baseHp-=dmg; targetHouse.lastAttacker=house.id;
     addLog('House '+house.name+"'s "+u.type+" strikes House "+targetHouse.name+"'s stronghold — "+Math.floor(stolen)+' spice seized, '+dmg+' power drained.');
     spawnAttackFx(u, targetHouse.base.x*SZ+SZ/2, targetHouse.base.y*SZ+SZ/2);
+    alertNearbyDefenders(targetHouse, targetHouse.base.x, targetHouse.base.y);
     return false;
   }
   if(!targetUnit) return false;
   targetUnit.hp-=dmg; targetUnit._lastCombatAt=now;
+  alertNearbyDefenders(targetHouse, targetUnit.x, targetUnit.y);
   const tx=targetUnit.sprite?targetUnit.sprite.x:targetUnit.x*SZ+SZ/2;
   const ty=targetUnit.sprite?targetUnit.sprite.y:targetUnit.y*SZ+SZ/2;
   spawnAttackFx(u, tx, ty);
@@ -1138,16 +1199,66 @@ function applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase){
   }
   return false;
 }
-// Nearest living enemy unit or base within range, for the "Search & Engage" stance.
+// A refinery's 3 non-origin footprint tiles carry no hp of their own — they
+// redirect to the primary tile so an attack on any corner of the 2x2 damages
+// the same building.
+function resolveBuildingTarget(key){
+  const b=buildingMap.get(key);
+  if(!b) return null;
+  if(b.primary===false) return resolveBuildingTarget(b.primaryKey);
+  return {key,b};
+}
+function buildingScreenPos(b){
+  const w=b.type==='refinery'?2:1; // refinery occupies a 2x2 footprint from its primary tile
+  return { x:(b.x+w/2)*SZ, y:(b.y+w/2)*SZ };
+}
+// Same cooldown-gated attack as applyCombatUnitAttack, but against a building
+// (turbine/silo/refinery) instead of a unit or the stronghold. Returns true
+// if the attacker's order should be cleared (building destroyed or gone).
+function applyBuildingAttack(house,u,targetHouse,buildingKey){
+  const stats=COMBAT_STATS[u.type];
+  if(!stats) return false;
+  const now=performance.now();
+  if(u._lastAttack && now-u._lastAttack<stats.cooldown) return false;
+  const resolved=resolveBuildingTarget(buildingKey);
+  if(!resolved) return true; // already destroyed by someone else
+  u._lastAttack=now; u._lastCombatAt=now;
+  const dmg=stats.dmg+(house.power||0);
+  const b=resolved.b;
+  b.hp-=dmg;
+  const pos=buildingScreenPos(b);
+  spawnAttackFx(u, pos.x, pos.y);
+  addLog('House '+house.name+"'s "+u.type+" hits House "+targetHouse.name+"'s "+b.type+' for '+dmg+'.');
+  alertNearbyDefenders(targetHouse, b.x, b.y);
+  if(b.hp<=0){
+    addLog("House "+targetHouse.name+"'s "+b.type+' is destroyed.');
+    spawnExplosionFx(pos.x,pos.y); playDestructionSound();
+    const toDelete=[resolved.key];
+    buildingMap.forEach((bb,k)=>{ if(bb.primary===false && bb.primaryKey===resolved.key) toDelete.push(k); });
+    toDelete.forEach(k=>buildingMap.delete(k));
+    if(b.type==='turbine') targetHouse.power=Math.max(0,targetHouse.power-TURBINE_DMG_BONUS);
+    else if(b.type==='silo') targetHouse.cap=Math.max(START_CAP,targetHouse.cap-SILO_CAP_BONUS);
+    else if(b.type==='refinery') targetHouse.cap=Math.max(START_CAP,targetHouse.cap-REFINERY_CAP_BONUS);
+    redrawSpiceAndBuildings();
+    return true;
+  }
+  return false;
+}
+// Nearest living enemy unit, building, or base within range, for the "Search & Engage" stance.
 function findEngageTarget(house,u){
   let best=null,bd=SEARCH_RADIUS;
   enemyHousesOf(house).forEach(r=>{
     r.units.forEach(t=>{
       const d=Math.max(Math.abs(u.x-t.x),Math.abs(u.y-t.y));
-      if(d<=bd){ bd=d; best={targetHouse:r, targetUnit:t, targetIsBase:false, x:t.x, y:t.y}; }
+      if(d<=bd){ bd=d; best={kind:'unit', targetHouse:r, targetUnit:t, x:t.x, y:t.y}; }
+    });
+    buildingMap.forEach(b=>{
+      if(b.owner!==r.id || b.primary===false) return;
+      const d=Math.max(Math.abs(u.x-b.x),Math.abs(u.y-b.y));
+      if(d<=bd){ bd=d; best={kind:'building', targetHouse:r, buildingKey:b.x+','+b.y, x:b.x, y:b.y}; }
     });
     const bd2=Math.max(Math.abs(u.x-r.base.x),Math.abs(u.y-r.base.y));
-    if(bd2<=bd){ bd=bd2; best={targetHouse:r, targetUnit:null, targetIsBase:true, x:r.base.x, y:r.base.y}; }
+    if(bd2<=bd){ bd=bd2; best={kind:'base', targetHouse:r, x:r.base.x, y:r.base.y}; }
   });
   return best;
 }
@@ -1159,8 +1270,12 @@ function stepHouseUnits(house){
       const t=findEngageTarget(house,u);
       if(t){
         const dist=Math.max(Math.abs(u.x-t.x),Math.abs(u.y-t.y));
-        if(dist<=1) applyCombatUnitAttack(house,u,t.targetHouse,t.targetUnit,t.targetIsBase);
-        else stepToward(u,t.x,t.y);
+        if(dist<=1){
+          if(t.kind==='building') applyBuildingAttack(house,u,t.targetHouse,t.buildingKey);
+          else applyCombatUnitAttack(house,u,t.targetHouse,t.targetUnit,t.kind==='base');
+        }
+        else if(t.kind==='unit') stepToward(u,t.x,t.y);
+        else { const ap=approachTile(u.x,u.y,t.x,t.y); stepToward(u,ap.x,ap.y); }
       } else {
         // nothing within engage range yet — actively hunt toward the nearest
         // living rival's stronghold instead of idling, picking up any enemy
@@ -1169,7 +1284,8 @@ function stepHouseUnits(house){
         if(rivals.length){
           let nearest=rivals[0], bd=Infinity;
           rivals.forEach(r=>{ const d=Math.max(Math.abs(u.x-r.base.x),Math.abs(u.y-r.base.y)); if(d<bd){ bd=d; nearest=r; } });
-          stepToward(u,nearest.base.x,nearest.base.y);
+          const ap=approachTile(u.x,u.y,nearest.base.x,nearest.base.y);
+          stepToward(u,ap.x,ap.y);
         }
       }
       return; // engage is a standing stance; only Retreat/Cancel clears it
@@ -1177,16 +1293,26 @@ function stepHouseUnits(house){
     if(u.order.kind==='attack'){
       const targetHouse=houseById(u.order.targetHouseId);
       if(!targetHouse || !targetHouse.alive){ u.order=null; return; }
-      let tx,ty,targetUnit=null,targetIsBase=false;
+      let tx,ty,targetUnit=null,targetIsBase=false,buildingKey=null;
       if(u.order.targetId==='base'){ tx=targetHouse.base.x; ty=targetHouse.base.y; targetIsBase=true; }
+      else if(typeof u.order.targetId==='string' && u.order.targetId.startsWith('b:')){
+        const resolved=resolveBuildingTarget(u.order.targetId.slice(2));
+        if(!resolved){ u.order=null; return; }
+        buildingKey=resolved.key; tx=resolved.b.x; ty=resolved.b.y;
+      }
       else { targetUnit=targetHouse.units.find(t=>t.id===u.order.targetId); if(!targetUnit){ u.order=null; return; } tx=targetUnit.x; ty=targetUnit.y; }
       const dist=Math.max(Math.abs(u.x-tx),Math.abs(u.y-ty));
       if(dist<=1){
         if(!isCombatUnit(u)){ u.order=null; return; }
-        const killed=applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase);
+        const killed = buildingKey
+          ? applyBuildingAttack(house,u,targetHouse,buildingKey)
+          : applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase);
         if(killed) u.order=null;
-      } else {
+      } else if(targetUnit){
         stepToward(u,tx,ty);
+      } else {
+        const ap=approachTile(u.x,u.y,tx,ty);
+        stepToward(u,ap.x,ap.y);
       }
       return;
     }
@@ -1307,11 +1433,11 @@ function aiTurnForHouse(house){
       house.units.push(h); ensureSprite(h); addLog('House '+house.name+' deploys a new harvester.');
     } else if(budget>=TURBINE_COST){
       const spot=findFreeTileNear(house.base.x,house.base.y);
-      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:house.id});
+      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine});
       house.spice-=TURBINE_COST; house.power+=TURBINE_DMG_BONUS; spentEcon+=TURBINE_COST; redrawSpiceAndBuildings();
     } else if(budget>=SILO_COST){
       const spot=findFreeTileNear(house.base.x,house.base.y);
-      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:house.id});
+      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo});
       house.spice-=SILO_COST; house.cap+=SILO_CAP_BONUS; spentEcon+=SILO_COST; redrawSpiceAndBuildings();
     }
   } else if(budget>=TANK_COST && Math.random()<0.35){
@@ -1504,7 +1630,10 @@ document.getElementById('ctxEngage').onclick=()=>{
 };
 document.getElementById('ctxRetreat').onclick=()=>{
   const u=state.selectedUnit; const owner=houseById(u.owner);
-  u.order={kind:'move', x:owner.base.x, y:owner.base.y};
+  // The stronghold tile itself is never a valid destination — retreat to a
+  // free tile right next to it instead of stacking on the headquarters.
+  const spot=findFreeSpawnTile(owner.base.x, owner.base.y);
+  u.order={kind:'move', x:spot.x, y:spot.y};
   addLog("House "+owner.name+"'s "+u.type+' retreats to the stronghold.');
   deselect();
 };
@@ -1551,8 +1680,8 @@ function handleBoardClick(e){
       const cost = uiMode.type==='place-turbine' ? TURBINE_COST : SILO_COST;
       if(ph.spice>=cost){
         ph.spice-=cost;
-        if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id}); ph.power+=TURBINE_DMG_BONUS; addLog('Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'); }
-        else { buildingMap.set(key,{x,y,type:'silo',owner:ph.id}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
+        if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); ph.power+=TURBINE_DMG_BONUS; addLog('Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'); }
+        else { buildingMap.set(key,{x,y,type:'silo',owner:ph.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
         redrawSpiceAndBuildings();
       }
     }
@@ -1572,8 +1701,12 @@ function handleBoardClick(e){
     if(blocked){ addLog('Not enough clear, explored ground here for a 2x2 refinery.'); }
     else if(ph.spice>=REFINERY_COST){
       ph.spice-=REFINERY_COST;
+      const primaryKey=x+','+y;
       footprint.forEach(([fx,fy],i)=>{
-        buildingMap.set(fx+','+fy, {x:fx,y:fy,type:'refinery',owner:ph.id,primary:i===0});
+        const entry=(i===0)
+          ? {x:fx,y:fy,type:'refinery',owner:ph.id,primary:true,hp:BUILDING_HP.refinery,hpMax:BUILDING_HP.refinery}
+          : {x:fx,y:fy,type:'refinery',owner:ph.id,primary:false,primaryKey};
+        buildingMap.set(fx+','+fy, entry);
       });
       ph.cap+=REFINERY_CAP_BONUS;
       const spawn=findFreeSpawnTile(x,y);
@@ -1610,9 +1743,17 @@ function handleBoardClick(e){
         addLog('Order given: attack House '+targetHouse.name+"'s stronghold.");
         return;
       }
+      const enemyBuilding=resolveBuildingTarget(x+','+y);
+      if(enemyBuilding && enemyBuilding.b.owner!==ph.id){
+        u.order={kind:'attack', targetHouseId:enemyBuilding.b.owner, targetId:'b:'+enemyBuilding.key};
+        addLog('Order given: attack House '+houseById(enemyBuilding.b.owner).name+"'s "+enemyBuilding.b.type+'.');
+        return;
+      }
     }
-    if(passable(x,y)){ u.order={kind:'move', x, y}; addLog('Order given: move to ('+x+','+y+').'); }
-    else addLog('Rocky mountains block that route.');
+    if(!passable(x,y)){ addLog('Rocky mountains block that route.'); }
+    else if(isBaseTile(x,y)){ addLog('A stronghold tile is never a valid destination.'); }
+    else if(buildingMap.has(x+','+y) && u.type!=='harvester'){ addLog('Only harvesters can enter a silo or refinery.'); }
+    else { u.order={kind:'move', x, y}; addLog('Order given: move to ('+x+','+y+').'); }
     return;
   }
 
@@ -1692,7 +1833,7 @@ function newGame(chosenId, rivalId){
   // harvesters have somewhere to unload from turn one instead of spilling cargo.
   state.houses.forEach(h=>{
     const spot=findFreeTileNear(h.base.x,h.base.y);
-    buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:h.id});
+    buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:h.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo});
     h.cap+=SILO_CAP_BONUS;
   });
   for(let i=0;i<WORM_COUNT;i++){
@@ -1719,7 +1860,7 @@ async function start(chosenId, rivalId){
   buildWorldVisuals();
   layerUnits.removeChildren();
   layerFx.removeChildren();
-  selectionRing=null; selectionLight=null; activeFx=[];
+  selectionRing=null; activeFx=[];
   syncAllSprites();
   revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
   centerCameraOn(ph.base.x, ph.base.y);
