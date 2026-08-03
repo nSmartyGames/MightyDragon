@@ -482,7 +482,9 @@ minimapCanvas.addEventListener('click',(e)=>{
 const KEYS={};
 document.addEventListener('keydown',e=>{ KEYS[e.key]=true; if(e.key==='Escape') deselect(); });
 document.addEventListener('keyup',e=>{ KEYS[e.key]=false; });
+console.log('[DBG] registering ticker1');
 app.ticker.add((delta)=>{
+  if(!window.__t1Last || performance.now()-window.__t1Last>1000){ window.__t1Last=performance.now(); console.log('[DBG] ticker1 alive', delta); }
   const spd=8*delta;
   let manualPan=false;
   if(KEYS['ArrowLeft']||KEYS['a']){ cam.x-=spd; manualPan=true; }
