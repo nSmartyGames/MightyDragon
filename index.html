@@ -106,6 +106,10 @@
   .legend{ display:flex; gap:10px; font-size:10px; color:var(--sand-2); margin-top:6px; flex-wrap:wrap; }
   .legend span{display:flex; align-items:center; gap:4px;}
   .swatch{width:9px; height:9px; border-radius:2px; display:inline-block;}
+  #selectBox{
+    position:absolute; display:none; pointer-events:none; z-index:15;
+    border:1px solid #33ff66; background:rgba(51,255,102,.15);
+  }
   /* Fixed to the board's top-left corner rather than anchored next to the
      selected unit, so it never covers the nearby tiles/enemies the new
      click-to-move-or-attack interaction relies on clicking. */
@@ -191,8 +195,10 @@
     <div class="sub"><span>Spice Throne — <span id="gameClock">00:00</span></span><span id="camHint">drag map / arrow keys to scroll</span></div>
     <div id="boardHost">
       <canvas id="minimap" width="100" height="100" title="Click to jump the camera"></canvas>
+      <div id="selectBox"></div>
       <div id="ctxMenu">
         <div class="ctx-title" id="ctxTitle">Unit</div>
+        <button id="ctxAttack">Attack</button>
         <button id="ctxEngage">Search &amp; Destroy</button>
         <button id="ctxRetreat">Retreat</button>
         <button id="ctxCancel">Cancel</button>
@@ -214,7 +220,7 @@
       <span><i class="swatch" style="background:#e0522a"></i>Spice deposit</span>
       <span><i class="swatch" style="background:#111"></i>Unexplored (fog)</span>
     </div>
-    <div class="hint">Click a vehicle to select it — the cursor becomes a target reticle. Click a tile to move there, or click an enemy to attack it. Search &amp; Destroy sends a trooper or tank hunting for any nearby enemy on its own. Building buttons ask for a grass or desert tile to place on. Drag the map or use arrow keys to scroll, or click the minimap to jump there — fog clears as your units explore. Troopers drain 10 power points per shot, tanks drain 20 every 2 seconds (each wind turbine adds +5 to every shot) — reduce a stronghold's 10000 power to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted. A refinery holds as much as 4 silos and comes with a free harvester. Sandworms only have a 1-in-5 chance of swallowing a unit that shares their tile.</div>
+    <div class="hint">Click a vehicle to select it, or hold Shift and drag a box to select several at once — the cursor becomes a target reticle. Click a tile to move there, or click an enemy to attack it; the Attack button arms targeting mode for a group, Search &amp; Destroy sends units hunting for any nearby enemy on their own, Retreat pulls them back to the stronghold. Building buttons ask for a grass or desert tile to place on. Drag the map (without Shift) or use arrow keys to scroll, or click the minimap to jump there — fog clears as your units explore. Troopers drain 10 power points per shot, tanks drain 20 every 2 seconds (each wind turbine adds +5 to every shot) — reduce a stronghold's 10000 power to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted; troopers and tanks can never enter one, only fight adjacent to it. A refinery holds as much as 4 silos and comes with a free harvester. Sandworms only have a 1-in-5 chance of swallowing a unit that shares their tile, and give up the chase after 5 seconds. A hit on your units, buildings, or stronghold auto-rallies nearby idle troops and tanks to Search &amp; Destroy.</div>
   </div>
 </div>
 
@@ -280,6 +286,8 @@ const AI_THINK_INTERVAL_MS=4000;
 const WORM_MOVE_INTERVAL_MS=900;
 const SPICE_SPAWN_INTERVAL_MS=6000;
 const WORM_SURFACE_MS=700;
+const WORM_HUNT_TIMEOUT_MS=5000; // give up chasing after 5s without a kill
+const WORM_WANDER_MS=4000; // ...and wander randomly this long before hunting again
 const SEARCH_RADIUS=8;
 const DEFEND_ALERT_RADIUS=12; // idle friendly combat units this close to a hit auto-switch to Search & Destroy
 
@@ -794,16 +802,16 @@ function drawCornerBracket(g,color){
   g.moveTo(hs,hs-cl); g.lineTo(hs,hs); g.lineTo(hs-cl,hs);
   g.moveTo(-hs+cl,hs); g.lineTo(-hs,hs); g.lineTo(-hs,hs-cl);
 }
-let selectionRing=null;
+let selectionRings=[]; // one blinking corner bracket per selected unit
 function updateSelectionRing(){
-  if(selectionRing){ layerFx.removeChild(selectionRing); selectionRing.destroy(); selectionRing=null; }
-  if(state.selectedUnit){
-    const u=state.selectedUnit;
-    selectionRing=new PIXI.Graphics();
-    drawCornerBracket(selectionRing,0x33ff66);
-    selectionRing.x=u.x*SZ+SZ/2; selectionRing.y=u.y*SZ+SZ/2;
-    layerFx.addChild(selectionRing);
-  }
+  selectionRings.forEach(r=>{ layerFx.removeChild(r); r.destroy(); });
+  selectionRings=state.selectedUnits.map(u=>{
+    const g=new PIXI.Graphics();
+    drawCornerBracket(g,0x33ff66);
+    g.x=u.x*SZ+SZ/2; g.y=u.y*SZ+SZ/2;
+    layerFx.addChild(g);
+    return g;
+  });
 }
 
 // ================= combat FX (lasers, bombs, sparks, health bars, death) ==
@@ -923,10 +931,12 @@ app.ticker.add((delta)=>{
     if(c._pulse!==undefined){ c._pulse+=0.04*delta; c.alpha=0.85+0.15*Math.sin(c._pulse); }
     else if(c._isBaseLight){ c.tint = Math.floor(now/1000)%2===0 ? 0x33ff66 : 0x3388ff; }
   });
-  if(selectionRing && state.selectedUnit && state.selectedUnit.sprite){
-    const sp=state.selectedUnit.sprite;
-    selectionRing.x=sp.x; selectionRing.y=sp.y;
-    selectionRing.visible = Math.floor(now/300)%2===0; // blink
+  if(selectionRings.length){
+    const on=Math.floor(now/300)%2===0; // blink, all in sync
+    state.selectedUnits.forEach((u,i)=>{
+      const r=selectionRings[i]; if(!r || !u.sprite) return;
+      r.x=u.sprite.x; r.y=u.sprite.y; r.visible=on;
+    });
   }
 });
 
@@ -1194,7 +1204,7 @@ function applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase){
     playDestructionSound();
     const idx=targetHouse.units.indexOf(targetUnit);
     if(idx>=0){ removeUnitVisuals(targetUnit); targetHouse.units.splice(idx,1); }
-    if(state.selectedUnit===targetUnit) deselect();
+    dropFromSelection(targetUnit);
     return true;
   }
   return false;
@@ -1359,13 +1369,26 @@ function autoHarvestAndReturn(house){
 }
 function moveWorms(){
   const units=allUnits();
+  const now=performance.now();
   state.worms.forEach(w=>{
     if(w.rest>0){ w.rest--; return; }
+    const wandering=!!(w.wanderUntil && now<w.wanderUntil);
     let best=null,bestDist=8;
-    units.forEach(u=>{
-      const d=Math.abs(u.x-w.x)+Math.abs(u.y-w.y);
-      if(d<bestDist){ bestDist=d; best=u; }
-    });
+    if(!wandering){
+      units.forEach(u=>{
+        const d=Math.abs(u.x-w.x)+Math.abs(u.y-w.y);
+        if(d<bestDist){ bestDist=d; best=u; }
+      });
+    }
+    if(best){
+      if(!w.huntStart) w.huntStart=now;
+      else if(now-w.huntStart>=WORM_HUNT_TIMEOUT_MS){
+        // chased for 5s without a kill — give up and wander before hunting again
+        w.wanderUntil=now+WORM_WANDER_MS; w.huntStart=null; best=null;
+      }
+    } else {
+      w.huntStart=null;
+    }
     let nx=w.x, ny=w.y, tries=0;
     do{
       if(best && Math.random()<0.7){ nx=w.x+Math.sign(best.x-w.x); ny=w.y+Math.sign(best.y-w.y); }
@@ -1384,10 +1407,10 @@ function resolveWormStrikes(){
       const hit=overlapping && Math.random()<WORM_EAT_CHANCE;
       if(hit){
         addLog((house===ph?'⚠ Your':"House "+house.name+"'s")+' '+u.type+' is swallowed as a sandworm erupts from the dune'+(u.carrying>0?' (lost '+Math.floor(u.carrying)+' spice)':'')+'.');
-        state.worms.forEach(w=>{ if(w.x===u.x&&w.y===u.y){ w.rest=2; w.surfaceUntil=now+WORM_SURFACE_MS; } });
+        state.worms.forEach(w=>{ if(w.x===u.x&&w.y===u.y){ w.rest=2; w.surfaceUntil=now+WORM_SURFACE_MS; w.huntStart=null; w.wanderUntil=null; } });
         removeUnitVisuals(u);
         playDestructionSound();
-        if(state.selectedUnit===u) deselect();
+        dropFromSelection(u);
         return false;
       }
       return true;
@@ -1477,7 +1500,7 @@ function processEliminations(){
       playDestructionSound();
       const finisher=h.lastAttacker?houseById(h.lastAttacker):null;
       addLog("House "+h.name+"'s stronghold has fallen! House "+h.name+' is eliminated.'+(finisher?(' House '+finisher.name+' delivered the final blow.'):''));
-      if(state.selectedUnit && state.selectedUnit.owner===h.id) deselect();
+      if(state.selectedUnits.some(u=>u.owner===h.id)) deselect();
     }
   });
   redrawSpiceAndBuildings();
@@ -1605,36 +1628,65 @@ const modeHint=document.getElementById('modeHint');
 
 function deselect(){
   if(!state) return;
-  state.selectedUnit=null; uiMode=null;
+  state.selectedUnits=[]; uiMode=null;
   ctxMenu.style.display='none'; modeHint.style.display='none';
   boardHost.classList.remove('targeting');
   updateSelectionRing();
 }
-// Selecting a unit puts the board in "targeting" mode: the cursor becomes a
-// crosshair, and the next map click issued via handleBoardClick moves the
-// unit there (or attacks, if the tile holds an enemy) — no explicit
-// Move/Attack menu step needed. The context menu only offers the standing
-// stances that aren't a single click target: Search & Destroy and Retreat.
-function selectUnit(u){ state.selectedUnit=u; uiMode=null; updateSelectionRing(); boardHost.classList.add('targeting'); openCtxMenuFor(u); }
+// Drops one unit out of the current multi-selection (used when it dies or is
+// eaten) without disturbing the rest of the selection.
+function dropFromSelection(u){
+  if(!state) return;
+  const idx=state.selectedUnits.indexOf(u);
+  if(idx<0) return;
+  state.selectedUnits.splice(idx,1);
+  if(state.selectedUnits.length===0) deselect();
+  else { updateSelectionRing(); openCtxMenuFor(); }
+}
+// Selecting unit(s) puts the board in "targeting" mode: the cursor becomes a
+// crosshair, and the next map click issued via handleBoardClick moves them
+// there (or attacks, if the tile holds an enemy) — no explicit Move/Attack
+// menu step needed. The context menu also offers an explicit Attack mode
+// (for clarity commanding a group), the standing Search & Destroy stance,
+// and Retreat.
+function selectUnit(u){ selectUnits([u]); }
+function selectUnits(units){
+  state.selectedUnits=units; uiMode=null; updateSelectionRing();
+  boardHost.classList.add('targeting'); openCtxMenuFor();
+}
 const UNIT_LABEL={ harvester:'Harvester', trooper:'Trooper', tank:'Tank' };
-function openCtxMenuFor(u){
-  document.getElementById('ctxTitle').textContent=(UNIT_LABEL[u.type]||u.type)+' #'+u.id;
-  document.getElementById('ctxEngage').style.display=isCombatUnit(u)?'flex':'none';
+function openCtxMenuFor(){
+  const sel=state.selectedUnits;
+  const title = sel.length===1
+    ? (UNIT_LABEL[sel[0].type]||sel[0].type)+' #'+sel[0].id
+    : sel.length+' units selected';
+  document.getElementById('ctxTitle').textContent=title;
+  const anyCombat=sel.some(isCombatUnit);
+  document.getElementById('ctxAttack').style.display=anyCombat?'flex':'none';
+  document.getElementById('ctxEngage').style.display=anyCombat?'flex':'none';
   ctxMenu.style.display='flex'; modeHint.textContent='Click a tile to move, or an enemy to attack'; modeHint.style.display='block';
 }
+document.getElementById('ctxAttack').onclick=()=>{
+  uiMode={type:'attack-target'};
+  modeHint.textContent='ATTACK — choose an enemy'; modeHint.style.display='block';
+};
 document.getElementById('ctxEngage').onclick=()=>{
-  const u=state.selectedUnit; const owner=houseById(u.owner);
-  u.order={kind:'engage'};
-  addLog("House "+owner.name+"'s trooper begins searching the map for enemies to destroy.");
+  state.selectedUnits.filter(isCombatUnit).forEach(u=>{
+    const owner=houseById(u.owner);
+    u.order={kind:'engage'};
+    addLog("House "+owner.name+"'s "+u.type+' begins searching the map for enemies to destroy.');
+  });
   deselect();
 };
 document.getElementById('ctxRetreat').onclick=()=>{
-  const u=state.selectedUnit; const owner=houseById(u.owner);
-  // The stronghold tile itself is never a valid destination — retreat to a
-  // free tile right next to it instead of stacking on the headquarters.
-  const spot=findFreeSpawnTile(owner.base.x, owner.base.y);
-  u.order={kind:'move', x:spot.x, y:spot.y};
-  addLog("House "+owner.name+"'s "+u.type+' retreats to the stronghold.');
+  state.selectedUnits.forEach(u=>{
+    const owner=houseById(u.owner);
+    // The stronghold tile itself is never a valid destination — retreat to a
+    // free tile right next to it instead of stacking on the headquarters.
+    const spot=findFreeSpawnTile(owner.base.x, owner.base.y);
+    u.order={kind:'move', x:spot.x, y:spot.y};
+    addLog("House "+owner.name+"'s "+u.type+' retreats to the stronghold.');
+  });
   deselect();
 };
 document.getElementById('ctxCancel').onclick=()=>{ deselect(); };
@@ -1645,26 +1697,81 @@ function tileFromEvent(e){
   return {x:Math.floor(px/SZ), y:Math.floor(py/SZ)};
 }
 
+// Screen-space marquee overlay for box-select. World-space tile bounds are
+// only computed once the drag finishes (finishSelectionBox), since the
+// camera doesn't move during a box-select drag.
+const selectBoxEl=document.getElementById('selectBox');
+function updateSelectionBox(x0,y0,x1,y1){
+  const rect=boardHost.getBoundingClientRect();
+  selectBoxEl.style.left=(Math.min(x0,x1)-rect.left)+'px';
+  selectBoxEl.style.top=(Math.min(y0,y1)-rect.top)+'px';
+  selectBoxEl.style.width=Math.abs(x1-x0)+'px';
+  selectBoxEl.style.height=Math.abs(y1-y0)+'px';
+  selectBoxEl.style.display='block';
+}
+function finishSelectionBox(x0,y0,x1,y1){
+  selectBoxEl.style.display='none';
+  if(!state || gameOver) return;
+  const rect=app.view.getBoundingClientRect();
+  const toWorld=(cx,cy)=>({ x:(cx-rect.left)/zoomFactor+cam.x, y:(cy-rect.top)/zoomFactor+cam.y });
+  const p0=toWorld(x0,y0), p1=toWorld(x1,y1);
+  const minX=Math.min(p0.x,p1.x), maxX=Math.max(p0.x,p1.x);
+  const minY=Math.min(p0.y,p1.y), maxY=Math.max(p0.y,p1.y);
+  const ph=playerHouse();
+  const picked=ph.units.filter(u=>{
+    const px=u.x*SZ+SZ/2, py=u.y*SZ+SZ/2;
+    return px>=minX && px<=maxX && py>=minY && py<=maxY;
+  });
+  if(picked.length) selectUnits(picked);
+  else deselect();
+}
 let dragState=null;
 app.view.addEventListener('pointerdown',(e)=>{
-  dragState={startX:e.clientX, startY:e.clientY, camX:cam.x, camY:cam.y, moved:false};
+  // Shift+drag box-selects; plain drag still pans the camera, unchanged.
+  const boxSelect=!!(state && !gameOver && !uiMode && e.shiftKey);
+  dragState={startX:e.clientX, startY:e.clientY, camX:cam.x, camY:cam.y, moved:false, boxSelect};
 });
 app.view.addEventListener('pointermove',(e)=>{
   if(!dragState) return;
   const dx=e.clientX-dragState.startX, dy=e.clientY-dragState.startY;
   if(Math.abs(dx)>4 || Math.abs(dy)>4){
     dragState.moved=true;
-    boardHost.classList.add('dragging');
-    cam.x=dragState.camX-dx/zoomFactor; cam.y=dragState.camY-dy/zoomFactor; clampCamera();
+    if(dragState.boxSelect){
+      updateSelectionBox(dragState.startX,dragState.startY,e.clientX,e.clientY);
+    } else {
+      boardHost.classList.add('dragging');
+      cam.x=dragState.camX-dx/zoomFactor; cam.y=dragState.camY-dy/zoomFactor; clampCamera();
+    }
   }
 });
 window.addEventListener('pointerup',(e)=>{
   if(!dragState) return;
   boardHost.classList.remove('dragging');
-  if(!dragState.moved) handleBoardClick(e);
+  if(dragState.boxSelect && dragState.moved) finishSelectionBox(dragState.startX,dragState.startY,e.clientX,e.clientY);
+  else if(!dragState.moved) handleBoardClick(e);
   dragState=null;
 });
 
+// Whatever enemy (unit, stronghold, or building) sits at (x,y), or null.
+function enemyTargetAt(ph,x,y){
+  const enemyUnit=state.houses.filter(h=>h!==ph).flatMap(h=>h.units).find(t=>t.x===x&&t.y===y);
+  if(enemyUnit) return {kind:'unit', unit:enemyUnit, houseId:enemyUnit.owner};
+  const targetHouse=state.houses.find(h=>h!==ph && h.alive && h.base.x===x && h.base.y===y);
+  if(targetHouse) return {kind:'base', houseId:targetHouse.id};
+  const enemyBuilding=resolveBuildingTarget(x+','+y);
+  if(enemyBuilding && enemyBuilding.b.owner!==ph.id) return {kind:'building', key:enemyBuilding.key, houseId:enemyBuilding.b.owner, type:enemyBuilding.b.type};
+  return null;
+}
+function issueAttackOrders(units,target){
+  if(!units.length) return;
+  units.forEach(u=>{
+    if(target.kind==='unit') u.order={kind:'attack', targetHouseId:target.houseId, targetId:target.unit.id};
+    else if(target.kind==='base') u.order={kind:'attack', targetHouseId:target.houseId, targetId:'base'};
+    else u.order={kind:'attack', targetHouseId:target.houseId, targetId:'b:'+target.key};
+  });
+  const label = target.kind==='unit' ? target.unit.type : target.kind==='base' ? 'stronghold' : target.type;
+  addLog('Order given: attack House '+houseById(target.houseId).name+"'s "+label+'.');
+}
 function handleBoardClick(e){
   if(!state || gameOver) return;
   const {x,y}=tileFromEvent(e);
@@ -1719,41 +1826,41 @@ function handleBoardClick(e){
     return;
   }
 
-  // A unit is selected: clicking the map commands it directly. A friendly
-  // unit under the cursor re-selects instead of stacking a move order onto
-  // it; a trooper attacks an enemy unit/stronghold under the cursor;
-  // anything else is a move order (non-combat units always just move, since
-  // they have no attack to execute anyway). The unit stays selected after a
-  // command so follow-up orders can be issued right away — only Cancel,
-  // Escape, or selecting something else clears the selection.
-  if(state.selectedUnit){
-    const u=state.selectedUnit;
+  // Explicit Attack mode (armed from the context menu): the next click must
+  // land on an enemy unit/stronghold/building, and every combat-capable
+  // selected unit is ordered onto it. Any other click cancels the mode.
+  if(uiMode && uiMode.type==='attack-target'){
+    uiMode=null; modeHint.style.display='none';
+    const target=enemyTargetAt(ph,x,y);
+    if(!target){ addLog('No enemy there to attack.'); return; }
+    issueAttackOrders(state.selectedUnits.filter(isCombatUnit), target);
+    return;
+  }
+
+  // Unit(s) selected: clicking the map commands them directly. A friendly
+  // unit under the cursor re-selects it alone instead of stacking a move
+  // order onto it; combat units attack an enemy unit/building/stronghold
+  // under the cursor; anything else is a move order (non-combat units and
+  // any unit with no attack available just move). Selection persists after
+  // a command so follow-up orders can be issued right away — only Cancel,
+  // Escape, or selecting something else clears it.
+  if(state.selectedUnits.length){
     const friendlyAtTile=ph.units.find(o=>o.x===x && o.y===y);
-    if(friendlyAtTile && friendlyAtTile!==u){ selectUnit(friendlyAtTile); return; }
-    if(isCombatUnit(u)){
-      const enemyUnit=state.houses.filter(h=>h!==ph).flatMap(h=>h.units).find(t=>t.x===x&&t.y===y);
-      if(enemyUnit){
-        u.order={kind:'attack', targetHouseId:enemyUnit.owner, targetId:enemyUnit.id};
-        addLog('Order given: attack House '+houseById(enemyUnit.owner).name+"'s "+enemyUnit.type+'.');
-        return;
-      }
-      const targetHouse=state.houses.find(h=>h!==ph && h.alive && h.base.x===x && h.base.y===y);
-      if(targetHouse){
-        u.order={kind:'attack', targetHouseId:targetHouse.id, targetId:'base'};
-        addLog('Order given: attack House '+targetHouse.name+"'s stronghold.");
-        return;
-      }
-      const enemyBuilding=resolveBuildingTarget(x+','+y);
-      if(enemyBuilding && enemyBuilding.b.owner!==ph.id){
-        u.order={kind:'attack', targetHouseId:enemyBuilding.b.owner, targetId:'b:'+enemyBuilding.key};
-        addLog('Order given: attack House '+houseById(enemyBuilding.b.owner).name+"'s "+enemyBuilding.b.type+'.');
-        return;
-      }
+    if(friendlyAtTile && !state.selectedUnits.includes(friendlyAtTile)){ selectUnit(friendlyAtTile); return; }
+    const target=enemyTargetAt(ph,x,y);
+    if(target){
+      const attackers=state.selectedUnits.filter(isCombatUnit);
+      if(attackers.length){ issueAttackOrders(attackers, target); return; }
     }
-    if(!passable(x,y)){ addLog('Rocky mountains block that route.'); }
-    else if(isBaseTile(x,y)){ addLog('A stronghold tile is never a valid destination.'); }
-    else if(buildingMap.has(x+','+y) && u.type!=='harvester'){ addLog('Only harvesters can enter a silo or refinery.'); }
-    else { u.order={kind:'move', x, y}; addLog('Order given: move to ('+x+','+y+').'); }
+    let anyMoved=false, blockedMsg=null;
+    state.selectedUnits.forEach(u=>{
+      if(!passable(x,y)){ blockedMsg='Rocky mountains block that route.'; return; }
+      if(isBaseTile(x,y)){ blockedMsg='A stronghold tile is never a valid destination.'; return; }
+      if(buildingMap.has(x+','+y) && u.type!=='harvester'){ blockedMsg='Only harvesters can enter a silo or refinery.'; return; }
+      u.order={kind:'move', x, y}; anyMoved=true;
+    });
+    if(anyMoved) addLog('Order given: move to ('+x+','+y+').');
+    else if(blockedMsg) addLog(blockedMsg);
     return;
   }
 
@@ -1818,7 +1925,7 @@ function newGame(chosenId, rivalId){
   buildingMap=new Map();
   explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(false));
   state={
-    startTime:performance.now(), log:[], selectedUnit:null,
+    startTime:performance.now(), log:[], selectedUnits:[],
     worms:[],
     houses: activeDefs.map(hd=>({
       id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss,
@@ -1860,7 +1967,7 @@ async function start(chosenId, rivalId){
   buildWorldVisuals();
   layerUnits.removeChildren();
   layerFx.removeChildren();
-  selectionRing=null; activeFx=[];
+  selectionRings=[]; activeFx=[];
   syncAllSprites();
   revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
   centerCameraOn(ph.base.x, ph.base.y);
