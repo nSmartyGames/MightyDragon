@@ -214,7 +214,7 @@
       <span><i class="swatch" style="background:#e0522a"></i>Spice deposit</span>
       <span><i class="swatch" style="background:#111"></i>Unexplored (fog)</span>
     </div>
-    <div class="hint">Click a vehicle to select it — the cursor becomes a target reticle. Click a tile to move there, or click an enemy to attack it. Search &amp; Destroy sends a trooper or tank hunting for any nearby enemy on its own. Building buttons ask for a grass or desert tile to place on. Drag the map or use arrow keys to scroll, or click the minimap to jump there — fog clears as your units explore. Troopers drain 10 power points per shot, tanks drain 20 every 2 seconds — reduce a stronghold's 1000 power to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted.</div>
+    <div class="hint">Click a vehicle to select it — the cursor becomes a target reticle. Click a tile to move there, or click an enemy to attack it. Search &amp; Destroy sends a trooper or tank hunting for any nearby enemy on its own. Building buttons ask for a grass or desert tile to place on. Drag the map or use arrow keys to scroll, or click the minimap to jump there — fog clears as your units explore. Troopers drain 10 power points per shot, tanks drain 20 every 2 seconds (each wind turbine adds +5 to every shot) — reduce a stronghold's 10000 power to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted. A refinery holds as much as 4 silos and comes with a free harvester. Sandworms only have a 1-in-5 chance of swallowing a unit that shares their tile.</div>
   </div>
 </div>
 
@@ -256,16 +256,19 @@ const MAPW=100, MAPH=100, TILE=16, ZOOM=2, SZ=TILE*ZOOM; // 32px on-screen tile
 const SPICE_TARGET=600;
 const START_SPICE=140, START_CAP=100;
 const HARVESTER_COST=60, TURBINE_COST=50, SILO_COST=70, TROOP_COST=25, TANK_COST=100;
-const REFINERY_COST=110, REFINERY_CAP_BONUS=150;
+const SILO_CAP_BONUS=80;
+const REFINERY_COST=110, REFINERY_CAP_BONUS=SILO_CAP_BONUS*4; // a refinery holds as much as 4 silos
 const HARVESTER_CAP=30, HARVEST_RATE=12;
 const WORM_COUNT=15;
+const WORM_EAT_CHANCE=0.2; // a worm sharing a unit's tile only swallows it 1 time in 5 — mostly it's a near-miss
 const MOVE_MS=380;
 const TROOP_HP=100, TANK_HP=300;
 const VISION_RADIUS=5;
-const BASE_HP_MAX=1000; // stronghold "power points"
+const BASE_HP_MAX=10000; // stronghold "power points"
 const TROOP_SHOT_DMG=10; // one trooper shot drains 10 power points, from a base or a unit
 const TANK_SHOT_DMG=20; // one tank shot drains 20 power points
 const TANK_ATTACK_COOLDOWN_MS=2000; // tanks fire once every 2 seconds
+const TURBINE_DMG_BONUS=5; // each wind turbine adds +5 damage to every shot the house's units fire
 // real-time pacing
 const TICK_MS=150;
 const HARVEST_INTERVAL_MS=500;
@@ -539,7 +542,34 @@ const TEX = {
   spice: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#e0522a'; cx.beginPath(); cx.arc(size/2,size/2,6,0,Math.PI*2); cx.fill(); cx.fillStyle='rgba(255,180,120,.6)'; cx.beginPath(); cx.arc(size/2-1.5,size/2-1.5,2.2,0,Math.PI*2); cx.fill(); }),
   turbine: canvasTexture(TILE,(cx,size)=>{ cx.strokeStyle='#ffffff'; cx.lineWidth=1.4; cx.beginPath(); cx.moveTo(size/2,3); cx.lineTo(size/2,size-2); cx.stroke(); cx.fillStyle='#ffffff'; cx.beginPath(); cx.arc(size/2,4,3,0,Math.PI*2); cx.fill(); }),
   silo: null,
-  base: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.fillRect(2,2,size-4,size-4); cx.strokeStyle='#000'; cx.strokeRect(2,2,size-4,size-4); }),
+  // A rounded, shaded rooftop viewed from directly above, rather than a flat
+  // white square — reads as a smoother, more solid headquarters once tinted
+  // per-house at render time (base sprites are tinted, so this stays greyscale).
+  base: canvasTexture(TILE,(cx,size)=>{
+    const pad=1.5, r=3;
+    const rr=(x,y,w,h,rad)=>{
+      cx.beginPath();
+      cx.moveTo(x+rad,y);
+      cx.arcTo(x+w,y,x+w,y+h,rad);
+      cx.arcTo(x+w,y+h,x,y+h,rad);
+      cx.arcTo(x,y+h,x,y,rad);
+      cx.arcTo(x,y,x+w,y,rad);
+      cx.closePath();
+    };
+    const grd=cx.createLinearGradient(0,0,0,size);
+    grd.addColorStop(0,'#ffffff'); grd.addColorStop(1,'#c7c7c7');
+    rr(pad,pad,size-pad*2,size-pad*2,r);
+    cx.fillStyle=grd; cx.fill();
+    cx.strokeStyle='rgba(0,0,0,.65)'; cx.lineWidth=1; cx.stroke();
+    // recessed inner roof panel for depth
+    rr(pad+2.2,pad+2.2,size-(pad+2.2)*2,size-(pad+2.2)*2,r*0.6);
+    cx.fillStyle='rgba(0,0,0,.10)'; cx.fill();
+    // central vent/dome, the only thing that reads clearly from directly above
+    cx.beginPath(); cx.arc(size/2,size/2,2,0,Math.PI*2);
+    cx.fillStyle='rgba(0,0,0,.4)'; cx.fill();
+    cx.beginPath(); cx.arc(size/2-0.5,size/2-0.5,0.8,0,Math.PI*2);
+    cx.fillStyle='rgba(255,255,255,.5)'; cx.fill();
+  }),
   light: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.beginPath(); cx.arc(size/2,size/2,3,0,Math.PI*2); cx.fill(); cx.strokeStyle='rgba(0,0,0,.6)'; cx.lineWidth=1; cx.stroke(); }),
   grassA: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#5c7a3a'; cx.fillRect(0,0,size,size); }),
   grassB: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#547231'; cx.fillRect(0,0,size,size); }),
@@ -963,6 +993,10 @@ function findPath(sx,sy,tx,ty){
     for(const [dx,dy] of PATH_DIRS8){
       const nx=cur.x+dx, ny=cur.y+dy;
       if(!inBounds(nx,ny) || !passable(nx,ny)) continue;
+      // Buildings block routing through them like terrain, except when a
+      // tile is the actual destination (e.g. a harvester's silo/refinery
+      // dropoff) — otherwise units would never be able to path onto one.
+      if(buildingMap.has(nx+','+ny) && !(nx===tx && ny===ty)) continue;
       if(dx!==0 && dy!==0 && (!passable(cur.x+dx,cur.y) || !passable(cur.x,cur.y+dy))) continue;
       const nkKey=key(nx,ny);
       if(closed.has(nkKey)) continue;
@@ -1076,16 +1110,18 @@ function applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase){
   const now=performance.now();
   if(u._lastAttack && now-u._lastAttack<stats.cooldown) return false;
   u._lastAttack=now; u._lastCombatAt=now;
+  // house.power is the sum of that house's wind-turbine bonuses — every shot,
+  // trooper or tank, hits harder by that flat amount.
+  const dmg=stats.dmg+(house.power||0);
   if(targetIsBase){
     const stolen=Math.min(targetHouse.spice, 10+Math.random()*10);
     targetHouse.spice-=stolen; house.spice+=stolen;
-    targetHouse.baseHp-=stats.dmg; targetHouse.lastAttacker=house.id;
-    addLog('House '+house.name+"'s "+u.type+" strikes House "+targetHouse.name+"'s stronghold — "+Math.floor(stolen)+' spice seized, '+stats.dmg+' power drained.');
+    targetHouse.baseHp-=dmg; targetHouse.lastAttacker=house.id;
+    addLog('House '+house.name+"'s "+u.type+" strikes House "+targetHouse.name+"'s stronghold — "+Math.floor(stolen)+' spice seized, '+dmg+' power drained.');
     spawnAttackFx(u, targetHouse.base.x*SZ+SZ/2, targetHouse.base.y*SZ+SZ/2);
     return false;
   }
   if(!targetUnit) return false;
-  const dmg=stats.dmg;
   targetUnit.hp-=dmg; targetUnit._lastCombatAt=now;
   const tx=targetUnit.sprite?targetUnit.sprite.x:targetUnit.x*SZ+SZ/2;
   const ty=targetUnit.sprite?targetUnit.sprite.y:targetUnit.y*SZ+SZ/2;
@@ -1218,7 +1254,8 @@ function resolveWormStrikes(){
   const now=performance.now();
   state.houses.forEach(house=>{
     house.units=house.units.filter(u=>{
-      const hit=state.worms.some(w=>w.x===u.x && w.y===u.y);
+      const overlapping=state.worms.some(w=>w.x===u.x && w.y===u.y);
+      const hit=overlapping && Math.random()<WORM_EAT_CHANCE;
       if(hit){
         addLog((house===ph?'⚠ Your':"House "+house.name+"'s")+' '+u.type+' is swallowed as a sandworm erupts from the dune'+(u.carrying>0?' (lost '+Math.floor(u.carrying)+' spice)':'')+'.');
         state.worms.forEach(w=>{ if(w.x===u.x&&w.y===u.y){ w.rest=2; w.surfaceUntil=now+WORM_SURFACE_MS; } });
@@ -1271,11 +1308,11 @@ function aiTurnForHouse(house){
     } else if(budget>=TURBINE_COST){
       const spot=findFreeTileNear(house.base.x,house.base.y);
       buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:house.id});
-      house.spice-=TURBINE_COST; house.power+=6; spentEcon+=TURBINE_COST; redrawSpiceAndBuildings();
+      house.spice-=TURBINE_COST; house.power+=TURBINE_DMG_BONUS; spentEcon+=TURBINE_COST; redrawSpiceAndBuildings();
     } else if(budget>=SILO_COST){
       const spot=findFreeTileNear(house.base.x,house.base.y);
       buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:house.id});
-      house.spice-=SILO_COST; house.cap+=80; spentEcon+=SILO_COST; redrawSpiceAndBuildings();
+      house.spice-=SILO_COST; house.cap+=SILO_CAP_BONUS; spentEcon+=SILO_COST; redrawSpiceAndBuildings();
     }
   } else if(budget>=TANK_COST && Math.random()<0.35){
     house.spice-=TANK_COST; spentMil+=TANK_COST;
@@ -1514,8 +1551,8 @@ function handleBoardClick(e){
       const cost = uiMode.type==='place-turbine' ? TURBINE_COST : SILO_COST;
       if(ph.spice>=cost){
         ph.spice-=cost;
-        if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id}); ph.power+=6; addLog('Wind turbine raised — power +6.'); }
-        else { buildingMap.set(key,{x,y,type:'silo',owner:ph.id}); ph.cap+=80; addLog('Silo constructed — capacity +80.'); }
+        if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id}); ph.power+=TURBINE_DMG_BONUS; addLog('Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'); }
+        else { buildingMap.set(key,{x,y,type:'silo',owner:ph.id}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
         redrawSpiceAndBuildings();
       }
     }
@@ -1539,7 +1576,10 @@ function handleBoardClick(e){
         buildingMap.set(fx+','+fy, {x:fx,y:fy,type:'refinery',owner:ph.id,primary:i===0});
       });
       ph.cap+=REFINERY_CAP_BONUS;
-      addLog('Refinery constructed — capacity +'+REFINERY_CAP_BONUS+'.');
+      const spawn=findFreeSpawnTile(x,y);
+      const freeHarvester=makeUnit(ph.id,'harvester',spawn.x,spawn.y);
+      ph.units.push(freeHarvester); ensureSprite(freeHarvester);
+      addLog('Refinery constructed — capacity +'+REFINERY_CAP_BONUS+', a new harvester joins the fleet.');
       redrawSpiceAndBuildings();
     }
     uiMode=null; modeHint.style.display='none'; renderStats();
@@ -1653,7 +1693,7 @@ function newGame(chosenId, rivalId){
   state.houses.forEach(h=>{
     const spot=findFreeTileNear(h.base.x,h.base.y);
     buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:h.id});
-    h.cap+=80;
+    h.cap+=SILO_CAP_BONUS;
   });
   for(let i=0;i<WORM_COUNT;i++){
     let x,y,tries=0;
