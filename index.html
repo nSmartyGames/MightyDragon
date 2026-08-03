@@ -639,6 +639,10 @@ function buildWorldVisuals(){
 }
 let spiceLabels=[];
 function redrawSpiceAndBuildings(){
+  // Text sprites own a unique canvas-backed GPU texture each — must be
+  // destroyed explicitly or every redraw (every worm-move tick) leaks one
+  // texture per spice deposit for the rest of the session.
+  layerBuildings.children.forEach(c=>{ if(c instanceof PIXI.Text) c.destroy(true); });
   layerBuildings.removeChildren();
   spiceLabels=[];
   spiceMap.forEach(dep=>{
@@ -730,8 +734,8 @@ function syncAllSprites(){
 
 let selectionRing=null, selectionLight=null;
 function updateSelectionRing(){
-  if(selectionRing){ layerFx.removeChild(selectionRing); selectionRing=null; }
-  if(selectionLight){ layerFx.removeChild(selectionLight); selectionLight=null; }
+  if(selectionRing){ layerFx.removeChild(selectionRing); selectionRing.destroy(); selectionRing=null; }
+  if(selectionLight){ layerFx.removeChild(selectionLight); selectionLight.destroy(); selectionLight=null; }
   if(state.selectedUnit){
     const u=state.selectedUnit;
     selectionRing=new PIXI.Graphics();
@@ -771,7 +775,7 @@ function spawnDeadFx(x,y){ spawnFx('dead', { x, y }, 1000); }
 function updateActiveFx(now){
   activeFx=activeFx.filter(fx=>{
     const t=(now-fx.born)/fx.life;
-    if(t>=1){ layerFx.removeChild(fx.g); return false; }
+    if(t>=1){ layerFx.removeChild(fx.g); fx.g.destroy(); return false; }
     const g=fx.g;
     if(fx.kind==='laser'){
       g.clear(); g.lineStyle(2,0xff3b30,1-t);
@@ -1049,8 +1053,12 @@ const COMBAT_STATS={
 };
 function isCombatUnit(u){ return !!COMBAT_STATS[u.type]; }
 function removeUnitVisuals(u){
-  if(u.sprite) layerUnits.removeChild(u.sprite);
-  if(u._hpBar) layerFx.removeChild(u._hpBar);
+  // Sprites share a static texture (TEX.trooper etc.) so destroy() must NOT
+  // touch the texture; the health bar is a per-unit Graphics object and must
+  // be fully destroyed or every kill leaks its GPU buffer for the rest of
+  // the session.
+  if(u.sprite){ layerUnits.removeChild(u.sprite); u.sprite.destroy(); }
+  if(u._hpBar){ layerFx.removeChild(u._hpBar); u._hpBar.destroy(); }
 }
 // Fires the attacker's shot FX at the target's current screen position:
 // a laser+spark for troopers, a lobbed bomb burst for tanks.
