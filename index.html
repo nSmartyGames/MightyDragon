@@ -492,6 +492,10 @@ app.ticker.add((delta)=>{
   if(manualPan) followUnit=null;
   if(followUnit){
     const stillAlive=followUnit.sprite && state && state.houses.some(h=>h.units.includes(followUnit));
+    if(!window.__dbgLast || performance.now()-window.__dbgLast>500){
+      window.__dbgLast=performance.now();
+      console.log('[DBG] tick followUnit', stillAlive, followUnit.sprite&&followUnit.sprite.x, followUnit.sprite&&followUnit.sprite.y, 'cam', cam.x, cam.y, 'order', JSON.stringify(followUnit.order));
+    }
     if(!stillAlive) followUnit=null;
     else {
       cam.x=followUnit.sprite.x-(vs.w/zoomFactor)/2;
@@ -1881,7 +1885,7 @@ function handleBoardClick(e){
       if(buildingMap.has(x+','+y) && u.type!=='harvester'){ blockedMsg='Only harvesters can enter a silo or refinery.'; return; }
       u.order={kind:'move', x, y}; if(!mover) mover=u;
     });
-    if(mover){ addLog('Order given: move to ('+x+','+y+').'); followUnit=mover; }
+    if(mover){ addLog('Order given: move to ('+x+','+y+').'); followUnit=mover; console.log('[DBG] followUnit set', followUnit.type, followUnit.id, followUnit.x, followUnit.y); }
     else if(blockedMsg) addLog(blockedMsg);
     return;
   }
