@@ -363,7 +363,6 @@ function viewSize(){
 }
 let vs=viewSize();
 const app = new PIXI.Application({width:vs.w, height:vs.h, background:0x0b0703, antialias:false});
-window.__app=app;
 boardHost.appendChild(app.view);
 
 const world = new PIXI.Container();
@@ -483,10 +482,7 @@ minimapCanvas.addEventListener('click',(e)=>{
 const KEYS={};
 document.addEventListener('keydown',e=>{ KEYS[e.key]=true; if(e.key==='Escape') deselect(); });
 document.addEventListener('keyup',e=>{ KEYS[e.key]=false; });
-console.log('[DBG] registering ticker1');
 app.ticker.add((delta)=>{
- try{
-  if(!window.__t1Last || performance.now()-window.__t1Last>1000){ window.__t1Last=performance.now(); console.log('[DBG] ticker1 alive', delta); }
   const spd=8*delta;
   let manualPan=false;
   if(KEYS['ArrowLeft']||KEYS['a']){ cam.x-=spd; manualPan=true; }
@@ -496,10 +492,6 @@ app.ticker.add((delta)=>{
   if(manualPan) followUnit=null;
   if(followUnit){
     const stillAlive=followUnit.sprite && state && state.houses.some(h=>h.units.includes(followUnit));
-    if(!window.__dbgLast || performance.now()-window.__dbgLast>500){
-      window.__dbgLast=performance.now();
-      console.log('[DBG] tick followUnit', stillAlive, followUnit.sprite&&followUnit.sprite.x, followUnit.sprite&&followUnit.sprite.y, 'cam', cam.x, cam.y, 'order', JSON.stringify(followUnit.order));
-    }
     if(!stillAlive) followUnit=null;
     else {
       cam.x=followUnit.sprite.x-(vs.w/zoomFactor)/2;
@@ -508,7 +500,6 @@ app.ticker.add((delta)=>{
     }
   }
   clampCamera();
- }catch(err){ console.log('[DBG] ticker1 threw', err && err.message, err && err.stack); }
 });
 
 // ================= texture generation =================
@@ -558,7 +549,6 @@ const TILE_PNG = {
   trooper: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAe0lEQVR4nL2SwQ3AIAhFpaM4Ft1BtuoEnhwGR6GXmlSKcjD1J56ePswPIexISklG7FiVTwUiIsw8nO4Kaq1rP4gxgmuYRZ7knDeV6JSGFu8ErbR2iYgCAJylFJObYWZ5LQ6qo3kfrzSL/7qJ6LzFj0CXpmNxvWl66uXxGwkoZYzxn0+NAAAAAElFTkSuQmCC',
   tank: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVR4nN1SyxHFIAiETBqxrvSglKL0kLZohXd4ISPxM87klj0hLLCrIgwQY1SLmRlHvG1UWMXrATvAutwe1ykgIhARFRGt85YTESUiN7BrIec8PTcWDCEEp6YeUNdqOL+qqiml7gAAgFLKvwnx7mssGGk137zCc2sPxmdmdHeAiMeDeDLzcZFd3uLpR7LmGZyCa+PyR/oIfs7ATUgSh/exAAAAAElFTkSuQmCC',
   outpost: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAi0lEQVR4nN2SsRXDIAxEv/O8CMswDjAKj1moNAgtoziV/QgI7BRpchXijtMhgAVyzseKB9gAnHOD0Fp7rUVEPZxS2vazCCEMglIKIqJyMUYAXqt4s84tBoPTWYPG7f1GG7ePrl1lMDDGTBMA1Fo/6uUMnuAfDbz3U7HGqc/YT7rlbhN8iyvB6gf+FG8TqylG5bxpTQAAAABJRU5ErkJggg==',
-  refinery: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABSklEQVR4nN1W223AIAy8VFmEBYFRgAHxKOmXkcsj4LRJ2p4UiceBT3AmBl7GBgDW2uON4CmlbeeO9/7R4CEEAMDeGwSeE/TxSJQrAuRp3DUGCBO+4YGU0vZ7r6DG6Ai/y9/PJutNZlmi5Q8F8MIY41Ccc64ZW+HXQporGAUnotNgq/z6lLoekJsRUdmM29xnnpbfwFp75JwPa+0xgpzLOV/iyzn+/wxNSEQwxny5a27HGJsj1vIZp1nAkMZZSS8Nv3hAElltz+k8ruVLXleAVG2MATA2TYxRzZc8iaUruOsVnAogoqLeOVfaG0Np+QWchnVq8VjvO0u3GZ/jAIOHiE1jjClfr888LV+iEcDmqsm1geq3XctndD0w2rTHucKfCugtCiFMC1UtH1DUhN57Vf1XB3+9JqyLk79XE96Fpaf4JzDNAu17/2/wCcJQumVBN721AAAAAElFTkSuQmCC',
   tankUnit: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAuklEQVR4nLVSsRHDIBATvixC60EYItlBeBRgB2cCKgZxySqkIvfEJsa5ixo49NKLB6CDGGMhWXp8xXRWcGpAsox2q5CaCQBSSpc7V80EAMaYywZV0yTIOZecc/cqkv+aQM6D5OF8DhNoraG1bgqXZXnvJd9NYK1tumzbtkvVTQAA3nsAwDzPzRpCUNLg9BWcc0gpwTm346TmJt2UUg9ZRHINIdSze+VJrkP/QIjHEgB49gQfWH/5vf/BC4rhapNJ6ehdAAAAAElFTkSuQmCC'
 };
 function loadImageTexture(dataUri){
@@ -569,11 +559,20 @@ function loadImageTexture(dataUri){
   });
 }
 
+// Shared rounded-rect path helper for the top-down building textures.
+function roundedRectPath(cx,x,y,w,h,rad){
+  cx.beginPath();
+  cx.moveTo(x+rad,y);
+  cx.arcTo(x+w,y,x+w,y+h,rad);
+  cx.arcTo(x+w,y+h,x,y+h,rad);
+  cx.arcTo(x,y+h,x,y,rad);
+  cx.arcTo(x,y,x+w,y,rad);
+  cx.closePath();
+}
 const TEX = {
   harvester: null, // filled in by preloadImageTiles()
   trooper: null,
   tank: null,
-  refinery: null,
   sandTrail: canvasTexture(TILE, sandTrailCanvas),
   wormMouth: canvasTexture(TILE, wormMouthCanvas),
   spice: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#e0522a'; cx.beginPath(); cx.arc(size/2,size/2,6,0,Math.PI*2); cx.fill(); cx.fillStyle='rgba(255,180,120,.6)'; cx.beginPath(); cx.arc(size/2-1.5,size/2-1.5,2.2,0,Math.PI*2); cx.fill(); }),
@@ -584,28 +583,51 @@ const TEX = {
   // per-house at render time (base sprites are tinted, so this stays greyscale).
   base: canvasTexture(TILE,(cx,size)=>{
     const pad=1.5, r=3;
-    const rr=(x,y,w,h,rad)=>{
-      cx.beginPath();
-      cx.moveTo(x+rad,y);
-      cx.arcTo(x+w,y,x+w,y+h,rad);
-      cx.arcTo(x+w,y+h,x,y+h,rad);
-      cx.arcTo(x,y+h,x,y,rad);
-      cx.arcTo(x,y,x+w,y,rad);
-      cx.closePath();
-    };
     const grd=cx.createLinearGradient(0,0,0,size);
     grd.addColorStop(0,'#ffffff'); grd.addColorStop(1,'#c7c7c7');
-    rr(pad,pad,size-pad*2,size-pad*2,r);
+    roundedRectPath(cx,pad,pad,size-pad*2,size-pad*2,r);
     cx.fillStyle=grd; cx.fill();
     cx.strokeStyle='rgba(0,0,0,.65)'; cx.lineWidth=1; cx.stroke();
     // recessed inner roof panel for depth
-    rr(pad+2.2,pad+2.2,size-(pad+2.2)*2,size-(pad+2.2)*2,r*0.6);
+    roundedRectPath(cx,pad+2.2,pad+2.2,size-(pad+2.2)*2,size-(pad+2.2)*2,r*0.6);
     cx.fillStyle='rgba(0,0,0,.10)'; cx.fill();
     // central vent/dome, the only thing that reads clearly from directly above
     cx.beginPath(); cx.arc(size/2,size/2,2,0,Math.PI*2);
     cx.fillStyle='rgba(0,0,0,.4)'; cx.fill();
     cx.beginPath(); cx.arc(size/2-0.5,size/2-0.5,0.8,0,Math.PI*2);
     cx.fillStyle='rgba(255,255,255,.5)'; cx.fill();
+  }),
+  // Same rounded-roof language as the stronghold, sized for the refinery's
+  // 2x2 footprint, with two tank-like vents instead of one to read as an
+  // industrial building rather than a second headquarters.
+  refineryBody: canvasTexture(TILE*2,(cx,size)=>{
+    const pad=2.5, r=5;
+    const grd=cx.createLinearGradient(0,0,0,size);
+    grd.addColorStop(0,'#ffffff'); grd.addColorStop(1,'#c7c7c7');
+    roundedRectPath(cx,pad,pad,size-pad*2,size-pad*2,r);
+    cx.fillStyle=grd; cx.fill();
+    cx.strokeStyle='rgba(0,0,0,.65)'; cx.lineWidth=1.2; cx.stroke();
+    roundedRectPath(cx,pad+3.5,pad+3.5,size-(pad+3.5)*2,size-(pad+3.5)*2,r*0.6);
+    cx.fillStyle='rgba(0,0,0,.10)'; cx.fill();
+    [[size*0.35,size*0.4],[size*0.65,size*0.62]].forEach(([vx,vy])=>{
+      cx.beginPath(); cx.arc(vx,vy,3.2,0,Math.PI*2);
+      cx.fillStyle='rgba(0,0,0,.4)'; cx.fill();
+      cx.beginPath(); cx.arc(vx-0.8,vy-0.8,1.2,0,Math.PI*2);
+      cx.fillStyle='rgba(255,255,255,.5)'; cx.fill();
+    });
+  }),
+  // White flag with a small spice-colored dot, anchored at the pole's base
+  // (bottom-left) so it can be scaled from that edge to flutter.
+  flag: canvasTexture(TILE,(cx,size)=>{
+    cx.strokeStyle='#3a2712'; cx.lineWidth=1.5;
+    cx.beginPath(); cx.moveTo(1,size-1); cx.lineTo(1,1); cx.stroke();
+    cx.fillStyle='#f3e3c0';
+    cx.beginPath();
+    cx.moveTo(1,1); cx.lineTo(size-2,3.5); cx.lineTo(size-3.5,7); cx.lineTo(1,9);
+    cx.closePath(); cx.fill();
+    cx.strokeStyle='rgba(0,0,0,.35)'; cx.lineWidth=0.6; cx.stroke();
+    cx.fillStyle='#e0522a';
+    cx.beginPath(); cx.arc(6.5,4.8,1.8,0,Math.PI*2); cx.fill();
   }),
   light: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.beginPath(); cx.arc(size/2,size/2,3,0,Math.PI*2); cx.fill(); cx.strokeStyle='rgba(0,0,0,.6)'; cx.lineWidth=1; cx.stroke(); }),
   grassA: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#5c7a3a'; cx.fillRect(0,0,size,size); }),
@@ -740,13 +762,23 @@ function redrawSpiceAndBuildings(){
   });
   buildingMap.forEach(b=>{
     if(b.primary===false) return; // footprint-only tile of a multi-tile building; drawn once at its origin
-    const tex = b.type==='turbine'?TEX.turbine : b.type==='silo'?TEX.silo : TEX.refinery;
+    const tex = b.type==='turbine'?TEX.turbine : b.type==='silo'?TEX.silo : TEX.refineryBody;
     const sp=new PIXI.Sprite(tex); sp.x=b.x*SZ; sp.y=b.y*SZ; sp.scale.set(ZOOM);
     const owner=houseById(b.owner);
     if(owner) sp.tint=owner.color;
     layerBuildings.addChild(sp);
     const w=b.type==='refinery'?2:1; // refinery's footprint is 2x2 tiles wide
     drawStaticHpBar(layerBuildings, b.x*SZ+w*SZ/2, b.y*SZ-4, SZ*w*0.7, b.hp, b.hpMax);
+    if(b.type==='refinery'){
+      // A white flag with the spice mark, planted at the refinery's near
+      // corner — left untinted (unlike the body) and flagged for the
+      // wave animation in the main ticker.
+      const flag=new PIXI.Sprite(TEX.flag);
+      flag.anchor.set(0,1); flag.scale.set(ZOOM);
+      flag.x=b.x*SZ+SZ*0.15; flag.y=b.y*SZ+SZ*0.85;
+      flag._flagWave=true; flag._flagPhase=(b.x*7+b.y*13)%(Math.PI*2);
+      layerBuildings.addChild(flag);
+    }
   });
   state.houses.forEach(h=>{
     const sp=new PIXI.Sprite(TEX.base); sp.x=h.base.x*SZ; sp.y=h.base.y*SZ; sp.scale.set(ZOOM);
@@ -955,6 +987,7 @@ app.ticker.add((delta)=>{
   layerBuildings.children.forEach(c=>{
     if(c._pulse!==undefined){ c._pulse+=0.04*delta; c.alpha=0.85+0.15*Math.sin(c._pulse); }
     else if(c._isBaseLight){ c.tint = Math.floor(now/1000)%2===0 ? 0x33ff66 : 0x3388ff; }
+    else if(c._flagWave){ c.skew.y=Math.sin(now/220+c._flagPhase)*0.22; }
   });
   if(selectionRings.length){
     const on=Math.floor(now/300)%2===0; // blink, all in sync
@@ -1658,6 +1691,13 @@ function deselect(){
   boardHost.classList.remove('targeting');
   updateSelectionRing();
 }
+// Closes the context menu without clearing the selection — used once an
+// order has actually been issued (menu action or direct map click), so it
+// doesn't linger over the board. The unit stays selected for follow-up
+// clicks; clicking it again reopens the menu.
+function hideCtxMenu(){
+  ctxMenu.style.display='none'; modeHint.style.display='none';
+}
 // Drops one unit out of the current multi-selection (used when it dies or is
 // eaten) without disturbing the rest of the selection.
 function dropFromSelection(u){
@@ -1693,6 +1733,7 @@ function openCtxMenuFor(){
 }
 document.getElementById('ctxAttack').onclick=()=>{
   uiMode={type:'attack-target'};
+  ctxMenu.style.display='none';
   modeHint.textContent='ATTACK — choose an enemy'; modeHint.style.display='block';
 };
 document.getElementById('ctxEngage').onclick=()=>{
@@ -1881,7 +1922,7 @@ function handleBoardClick(e){
     const target=enemyTargetAt(ph,x,y);
     if(target){
       const attackers=state.selectedUnits.filter(isCombatUnit);
-      if(attackers.length){ issueAttackOrders(attackers, target); return; }
+      if(attackers.length){ issueAttackOrders(attackers, target); hideCtxMenu(); return; }
     }
     let mover=null, blockedMsg=null;
     state.selectedUnits.forEach(u=>{
@@ -1890,7 +1931,7 @@ function handleBoardClick(e){
       if(buildingMap.has(x+','+y) && u.type!=='harvester'){ blockedMsg='Only harvesters can enter a silo or refinery.'; return; }
       u.order={kind:'move', x, y}; if(!mover) mover=u;
     });
-    if(mover){ addLog('Order given: move to ('+x+','+y+').'); followUnit=mover; console.log('[DBG] followUnit set', followUnit.type, followUnit.id, followUnit.x, followUnit.y); }
+    if(mover){ addLog('Order given: move to ('+x+','+y+').'); followUnit=mover; hideCtxMenu(); }
     else if(blockedMsg) addLog(blockedMsg);
     return;
   }
@@ -2041,8 +2082,7 @@ Promise.all([
   loadImageTexture(TILE_PNG.trooper).then(t=>{ TEX.trooper=t; }),
   loadImageTexture(TILE_PNG.tank).then(t=>{ TEX.harvester=t; }),
   loadImageTexture(TILE_PNG.tankUnit).then(t=>{ TEX.tank=t; }),
-  loadImageTexture(TILE_PNG.outpost).then(t=>{ TEX.silo=t; }),
-  loadImageTexture(TILE_PNG.refinery).then(t=>{ TEX.refinery=t; })
+  loadImageTexture(TILE_PNG.outpost).then(t=>{ TEX.silo=t; })
 ]).then(showHouseSelect);
 })();
 </script>
