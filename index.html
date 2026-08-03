@@ -378,11 +378,16 @@ app.stage.addChild(world);
 const cam={x:0,y:0};
 let zoomFactor=1;
 const ZOOM_STEP=2;
+// While set, the camera tracks this unit every frame as it walks its route.
+// Any manual camera action (drag-pan, arrow keys, minimap click, zoom)
+// releases the lock, same as the unit simply arriving/losing its order.
+let followUnit=null;
 
 // A double-click (desktop) or double-tap (touch) re-fits the canvas to its
 // container (in case it changed since last render, e.g. rotation) and toggles
 // a 2x zoom centered on the point that was double-clicked/tapped.
 function zoomAt(clientX, clientY){
+  followUnit=null;
   vs=viewSize();
   app.renderer.resize(vs.w, vs.h);
   const rect=app.view.getBoundingClientRect();
@@ -471,7 +476,7 @@ minimapCanvas.addEventListener('click',(e)=>{
   const rect=minimapCanvas.getBoundingClientRect();
   const mx=Math.floor((e.clientX-rect.left)/rect.width*MAPW);
   const my=Math.floor((e.clientY-rect.top)/rect.height*MAPH);
-  if(inBounds(mx,my)){ centerCameraOn(mx,my); renderMinimap(); }
+  if(inBounds(mx,my)){ followUnit=null; centerCameraOn(mx,my); renderMinimap(); }
 });
 
 const KEYS={};
@@ -479,10 +484,21 @@ document.addEventListener('keydown',e=>{ KEYS[e.key]=true; if(e.key==='Escape') 
 document.addEventListener('keyup',e=>{ KEYS[e.key]=false; });
 app.ticker.add((delta)=>{
   const spd=8*delta;
-  if(KEYS['ArrowLeft']||KEYS['a']) cam.x-=spd;
-  if(KEYS['ArrowRight']||KEYS['d']) cam.x+=spd;
-  if(KEYS['ArrowUp']||KEYS['w']) cam.y-=spd;
-  if(KEYS['ArrowDown']||KEYS['s']) cam.y+=spd;
+  let manualPan=false;
+  if(KEYS['ArrowLeft']||KEYS['a']){ cam.x-=spd; manualPan=true; }
+  if(KEYS['ArrowRight']||KEYS['d']){ cam.x+=spd; manualPan=true; }
+  if(KEYS['ArrowUp']||KEYS['w']){ cam.y-=spd; manualPan=true; }
+  if(KEYS['ArrowDown']||KEYS['s']){ cam.y+=spd; manualPan=true; }
+  if(manualPan) followUnit=null;
+  if(followUnit){
+    const stillAlive=followUnit.sprite && state && state.houses.some(h=>h.units.includes(followUnit));
+    if(!stillAlive) followUnit=null;
+    else {
+      cam.x=followUnit.sprite.x-(vs.w/zoomFactor)/2;
+      cam.y=followUnit.sprite.y-(vs.h/zoomFactor)/2;
+      if(!followUnit.order) followUnit=null; // arrived — release the lock
+    }
+  }
   clampCamera();
 });
 
@@ -1628,7 +1644,7 @@ const modeHint=document.getElementById('modeHint');
 
 function deselect(){
   if(!state) return;
-  state.selectedUnits=[]; uiMode=null;
+  state.selectedUnits=[]; uiMode=null; followUnit=null;
   ctxMenu.style.display='none'; modeHint.style.display='none';
   boardHost.classList.remove('targeting');
   updateSelectionRing();
@@ -1671,15 +1687,18 @@ document.getElementById('ctxAttack').onclick=()=>{
   modeHint.textContent='ATTACK — choose an enemy'; modeHint.style.display='block';
 };
 document.getElementById('ctxEngage').onclick=()=>{
-  state.selectedUnits.filter(isCombatUnit).forEach(u=>{
+  const combatants=state.selectedUnits.filter(isCombatUnit);
+  combatants.forEach(u=>{
     const owner=houseById(u.owner);
     u.order={kind:'engage'};
     addLog("House "+owner.name+"'s "+u.type+' begins searching the map for enemies to destroy.');
   });
   deselect();
+  if(combatants.length) followUnit=combatants[0];
 };
 document.getElementById('ctxRetreat').onclick=()=>{
-  state.selectedUnits.forEach(u=>{
+  const units=state.selectedUnits.slice();
+  units.forEach(u=>{
     const owner=houseById(u.owner);
     // The stronghold tile itself is never a valid destination — retreat to a
     // free tile right next to it instead of stacking on the headquarters.
@@ -1688,6 +1707,7 @@ document.getElementById('ctxRetreat').onclick=()=>{
     addLog("House "+owner.name+"'s "+u.type+' retreats to the stronghold.');
   });
   deselect();
+  if(units.length) followUnit=units[0];
 };
 document.getElementById('ctxCancel').onclick=()=>{ deselect(); };
 
@@ -1739,6 +1759,7 @@ app.view.addEventListener('pointermove',(e)=>{
     if(dragState.boxSelect){
       updateSelectionBox(dragState.startX,dragState.startY,e.clientX,e.clientY);
     } else {
+      followUnit=null;
       boardHost.classList.add('dragging');
       cam.x=dragState.camX-dx/zoomFactor; cam.y=dragState.camY-dy/zoomFactor; clampCamera();
     }
@@ -1771,6 +1792,7 @@ function issueAttackOrders(units,target){
   });
   const label = target.kind==='unit' ? target.unit.type : target.kind==='base' ? 'stronghold' : target.type;
   addLog('Order given: attack House '+houseById(target.houseId).name+"'s "+label+'.');
+  followUnit=units[0];
 }
 function handleBoardClick(e){
   if(!state || gameOver) return;
@@ -1852,14 +1874,14 @@ function handleBoardClick(e){
       const attackers=state.selectedUnits.filter(isCombatUnit);
       if(attackers.length){ issueAttackOrders(attackers, target); return; }
     }
-    let anyMoved=false, blockedMsg=null;
+    let mover=null, blockedMsg=null;
     state.selectedUnits.forEach(u=>{
       if(!passable(x,y)){ blockedMsg='Rocky mountains block that route.'; return; }
       if(isBaseTile(x,y)){ blockedMsg='A stronghold tile is never a valid destination.'; return; }
       if(buildingMap.has(x+','+y) && u.type!=='harvester'){ blockedMsg='Only harvesters can enter a silo or refinery.'; return; }
-      u.order={kind:'move', x, y}; anyMoved=true;
+      u.order={kind:'move', x, y}; if(!mover) mover=u;
     });
-    if(anyMoved) addLog('Order given: move to ('+x+','+y+').');
+    if(mover){ addLog('Order given: move to ('+x+','+y+').'); followUnit=mover; }
     else if(blockedMsg) addLog(blockedMsg);
     return;
   }
