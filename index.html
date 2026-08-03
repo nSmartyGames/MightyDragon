@@ -1183,10 +1183,10 @@ function applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase){
   // trooper or tank, hits harder by that flat amount.
   const dmg=stats.dmg+(house.power||0);
   if(targetIsBase){
-    const stolen=Math.min(targetHouse.spice, 10+Math.random()*10);
-    targetHouse.spice-=stolen; house.spice+=stolen;
+    // Attacks only ever drain stronghold power — a house's banked spice is
+    // never touched by combat, no matter what's under fire.
     targetHouse.baseHp-=dmg; targetHouse.lastAttacker=house.id;
-    addLog('House '+house.name+"'s "+u.type+" strikes House "+targetHouse.name+"'s stronghold — "+Math.floor(stolen)+' spice seized, '+dmg+' power drained.');
+    addLog('House '+house.name+"'s "+u.type+" strikes House "+targetHouse.name+"'s stronghold — "+dmg+' power drained.');
     spawnAttackFx(u, targetHouse.base.x*SZ+SZ/2, targetHouse.base.y*SZ+SZ/2);
     alertNearbyDefenders(targetHouse, targetHouse.base.x, targetHouse.base.y);
     return false;
