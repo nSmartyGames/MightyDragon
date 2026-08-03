@@ -484,6 +484,7 @@ document.addEventListener('keydown',e=>{ KEYS[e.key]=true; if(e.key==='Escape') 
 document.addEventListener('keyup',e=>{ KEYS[e.key]=false; });
 console.log('[DBG] registering ticker1');
 app.ticker.add((delta)=>{
+ try{
   if(!window.__t1Last || performance.now()-window.__t1Last>1000){ window.__t1Last=performance.now(); console.log('[DBG] ticker1 alive', delta); }
   const spd=8*delta;
   let manualPan=false;
@@ -506,6 +507,7 @@ app.ticker.add((delta)=>{
     }
   }
   clampCamera();
+ }catch(err){ console.log('[DBG] ticker1 threw', err && err.message, err && err.stack); }
 });
 
 // ================= texture generation =================
