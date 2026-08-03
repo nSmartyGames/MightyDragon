@@ -581,22 +581,94 @@ const TEX = {
   // A rounded, shaded rooftop viewed from directly above, rather than a flat
   // white square — reads as a smoother, more solid headquarters once tinted
   // per-house at render time (base sprites are tinted, so this stays greyscale).
+  // Corner turrets + a crenellated edge push it further from "generic
+  // building" toward "fortified stronghold" within the tile's 16px budget.
   base: canvasTexture(TILE,(cx,size)=>{
-    const pad=1.5, r=3;
+    const pad=1.5, r=2.5;
     const grd=cx.createLinearGradient(0,0,0,size);
     grd.addColorStop(0,'#ffffff'); grd.addColorStop(1,'#c7c7c7');
     roundedRectPath(cx,pad,pad,size-pad*2,size-pad*2,r);
     cx.fillStyle=grd; cx.fill();
     cx.strokeStyle='rgba(0,0,0,.65)'; cx.lineWidth=1; cx.stroke();
-    // recessed inner roof panel for depth
-    roundedRectPath(cx,pad+2.2,pad+2.2,size-(pad+2.2)*2,size-(pad+2.2)*2,r*0.6);
-    cx.fillStyle='rgba(0,0,0,.10)'; cx.fill();
+    // crenellated battlements: small notches along all 4 edges
+    cx.fillStyle='rgba(0,0,0,.3)';
+    for(let i=0;i<3;i++){
+      const off=pad+2+i*4;
+      cx.fillRect(off,pad-0.5,1.6,1.2);
+      cx.fillRect(off,size-pad-0.7,1.6,1.2);
+      cx.fillRect(pad-0.5,off,1.2,1.6);
+      cx.fillRect(size-pad-0.7,off,1.2,1.6);
+    }
+    // corner turrets, seen from above as small drum shapes
+    [[pad+1.4,pad+1.4],[size-pad-1.4,pad+1.4],[pad+1.4,size-pad-1.4],[size-pad-1.4,size-pad-1.4]].forEach(([tx,ty])=>{
+      cx.beginPath(); cx.arc(tx,ty,1.7,0,Math.PI*2);
+      cx.fillStyle='rgba(0,0,0,.32)'; cx.fill();
+      cx.strokeStyle='rgba(0,0,0,.5)'; cx.lineWidth=0.5; cx.stroke();
+      cx.beginPath(); cx.arc(tx-0.4,ty-0.4,0.6,0,Math.PI*2);
+      cx.fillStyle='rgba(255,255,255,.4)'; cx.fill();
+    });
+    // recessed inner keep for depth
+    roundedRectPath(cx,pad+3,pad+3,size-(pad+3)*2,size-(pad+3)*2,r*0.6);
+    cx.fillStyle='rgba(0,0,0,.12)'; cx.fill();
+    cx.strokeStyle='rgba(0,0,0,.22)'; cx.lineWidth=0.5; cx.stroke();
     // central vent/dome, the only thing that reads clearly from directly above
-    cx.beginPath(); cx.arc(size/2,size/2,2,0,Math.PI*2);
-    cx.fillStyle='rgba(0,0,0,.4)'; cx.fill();
+    cx.beginPath(); cx.arc(size/2,size/2,1.9,0,Math.PI*2);
+    cx.fillStyle='rgba(0,0,0,.45)'; cx.fill();
     cx.beginPath(); cx.arc(size/2-0.5,size/2-0.5,0.8,0,Math.PI*2);
-    cx.fillStyle='rgba(255,255,255,.5)'; cx.fill();
+    cx.fillStyle='rgba(255,255,255,.55)'; cx.fill();
   }),
+  // House flags for the stronghold: same pole+cloth construction as the
+  // refinery's spice flag, but colored per house with a distinct blazon
+  // baked in (not tint-based, since each needs its own shape+color).
+  houseFlags: (()=>{
+    const emblems={
+      horicus:(cx)=>{ // flame
+        cx.fillStyle='#ffe066';
+        cx.beginPath();
+        cx.moveTo(7,2);
+        cx.bezierCurveTo(9,4,9.4,5.8,7.8,7.6);
+        cx.bezierCurveTo(8.3,6.4,7.6,5.6,7,6);
+        cx.bezierCurveTo(7.3,6.9,6,7.7,5.4,6.6);
+        cx.bezierCurveTo(4.5,4.8,5.3,3,7,2);
+        cx.closePath(); cx.fill();
+      },
+      andromedus:(cx)=>{ // star
+        cx.fillStyle='#f3e3c0';
+        const ox=6.6, oy=4.8, rOut=2.5, rIn=1.05;
+        cx.beginPath();
+        for(let i=0;i<10;i++){
+          const ang=-Math.PI/2+i*Math.PI/5, rad=i%2===0?rOut:rIn;
+          const px=ox+Math.cos(ang)*rad, py=oy+Math.sin(ang)*rad;
+          if(i===0) cx.moveTo(px,py); else cx.lineTo(px,py);
+        }
+        cx.closePath(); cx.fill();
+      },
+      catarnicus:(cx)=>{ // venom drop
+        cx.fillStyle='#c8f0a0';
+        cx.beginPath();
+        cx.moveTo(6.6,2.2);
+        cx.bezierCurveTo(8.6,4.6,8.1,7.6,6.6,7.6);
+        cx.bezierCurveTo(5.1,7.6,4.6,4.6,6.6,2.2);
+        cx.closePath(); cx.fill();
+        cx.fillStyle='#2a4a1a';
+        cx.beginPath(); cx.arc(6.6,5.6,0.55,0,Math.PI*2); cx.fill();
+      }
+    };
+    const out={};
+    HOUSE_DEFS.forEach(hd=>{
+      out[hd.id]=canvasTexture(TILE,(cx,size)=>{
+        cx.strokeStyle='#3a2712'; cx.lineWidth=1.5;
+        cx.beginPath(); cx.moveTo(1,size-1); cx.lineTo(1,1); cx.stroke();
+        cx.fillStyle=hd.colorCss;
+        cx.beginPath();
+        cx.moveTo(1,1); cx.lineTo(size-1,3.8); cx.lineTo(size-3,8); cx.lineTo(1,10);
+        cx.closePath(); cx.fill();
+        cx.strokeStyle='rgba(0,0,0,.4)'; cx.lineWidth=0.6; cx.stroke();
+        (emblems[hd.id]||(()=>{}))(cx);
+      });
+    });
+    return out;
+  })(),
   // Same rounded-roof language as the stronghold, sized for the refinery's
   // 2x2 footprint, with two tank-like vents instead of one to read as an
   // industrial building rather than a second headquarters.
@@ -789,6 +861,16 @@ function redrawSpiceAndBuildings(){
       light.x=h.base.x*SZ+SZ-8; light.y=h.base.y*SZ+8; light.scale.set(ZOOM*0.6);
       light._isBaseLight=true;
       layerBuildings.addChild(light);
+      // House-colored flag with the house's own blazon, left untinted
+      // (color+emblem are baked into the per-house texture already).
+      const flagTex=TEX.houseFlags[h.id];
+      if(flagTex){
+        const flag=new PIXI.Sprite(flagTex);
+        flag.anchor.set(0,1); flag.scale.set(ZOOM);
+        flag.x=h.base.x*SZ+SZ*0.1; flag.y=h.base.y*SZ+SZ*0.9;
+        flag._flagWave=true; flag._flagPhase=(h.base.x*11+h.base.y*17)%(Math.PI*2);
+        layerBuildings.addChild(flag);
+      }
       drawStaticHpBar(layerBuildings, h.base.x*SZ+SZ/2, h.base.y*SZ-4, SZ*0.9, h.baseHp, h.baseHpMax);
     }
   });
