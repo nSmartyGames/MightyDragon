@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Galacticus — Spice Throne</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
   :root{
     --sand-3:#8a5a2b; --night:#1c130a; --rust:#c1441e; --rust-dark:#8a2e12;
@@ -224,10 +225,36 @@
   </div>
 </div>
 
+<div id="modeOverlay" class="overlay-base">
+  <div class="card">
+    <h2>Galacticus</h2>
+    <p class="sub2">Skirmish against the machine, or duel a friend directly — no server, just a room code.</p>
+    <button id="modeVsAi" style="justify-content:center;">Play vs AI ▶</button>
+    <button id="modeOnline" style="justify-content:center; margin-top:8px;">Play Online (1v1) ▶</button>
+  </div>
+</div>
+
+<div id="onlineOverlay" class="overlay-base">
+  <div class="card">
+    <h2>Play Online</h2>
+    <p class="sub2" id="onlineIntro">Create a room and send the code to a friend, or join theirs. Both sides then pick a House and the duel begins — no fog of war in online matches yet.</p>
+    <div id="onlineChoice">
+      <button id="onlineCreate" style="justify-content:center;">Create Room ▶</button>
+      <button id="onlineJoin" style="justify-content:center; margin-top:8px;">Join Room ▶</button>
+    </div>
+    <div id="onlineJoinForm" style="display:none; margin-top:10px;">
+      <input id="joinCodeInput" maxlength="6" placeholder="ROOM CODE" style="width:100%; text-align:center; letter-spacing:4px; text-transform:uppercase; font-family:inherit; font-size:16px; padding:10px; background:#160d05; color:var(--paper); border:1px solid var(--sand-3); border-radius:4px;">
+      <button id="onlineJoinGo" style="justify-content:center; margin-top:8px;">Connect ▶</button>
+    </div>
+    <p id="onlineStatus" class="sub2" style="min-height:1.4em;"></p>
+    <button id="onlineBack" style="justify-content:center; margin-top:8px;">◀ Back</button>
+  </div>
+</div>
+
 <div id="houseOverlay" class="overlay-base">
   <div class="card wide">
     <h2>Choose Your House</h2>
-    <p class="sub2">Three Great Houses vie for dominion over the Deep Desert and its Spice Throne. Pick your allegiance, then choose the one rival House that will contest you.</p>
+    <p class="sub2" id="houseSub">Three Great Houses vie for dominion over the Deep Desert and its Spice Throne. Pick your allegiance, then choose the one rival House that will contest you.</p>
     <div id="houseCards" class="houseCards"></div>
   </div>
 </div>
@@ -237,6 +264,13 @@
     <h2>Choose Your Rival</h2>
     <p class="sub2" id="rivalSub"></p>
     <div id="rivalCards" class="houseCards"></div>
+  </div>
+</div>
+
+<div id="mpWaitOverlay" class="overlay-base">
+  <div class="card">
+    <h2>Waiting</h2>
+    <p class="sub2" id="mpWaitText">Waiting for your opponent...</p>
   </div>
 </div>
 
@@ -907,7 +941,14 @@ function makeUnit(ownerId,type,x,y){
 function addLog(msg){ state.log.push(msg); if(state.log.length>60) state.log.shift(); renderLog(); }
 
 function houseById(id){ return state.houses.find(h=>h.id===id); }
-function playerHouse(){ return state.houses.find(h=>!h.ai); }
+// In an online match both houses are non-AI (the remote player's house just
+// isn't driven by aiTurnForHouse) — mp.myHouseId is the only reliable way to
+// tell which one is "mine" there. Falls back to the old ai-flag lookup for
+// single-player, on both host and client alike.
+function playerHouse(){
+  if(mp && mp.myHouseId) return houseById(mp.myHouseId);
+  return state.houses.find(h=>!h.ai);
+}
 function allUnits(){ return state.houses.flatMap(h=>h.units); }
 function enemyHousesOf(house){ return state.houses.filter(h=>h!==house && h.alive); }
 
@@ -1771,6 +1812,7 @@ function gameTick(){
   renderStats();
   renderMinimap();
   if(result){ stopSim(); endGame(result); }
+  if(mp && mp.role==='host') mpSend(buildSnapshot());
 }
 
 // ================= selection / context menu / build placement / input =================
@@ -1837,7 +1879,7 @@ document.getElementById('ctxEngage').onclick=()=>{
     addLog("House "+owner.name+"'s "+u.type+' begins searching the map for enemies to destroy.');
   });
   deselect();
-  if(combatants.length) followUnit=combatants[0];
+  if(combatants.length){ followUnit=combatants[0]; if(isMpClient()) mpSend({type:'cmd', kind:'engage', unitIds:combatants.map(u=>u.id)}); }
 };
 document.getElementById('ctxRetreat').onclick=()=>{
   const units=state.selectedUnits.slice();
@@ -1850,7 +1892,7 @@ document.getElementById('ctxRetreat').onclick=()=>{
     addLog("House "+owner.name+"'s "+u.type+' retreats to the stronghold.');
   });
   deselect();
-  if(units.length) followUnit=units[0];
+  if(units.length){ followUnit=units[0]; if(isMpClient()) mpSend({type:'cmd', kind:'retreat', unitIds:units.map(u=>u.id)}); }
 };
 document.getElementById('ctxCancel').onclick=()=>{ deselect(); };
 
@@ -1936,6 +1978,14 @@ function issueAttackOrders(units,target){
   const label = target.kind==='unit' ? target.unit.type : target.kind==='base' ? 'stronghold' : target.type;
   addLog('Order given: attack House '+houseById(target.houseId).name+"'s "+label+'.');
   followUnit=units[0];
+  // Only fires for a client's own local input (never when the host applies
+  // an already-received remote command back through this same function).
+  if(isMpClient()){
+    const t = target.kind==='unit' ? {kind:'unit', houseId:target.houseId, unitId:target.unit.id}
+      : target.kind==='base' ? {kind:'base', houseId:target.houseId}
+      : {kind:'building', houseId:target.houseId, key:target.key, btype:target.type};
+    mpSend({type:'cmd', kind:'attack', unitIds:units.map(u=>u.id), target:t});
+  }
 }
 function handleBoardClick(e){
   if(!state || gameOver) return;
@@ -1951,10 +2001,15 @@ function handleBoardClick(e){
     else {
       const cost = uiMode.type==='place-turbine' ? TURBINE_COST : SILO_COST;
       if(ph.spice>=cost){
-        ph.spice-=cost;
-        if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); ph.power+=TURBINE_DMG_BONUS; addLog('Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'); }
-        else { buildingMap.set(key,{x,y,type:'silo',owner:ph.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
-        redrawSpiceAndBuildings();
+        if(isMpClient()){
+          mpSend({type:'cmd', kind: uiMode.type==='place-turbine'?'buildTurbine':'buildSilo', x, y});
+          addLog((uiMode.type==='place-turbine'?'Wind turbine':'Silo')+' requested.');
+        } else {
+          ph.spice-=cost;
+          if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); ph.power+=TURBINE_DMG_BONUS; addLog('Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'); }
+          else { buildingMap.set(key,{x,y,type:'silo',owner:ph.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
+          redrawSpiceAndBuildings();
+        }
       }
     }
     uiMode=null; modeHint.style.display='none'; renderStats();
@@ -1972,20 +2027,25 @@ function handleBoardClick(e){
     });
     if(blocked){ addLog('Not enough clear, explored ground here for a 2x2 refinery.'); }
     else if(ph.spice>=REFINERY_COST){
-      ph.spice-=REFINERY_COST;
-      const primaryKey=x+','+y;
-      footprint.forEach(([fx,fy],i)=>{
-        const entry=(i===0)
-          ? {x:fx,y:fy,type:'refinery',owner:ph.id,primary:true,hp:BUILDING_HP.refinery,hpMax:BUILDING_HP.refinery}
-          : {x:fx,y:fy,type:'refinery',owner:ph.id,primary:false,primaryKey};
-        buildingMap.set(fx+','+fy, entry);
-      });
-      ph.cap+=REFINERY_CAP_BONUS;
-      const spawn=findFreeSpawnTile(x,y);
-      const freeHarvester=makeUnit(ph.id,'harvester',spawn.x,spawn.y);
-      ph.units.push(freeHarvester); ensureSprite(freeHarvester);
-      addLog('Refinery constructed — capacity +'+REFINERY_CAP_BONUS+', a new harvester joins the fleet.');
-      redrawSpiceAndBuildings();
+      if(isMpClient()){
+        mpSend({type:'cmd', kind:'buildRefinery', x, y});
+        addLog('Refinery requested.');
+      } else {
+        ph.spice-=REFINERY_COST;
+        const primaryKey=x+','+y;
+        footprint.forEach(([fx,fy],i)=>{
+          const entry=(i===0)
+            ? {x:fx,y:fy,type:'refinery',owner:ph.id,primary:true,hp:BUILDING_HP.refinery,hpMax:BUILDING_HP.refinery}
+            : {x:fx,y:fy,type:'refinery',owner:ph.id,primary:false,primaryKey};
+          buildingMap.set(fx+','+fy, entry);
+        });
+        ph.cap+=REFINERY_CAP_BONUS;
+        const spawn=findFreeSpawnTile(x,y);
+        const freeHarvester=makeUnit(ph.id,'harvester',spawn.x,spawn.y);
+        ph.units.push(freeHarvester); ensureSprite(freeHarvester);
+        addLog('Refinery constructed — capacity +'+REFINERY_CAP_BONUS+', a new harvester joins the fleet.');
+        redrawSpiceAndBuildings();
+      }
     }
     uiMode=null; modeHint.style.display='none'; renderStats();
     return;
@@ -2017,14 +2077,17 @@ function handleBoardClick(e){
       const attackers=state.selectedUnits.filter(isCombatUnit);
       if(attackers.length){ issueAttackOrders(attackers, target); hideCtxMenu(); return; }
     }
-    let mover=null, blockedMsg=null;
+    let mover=null, blockedMsg=null, moverIds=[];
     state.selectedUnits.forEach(u=>{
       if(!passable(x,y)){ blockedMsg='Rocky mountains block that route.'; return; }
       if(isBaseTile(x,y)){ blockedMsg='A stronghold tile is never a valid destination.'; return; }
       if(buildingMap.has(x+','+y) && u.type!=='harvester'){ blockedMsg='Only harvesters can enter a silo or refinery.'; return; }
-      u.order={kind:'move', x, y}; if(!mover) mover=u;
+      u.order={kind:'move', x, y}; if(!mover) mover=u; moverIds.push(u.id);
     });
-    if(mover){ addLog('Order given: move to ('+x+','+y+').'); followUnit=mover; hideCtxMenu(); }
+    if(mover){
+      addLog('Order given: move to ('+x+','+y+').'); followUnit=mover; hideCtxMenu();
+      if(isMpClient()) mpSend({type:'cmd', kind:'move', unitIds:moverIds, x, y});
+    }
     else if(blockedMsg) addLog(blockedMsg);
     return;
   }
@@ -2038,6 +2101,7 @@ function handleBoardClick(e){
 document.getElementById('buildHarvester').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<HARVESTER_COST || gameOver) return;
+  if(isMpClient()){ mpSend({type:'cmd', kind:'buildHarvester'}); addLog('Harvester requested.'); return; }
   ph.spice-=HARVESTER_COST;
   const spawn=findFreeSpawnTile(ph.base.x, ph.base.y);
   const h=makeUnit(ph.id,'harvester', spawn.x, spawn.y);
@@ -2062,6 +2126,7 @@ document.getElementById('buildRefinery').onclick=()=>{
 document.getElementById('recruitTroop').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<TROOP_COST || gameOver) return;
+  if(isMpClient()){ mpSend({type:'cmd', kind:'recruitTroop'}); addLog('Trooper requested.'); return; }
   ph.spice-=TROOP_COST;
   const spawn=findFreeSpawnTile(ph.base.x, ph.base.y);
   const t=makeUnit(ph.id,'trooper', spawn.x, spawn.y);
@@ -2071,13 +2136,363 @@ document.getElementById('recruitTroop').onclick=()=>{
 document.getElementById('recruitTank').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<TANK_COST || gameOver) return;
+  if(isMpClient()){ mpSend({type:'cmd', kind:'recruitTank'}); addLog('Tank requested.'); return; }
   ph.spice-=TANK_COST;
   const spawn=findFreeSpawnTile(ph.base.x, ph.base.y);
   const t=makeUnit(ph.id,'tank', spawn.x, spawn.y);
   ph.units.push(t); ensureSprite(t);
   addLog('A tank joins your army.'); renderStats();
 };
-document.getElementById('restartBtn').onclick=()=>{ showHouseSelect(); };
+document.getElementById('restartBtn').onclick=()=>{
+  if(mp){ if(mp.peer) mp.peer.destroy(); mp=null; showModeSelect(); }
+  else showHouseSelect();
+};
+
+// ================= multiplayer (PeerJS, host-authoritative) =================
+// One peer (whoever creates the room) is the "host": it runs the exact same
+// simulation as single-player vs-AI, except the remote player's House is
+// driven by commands arriving over the data channel instead of
+// aiTurnForHouse. The host pushes a full state snapshot to the "client"
+// every tick; the client never runs its own simulation, it only renders
+// whatever it's told and forwards its own input as commands. No fog of war
+// in this mode yet — see newGame().
+let mp=null; // {role:'host'|'client', peer, conn, connected, myHouseId, remoteHouseId, paused}
+let onlinePick=null, remotePick=null, mpEndShown=false;
+function isMpClient(){ return !!(mp && mp.role==='client'); }
+function mpSend(msg){ if(mp && mp.conn && mp.conn.open){ try{ mp.conn.send(msg); }catch(e){} } }
+function genRoomCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous 0/O/1/I
+  let s=''; for(let i=0;i<5;i++) s+=chars[Math.floor(Math.random()*chars.length)];
+  return s;
+}
+function showMpWait(text){ document.getElementById('mpWaitText').textContent=text; document.getElementById('mpWaitOverlay').style.display='flex'; }
+function hideMpWait(){ document.getElementById('mpWaitOverlay').style.display='none'; }
+
+function serializeUnit(u){ return {id:u.id, owner:u.owner, type:u.type, x:u.x, y:u.y, hp:u.hp, carrying:u.carrying}; }
+function serializeHouse(h){
+  return { id:h.id, name:h.name, color:h.color, colorCss:h.colorCss, alive:h.alive,
+    baseHp:h.baseHp, baseHpMax:h.baseHpMax, base:h.base,
+    spice:h.spice, cap:h.cap, power:h.power, units:h.units.map(serializeUnit) };
+}
+function buildInitMessage(){
+  return {
+    type:'init', terrain,
+    spiceMap:Array.from(spiceMap.values()),
+    buildingMap:Array.from(buildingMap.entries()),
+    houses:state.houses.map(serializeHouse),
+    worms:state.worms.map(w=>({x:w.x,y:w.y,dir:w.dir,rest:w.rest})),
+    myHouseId:mp.remoteHouseId, rivalHouseId:mp.myHouseId
+  };
+}
+function buildSnapshot(){
+  return {
+    type:'snapshot',
+    houses:state.houses.map(serializeHouse),
+    worms:state.worms.map(w=>({x:w.x,y:w.y,dir:w.dir})),
+    spiceMap:Array.from(spiceMap.values()),
+    buildingMap:Array.from(buildingMap.entries()),
+    log:state.log.slice(-8), gameOver
+  };
+}
+function deserializeHouse(hd){
+  return { id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss, alive:hd.alive,
+    ai:false, baseHp:hd.baseHp, baseHpMax:hd.baseHpMax, base:hd.base,
+    spice:hd.spice, cap:hd.cap, power:hd.power,
+    units:hd.units.map(u=>({...u, order:null, dir:0, frame:0, moving:false, sprite:null, moveFrom:null, moveTo:null, moveStart:0})),
+    spentEconomy:0, spentMilitary:0, lastAttacker:null };
+}
+// Client: one-time world setup from the host's first message, standing in
+// for newGame()+start() since the client never generates its own terrain.
+function applyMpInit(msg){
+  ensureAudio();
+  stopSim();
+  gameOver=false; mpEndShown=false;
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('houseOverlay').style.display='none';
+  document.getElementById('rivalOverlay').style.display='none';
+  hideMpWait();
+  mp.myHouseId=msg.myHouseId; mp.remoteHouseId=msg.rivalHouseId;
+  terrain=msg.terrain;
+  buildingMap=new Map(msg.buildingMap);
+  spiceMap=new Map(msg.spiceMap.map(dep=>[dep.x+','+dep.y, dep]));
+  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(true)); // no fog online
+  state={
+    startTime:performance.now(), log:[], selectedUnits:[],
+    worms:msg.worms.map(w=>({x:w.x,y:w.y,rest:w.rest||0,dir:w.dir||0,frame:0,sprite:null})),
+    houses:msg.houses.map(deserializeHouse)
+  };
+  addLog('Connected — House '+houseById(mp.myHouseId).name+' vs House '+houseById(mp.remoteHouseId).name+'.');
+  buildWorldVisuals();
+  layerUnits.removeChildren(); layerFx.removeChildren();
+  selectionRings=[]; activeFx=[];
+  syncAllSprites();
+  const ph=playerHouse();
+  centerCameraOn(ph.base.x, ph.base.y);
+  renderStats(); renderLog(); updateClock(); renderMinimap();
+}
+// Client: merge a periodic snapshot into the local mirror — units/buildings/
+// worms are matched by id/key and updated in place (new ones added, gone
+// ones removed) rather than rebuilt from scratch, so sprites persist.
+function applyMpSnapshot(msg){
+  if(!state) return;
+  gameOver=msg.gameOver;
+  msg.houses.forEach(hd=>{
+    const h=houseById(hd.id); if(!h) return;
+    h.alive=hd.alive; h.baseHp=hd.baseHp; h.spice=hd.spice; h.cap=hd.cap; h.power=hd.power;
+    const seen=new Set();
+    hd.units.forEach(ud=>{
+      seen.add(ud.id);
+      let u=h.units.find(x=>x.id===ud.id);
+      if(!u){
+        u={ id:ud.id, owner:ud.owner, type:ud.type, x:ud.x, y:ud.y, hp:ud.hp, carrying:ud.carrying,
+            order:null, dir:0, frame:0, moving:false, sprite:null, moveFrom:null, moveTo:null, moveStart:0 };
+        h.units.push(u);
+      } else {
+        u.x=ud.x; u.y=ud.y; u.hp=ud.hp; u.carrying=ud.carrying; u.moving=false;
+        if(u.sprite){ u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; }
+      }
+    });
+    h.units=h.units.filter(u=>{
+      if(seen.has(u.id)) return true;
+      removeUnitVisuals(u); dropFromSelection(u); return false;
+    });
+  });
+  spiceMap=new Map(msg.spiceMap.map(dep=>[dep.x+','+dep.y, dep]));
+  buildingMap=new Map(msg.buildingMap);
+  state.worms.forEach((w,i)=>{
+    const mw=msg.worms[i]; if(!mw) return;
+    w.x=mw.x; w.y=mw.y; w.dir=mw.dir; w.moving=false;
+    if(w.sprite){ w.sprite.x=w.x*SZ+SZ/2; w.sprite.y=w.y*SZ+SZ/2; }
+  });
+  state.log=msg.log;
+  syncAllSprites();
+  redrawSpiceAndBuildings();
+  renderStats(); renderLog(); renderMinimap(); updateClock();
+  if(gameOver && !mpEndShown){ mpEndShown=true; showMpEndScreen(); }
+}
+function showMpEndScreen(){
+  const mine=houseById(mp.myHouseId), riv=houseById(mp.remoteHouseId);
+  let title,body;
+  if(!mine.alive){ title='Defeat'; body="House "+mine.name+"'s stronghold fell."; }
+  else if(!riv.alive){ title='Victory'; body="House "+riv.name+"'s stronghold fell."; }
+  else if(mine.spice>=SPICE_TARGET){ title='Victory'; body='House '+mine.name+' banked '+SPICE_TARGET+' spice first.'; }
+  else { title='Defeat'; body='House '+riv.name+' banked '+SPICE_TARGET+' spice first.'; }
+  document.getElementById('resultTitle').textContent=title;
+  document.getElementById('resultBody').textContent=body;
+  document.getElementById('learnBody').textContent='';
+  document.getElementById('overlay').style.display='flex';
+}
+// Host: apply one command relayed from the client — mirrors the local
+// button/click handlers below but always targets the remote player's House
+// (mp.remoteHouseId) rather than playerHouse(). Keep in sync with those.
+function applyRemoteCommand(msg){
+  if(!mp || mp.role!=='host' || !state) return;
+  const house=houseById(mp.remoteHouseId);
+  if(!house || !house.alive) return;
+  const findUnits=(ids)=>house.units.filter(u=>ids && ids.includes(u.id));
+  if(msg.kind==='move'){
+    findUnits(msg.unitIds).forEach(u=>{ u.order={kind:'move', x:msg.x, y:msg.y}; });
+  } else if(msg.kind==='engage'){
+    findUnits(msg.unitIds).filter(isCombatUnit).forEach(u=>{ u.order={kind:'engage'}; });
+  } else if(msg.kind==='retreat'){
+    findUnits(msg.unitIds).forEach(u=>{
+      const spot=findFreeSpawnTile(house.base.x, house.base.y);
+      u.order={kind:'move', x:spot.x, y:spot.y};
+    });
+  } else if(msg.kind==='attack'){
+    const units=findUnits(msg.unitIds).filter(isCombatUnit);
+    const t=msg.target; let target=null;
+    if(t.kind==='unit'){
+      const targetHouse=houseById(t.houseId);
+      const unit=targetHouse && targetHouse.units.find(u=>u.id===t.unitId);
+      if(unit) target={kind:'unit', unit, houseId:t.houseId};
+    } else if(t.kind==='base'){ target={kind:'base', houseId:t.houseId}; }
+    else if(t.kind==='building'){ target={kind:'building', key:t.key, houseId:t.houseId, type:t.btype}; }
+    if(target) issueAttackOrders(units, target);
+  } else if(msg.kind==='buildHarvester'){
+    if(house.spice>=HARVESTER_COST){
+      house.spice-=HARVESTER_COST;
+      const spawn=findFreeSpawnTile(house.base.x, house.base.y);
+      const h=makeUnit(house.id,'harvester', spawn.x, spawn.y);
+      house.units.push(h); ensureSprite(h);
+      addLog('House '+house.name+' deploys a new harvester.');
+    }
+  } else if(msg.kind==='recruitTroop'){
+    if(house.spice>=TROOP_COST){
+      house.spice-=TROOP_COST;
+      const spawn=findFreeSpawnTile(house.base.x, house.base.y);
+      const t=makeUnit(house.id,'trooper', spawn.x, spawn.y);
+      house.units.push(t); ensureSprite(t);
+      addLog('House '+house.name+' recruits a trooper.');
+    }
+  } else if(msg.kind==='recruitTank'){
+    if(house.spice>=TANK_COST){
+      house.spice-=TANK_COST;
+      const spawn=findFreeSpawnTile(house.base.x, house.base.y);
+      const t=makeUnit(house.id,'tank', spawn.x, spawn.y);
+      house.units.push(t); ensureSprite(t);
+      addLog('House '+house.name+' recruits a tank.');
+    }
+  } else if(msg.kind==='buildTurbine' || msg.kind==='buildSilo'){
+    const key=msg.x+','+msg.y;
+    const cost=msg.kind==='buildTurbine'?TURBINE_COST:SILO_COST;
+    const ok=house.spice>=cost && !buildingMap.has(key) && !spiceMap.has(key)
+      && terrain[msg.y] && terrain[msg.y][msg.x]!=='mountain' && !isBaseTile(msg.x,msg.y);
+    if(ok){
+      house.spice-=cost;
+      if(msg.kind==='buildTurbine'){ buildingMap.set(key,{x:msg.x,y:msg.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); house.power+=TURBINE_DMG_BONUS; addLog('House '+house.name+' raises a wind turbine.'); }
+      else { buildingMap.set(key,{x:msg.x,y:msg.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); house.cap+=SILO_CAP_BONUS; addLog('House '+house.name+' builds a silo.'); }
+      redrawSpiceAndBuildings();
+    }
+  } else if(msg.kind==='buildRefinery'){
+    const footprint=[[msg.x,msg.y],[msg.x+1,msg.y],[msg.x,msg.y+1],[msg.x+1,msg.y+1]];
+    const blocked=footprint.some(([fx,fy])=> !inBounds(fx,fy) || terrain[fy][fx]==='mountain' || buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy) || isBaseTile(fx,fy));
+    if(!blocked && house.spice>=REFINERY_COST){
+      house.spice-=REFINERY_COST;
+      const primaryKey=msg.x+','+msg.y;
+      footprint.forEach(([fx,fy],i)=>{
+        const entry=(i===0)
+          ? {x:fx,y:fy,type:'refinery',owner:house.id,primary:true,hp:BUILDING_HP.refinery,hpMax:BUILDING_HP.refinery}
+          : {x:fx,y:fy,type:'refinery',owner:house.id,primary:false,primaryKey};
+        buildingMap.set(fx+','+fy, entry);
+      });
+      house.cap+=REFINERY_CAP_BONUS;
+      const spawn=findFreeSpawnTile(msg.x,msg.y);
+      const freeHarvester=makeUnit(house.id,'harvester',spawn.x,spawn.y);
+      house.units.push(freeHarvester); ensureSprite(freeHarvester);
+      addLog('House '+house.name+' completes a refinery.');
+      redrawSpiceAndBuildings();
+    }
+  }
+}
+function checkBothPicked(){
+  if(!onlinePick || !remotePick) return;
+  if(onlinePick===remotePick){
+    if(mp.role==='client'){
+      remotePick=null; onlinePick=null;
+      hideMpWait();
+      document.getElementById('houseSub').textContent='Your opponent already picked that House — choose a different one.';
+      showHouseSelect();
+    }
+    return; // host: keep waiting, its own pick stands
+  }
+  mp.myHouseId=onlinePick; mp.remoteHouseId=remotePick;
+  hideMpWait();
+  if(mp.role==='host') start(mp.myHouseId, mp.remoteHouseId);
+  else showMpWait('Connected — waiting for the host to start the match...');
+}
+function onlinePickHouse(houseId){
+  ensureAudio();
+  onlinePick=houseId;
+  mpSend({type:'pickHouse', houseId});
+  document.getElementById('houseOverlay').style.display='none';
+  showMpWait('You picked House '+HOUSE_DEFS.find(hd=>hd.id===houseId).name+' — waiting for your opponent to pick...');
+  checkBothPicked();
+}
+function onMpData(msg){
+  if(!msg || !msg.type) return;
+  if(msg.type==='pickHouse'){ remotePick=msg.houseId; checkBothPicked(); return; }
+  if(msg.type==='paused'){ showMpWait('Your opponent disconnected — waiting for them to reconnect...'); return; }
+  if(msg.type==='resumed'){ hideMpWait(); return; }
+  if(mp.role==='host') applyRemoteCommand(msg);
+  else if(msg.type==='init') applyMpInit(msg);
+  else if(msg.type==='snapshot') applyMpSnapshot(msg);
+}
+function onMpDisconnect(){
+  if(!mp) return;
+  if(mp.role==='host'){
+    // Host pauses its own simulation and waits for the same room code to be
+    // rejoined; a fresh 'init' is sent the moment it reconnects.
+    if(simHandle) stopSim();
+    showMpWait('Your opponent disconnected — waiting for them to reconnect...');
+    mp.peer.off('connection'); // avoid stacking duplicate listeners on re-arm below
+    mp.peer.on('connection',(conn)=>{
+      mp.conn=conn;
+      conn.on('data', onMpData);
+      conn.on('close', onMpDisconnect);
+      conn.on('open', ()=>{
+        hideMpWait();
+        if(state){ mpSend(buildInitMessage()); simHandle=setInterval(gameTick, TICK_MS); }
+      });
+    });
+  } else {
+    showMpWait('Disconnected from the host — trying to reconnect...');
+    const code=mp.roomCode;
+    const retry=()=>{
+      if(!mp) return;
+      const conn=mp.peer.connect('gxdune-'+code, {reliable:true});
+      conn.on('open', ()=>{ mp.conn=conn; conn.on('data', onMpData); conn.on('close', onMpDisconnect); hideMpWait(); });
+      conn.on('error', ()=>{ setTimeout(retry, 2000); });
+    };
+    setTimeout(retry, 1500);
+  }
+}
+function showModeSelect(){ document.getElementById('modeOverlay').style.display='flex'; }
+document.getElementById('modeVsAi').onclick=()=>{
+  document.getElementById('modeOverlay').style.display='none';
+  houseSelectMode='ai';
+  showHouseSelect();
+};
+document.getElementById('modeOnline').onclick=()=>{
+  document.getElementById('modeOverlay').style.display='none';
+  document.getElementById('onlineChoice').style.display='block';
+  document.getElementById('onlineJoinForm').style.display='none';
+  document.getElementById('onlineStatus').textContent='';
+  document.getElementById('onlineOverlay').style.display='flex';
+};
+document.getElementById('onlineBack').onclick=()=>{
+  if(mp && mp.peer) mp.peer.destroy();
+  mp=null;
+  document.getElementById('onlineOverlay').style.display='none';
+  document.getElementById('modeOverlay').style.display='flex';
+};
+document.getElementById('onlineCreate').onclick=()=>{
+  const code=genRoomCode();
+  document.getElementById('onlineChoice').style.display='none';
+  document.getElementById('onlineStatus').textContent='Creating room...';
+  const peer=new Peer(('gxdune-'+code).toLowerCase());
+  mp={role:'host', peer, conn:null, connected:false, myHouseId:null, remoteHouseId:null, roomCode:code};
+  peer.on('open',()=>{
+    document.getElementById('onlineStatus').innerHTML='Room code: <b style="font-size:20px; letter-spacing:4px;">'+code+'</b><br>Share it with your opponent — waiting for them to join...';
+  });
+  peer.on('connection',(conn)=>{
+    mp.conn=conn;
+    conn.on('data', onMpData);
+    conn.on('close', onMpDisconnect);
+    conn.on('open',()=>{
+      mp.connected=true;
+      document.getElementById('onlineOverlay').style.display='none';
+      houseSelectMode='online';
+      showHouseSelect();
+    });
+  });
+  peer.on('error',(err)=>{ document.getElementById('onlineStatus').textContent='Connection error: '+((err&&err.type)||err); });
+};
+document.getElementById('onlineJoin').onclick=()=>{
+  document.getElementById('onlineChoice').style.display='none';
+  document.getElementById('onlineJoinForm').style.display='block';
+};
+document.getElementById('onlineJoinGo').onclick=()=>{
+  const code=document.getElementById('joinCodeInput').value.trim().toUpperCase();
+  if(!code) return;
+  document.getElementById('onlineStatus').textContent='Connecting...';
+  const peer=new Peer();
+  mp={role:'client', peer, conn:null, connected:false, myHouseId:null, remoteHouseId:null, roomCode:code};
+  peer.on('open',()=>{
+    const conn=peer.connect(('gxdune-'+code).toLowerCase(), {reliable:true});
+    mp.conn=conn;
+    conn.on('data', onMpData);
+    conn.on('close', onMpDisconnect);
+    conn.on('open',()=>{
+      mp.connected=true;
+      document.getElementById('onlineOverlay').style.display='none';
+      houseSelectMode='online';
+      showHouseSelect();
+    });
+    conn.on('error',(err)=>{ document.getElementById('onlineStatus').textContent='Could not connect: '+((err&&err.type)||err); });
+  });
+  peer.on('error',(err)=>{ document.getElementById('onlineStatus').textContent='Could not connect: '+((err&&err.type)||err); });
+};
 
 // ================= boot =================
 // A game is always a duel: the player's chosen House plus exactly one chosen
@@ -2088,13 +2503,20 @@ function newGame(chosenId, rivalId){
   generateTerrain();
   activeDefs.forEach(hd=>{ const sp=HOUSE_SPAWNS[hd.id]; carveGrassArea(sp.x,sp.y,7); });
   buildingMap=new Map();
-  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(false));
+  // Online matches have no fog of war yet (each side would need its own
+  // vision grid — a bigger change deferred for later) — both sides just see
+  // everything from the start.
+  const noFog=!!mp;
+  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(noFog));
   state={
     startTime:performance.now(), log:[], selectedUnits:[],
     worms:[],
     houses: activeDefs.map(hd=>({
       id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss,
-      ai: hd.id!==chosenId,
+      // On a host running an online match, the remote player's House must
+      // also be ai:false so aiTurnForHouse leaves it alone — playerHouse()
+      // uses mp.myHouseId (not this flag) to tell the two apart.
+      ai: hd.id!==chosenId && !(mp && mp.remoteHouseId===hd.id),
       base:{...HOUSE_SPAWNS[hd.id]}, baseHp:BASE_HP_MAX, baseHpMax:BASE_HP_MAX,
       spice:START_SPICE, cap:START_CAP, power:0, units:[],
       spentEconomy:0, spentMilitary:0, alive:true, lastAttacker:null
@@ -2127,8 +2549,15 @@ async function start(chosenId, rivalId){
   state.houses.forEach(h=>{ h.units.push(makeUnit(h.id,'harvester', h.base.x, h.base.y)); });
   learning=await loadLearning();
   const ph=playerHouse();
-  const rivalNames=state.houses.filter(h=>h!==ph).map(h=>h.name+' (played '+learning[h.id].games+' game(s))').join(' and House ');
-  addLog('House '+ph.name+' begins its expedition into the Deep Desert. Rival: House '+rivalNames+'.');
+  if(mp){
+    const riv=state.houses.find(h=>h!==ph);
+    addLog('House '+ph.name+' begins its expedition into the Deep Desert. Online rival: House '+riv.name+'.');
+    mpEndShown=false;
+    if(mp.role==='host') mpSend(buildInitMessage());
+  } else {
+    const rivalNames=state.houses.filter(h=>h!==ph).map(h=>h.name+' (played '+learning[h.id].games+' game(s))').join(' and House ');
+    addLog('House '+ph.name+' begins its expedition into the Deep Desert. Rival: House '+rivalNames+'.');
+  }
   buildWorldVisuals();
   layerUnits.removeChildren();
   layerFx.removeChildren();
@@ -2155,18 +2584,23 @@ function showRivalSelect(chosenId){
   });
   el.style.display='flex';
 }
+let houseSelectMode='ai'; // 'ai' -> pick rival next; 'online' -> send pick to the peer
 function showHouseSelect(){
   stopSim();
   document.getElementById('overlay').style.display='none';
   document.getElementById('rivalOverlay').style.display='none';
+  document.getElementById('mpWaitOverlay').style.display='none';
   const el=document.getElementById('houseOverlay');
+  document.getElementById('houseSub').textContent = houseSelectMode==='online'
+    ? "Pick your House — your opponent is picking too. If you both pick the same one, whoever picked second will be asked to choose again."
+    : 'Three Great Houses vie for dominion over the Deep Desert and its Spice Throne. Pick your allegiance, then choose the one rival House that will contest you.';
   const cardsEl=document.getElementById('houseCards');
   cardsEl.innerHTML='';
   HOUSE_DEFS.forEach(hd=>{
     const card=document.createElement('div');
     card.className='houseCard';
     card.innerHTML='<div class="bar" style="background:'+hd.colorCss+'"></div><h3 style="color:'+hd.colorCss+'">'+hd.name+'</h3><p>'+hd.tagline+'</p>';
-    card.onclick=()=>{ showRivalSelect(hd.id); };
+    card.onclick=()=>{ houseSelectMode==='online' ? onlinePickHouse(hd.id) : showRivalSelect(hd.id); };
     cardsEl.appendChild(card);
   });
   el.style.display='flex';
@@ -2176,7 +2610,7 @@ Promise.all([
   loadImageTexture(TILE_PNG.tank).then(t=>{ TEX.harvester=t; }),
   loadImageTexture(TILE_PNG.tankUnit).then(t=>{ TEX.tank=t; }),
   loadImageTexture(TILE_PNG.outpost).then(t=>{ TEX.silo=t; })
-]).then(showHouseSelect);
+]).then(showModeSelect);
 })();
 </script>
 </body>
