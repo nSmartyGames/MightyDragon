@@ -363,6 +363,7 @@ function viewSize(){
 }
 let vs=viewSize();
 const app = new PIXI.Application({width:vs.w, height:vs.h, background:0x0b0703, antialias:false});
+window.__app=app;
 boardHost.appendChild(app.view);
 
 const world = new PIXI.Container();
