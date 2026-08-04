@@ -830,10 +830,14 @@ function buildWorldVisuals(){
       layerGround.addChild(s);
       groundSprites[y][x]=s;
 
-      const f=new PIXI.Sprite(TEX.fog);
-      f.x=x*SZ; f.y=y*SZ; f.scale.set(ZOOM);
-      layerFog.addChild(f);
-      fogSprites[y][x]=f;
+      if(explored[y][x]){
+        fogSprites[y][x]=null;
+      } else {
+        const f=new PIXI.Sprite(TEX.fog);
+        f.x=x*SZ; f.y=y*SZ; f.scale.set(ZOOM);
+        layerFog.addChild(f);
+        fogSprites[y][x]=f;
+      }
     }
   }
   redrawSpiceAndBuildings();
