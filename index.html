@@ -124,9 +124,18 @@
      fixed header. */
   .hint{
     position:absolute; left:8px; top:98px; z-index:11; font-size:9px; color:#c9b088;
-    background:rgba(20,12,4,.55); padding:4px 8px; border-radius:6px; max-width:44%;
+    background:rgba(20,12,4,.55); border-radius:6px; max-width:44%;
     line-height:1.4;
   }
+  .hint-bar{
+    display:flex; align-items:center; gap:3px; padding:4px 6px; cursor:pointer;
+    user-select:none; font-weight:bold; width:fit-content;
+  }
+  .hint-text{ padding:0 8px 6px 8px; }
+  /* Collapsed = just the "H▸" bar; higher specificity than .hint so it
+     wins over the max-width:60% mobile override below. */
+  .hint.collapsed{ max-width:none; }
+  .hint.collapsed .hint-text{ display:none; }
   .legend{
     position:absolute; left:8px; top:66px; z-index:11; display:flex; gap:8px; font-size:9px;
     color:var(--sand-2); flex-wrap:wrap; background:rgba(20,12,4,.55); padding:4px 8px; border-radius:6px; max-width:44%;
@@ -249,7 +258,10 @@
       <span><i class="swatch" style="background:#e0522a"></i>Spice deposit</span>
       <span><i class="swatch" style="background:#111"></i>Unexplored (fog)</span>
     </div>
-    <div class="hint">Click a vehicle to select it, or hold Shift and drag a box to select several at once — the cursor becomes a target reticle. Click a tile to move there, or click an enemy to attack it; the Attack button arms targeting mode for a group, Search &amp; Destroy sends units hunting for any nearby enemy on their own, Retreat pulls them back to the stronghold. Building buttons ask for a grass or desert tile to place on. Drag the map (without Shift) or use arrow keys to scroll, or click the minimap to jump there — fog clears as your units explore. Troopers drain 10 power points per shot, tanks drain 20 every 2 seconds (each wind turbine adds +5 to every shot) — reduce a stronghold's 10k power to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted; troopers and tanks can never enter one, only fight adjacent to it. A refinery holds as much as 4 silos and comes with a free harvester. Sandworms only have a 1-in-5 chance of swallowing a unit that shares their tile, and give up the chase after 5 seconds. A hit on your units, buildings, or stronghold auto-rallies nearby idle troops and tanks to Search &amp; Destroy.</div>
+    <div class="hint collapsed" id="hintBox">
+      <div class="hint-bar" id="hintBar" title="Toggle help"><span>H</span><span id="hintArrow">▸</span></div>
+      <div class="hint-text">Click a vehicle to select it, or hold Shift and drag a box to select several at once — the cursor becomes a target reticle. Click a tile to move there, or click an enemy to attack it; the Attack button arms targeting mode for a group, Search &amp; Destroy sends units hunting for any nearby enemy on their own, Retreat pulls them back to the stronghold. Building buttons ask for a grass or desert tile to place on. Drag the map (without Shift) or use arrow keys to scroll, or click the minimap to jump there — fog clears as your units explore. Troopers drain 10 power points per shot, tanks drain 20 every 2 seconds (each wind turbine adds +5 to every shot) — reduce a stronghold's 10k power to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted; troopers and tanks can never enter one, only fight adjacent to it. A refinery holds as much as 4 silos and comes with a free harvester. Sandworms only have a 1-in-5 chance of swallowing a unit that shares their tile, and give up the chase after 5 seconds. A hit on your units, buildings, or stronghold auto-rallies nearby idle troops and tanks to Search &amp; Destroy.</div>
+    </div>
   </div>
 </div>
 
@@ -445,6 +457,10 @@ function toggleMusic(){
   if(btn) btn.textContent=musicOn?'🔊':'🔇';
 }
 document.getElementById('musicToggle').addEventListener('click', toggleMusic);
+document.getElementById('hintBar').addEventListener('click', ()=>{
+  const collapsed = document.getElementById('hintBox').classList.toggle('collapsed');
+  document.getElementById('hintArrow').textContent = collapsed ? '▸' : '▾';
+});
 function playFireSound(){
   if(!audioCtx) return;
   const t0=audioCtx.currentTime;
