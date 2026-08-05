@@ -1203,7 +1203,7 @@ function scatterSpice(){
   while(placed<target && guard<6000){
     guard++;
     const x=Math.floor(Math.random()*MAPW), y=Math.floor(Math.random()*MAPH);
-    if(terrain[y][x]==='desert' || (terrain[y][x]==='grass' && Math.random()<0.15)){
+    if(terrain[y][x]==='desert'){
       const key=x+','+y;
       if(!spiceMap.has(key) && !isNearBase(x,y,4)){
         spiceMap.set(key, {x,y,amount:80+Math.floor(Math.random()*90)});
