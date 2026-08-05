@@ -1072,7 +1072,11 @@ const TERRAIN_BASE_DRAW={
   mountain:(cx,size,even)=>{ even?mountainCanvasA(cx,size):mountainCanvasB(cx,size); }
 };
 const TERRAIN_BLEND_RGB={ grass:[0x5c,0x7a,0x3a], desert:[0xca,0xa4,0x6a], mountain:[0x3a,0x2f,0x22] };
-const WAVE_AMP=4.5, WAVE_FREQ=(2*Math.PI)/40;
+const WAVE_AMP=6, WAVE_FREQ=(2*Math.PI)/40;
+// Quantizing the wave offset to steps this large (vs. a finer 1-2px step)
+// is what makes the boundary read as blocky/angular corners rather than a
+// smooth flowing curve.
+const EDGE_STEP=6;
 // Rocky mountain edges get their own, bolder wave: a jagged coastline reads
 // as rock, unlike the gentle single-frequency grass/desert dune transition.
 const ROCK_WAVE_AMP=7;
@@ -1094,8 +1098,8 @@ function terrainWaveRocky(coord,seed){
 // native TILE resolution) once per game start: a base-color pass per tile,
 // then a single whole-buffer wavy-boundary blend pass (cheaper than one
 // getImageData/putImageData round-trip per tile). The wave offset is
-// quantized to a 4px step so the curve still reads as a chunky, retro-pixel
-// coastline rather than a smooth anti-aliased one.
+// quantized to EDGE_STEP so the curve reads as a chunky, angular coastline
+// (retro-pixel corners) rather than a smooth anti-aliased one.
 function renderTerrainBuffer(){
   const bw=MAPW*TILE, bh=MAPH*TILE;
   if(terrainBuffer) terrainBuffer.remove();
@@ -1135,7 +1139,7 @@ function renderTerrainBuffer(){
           for(let lx=0;lx<TILE;lx++){
             const gpx=x*TILE+lx, gpy=y*TILE+ly;
             const rawOffset=(dir==='up'||dir==='down') ? wave(gpx,seed) : wave(gpy,seed);
-            const offset=Math.round(rawOffset/4)*4;
+            const offset=Math.round(rawOffset/EDGE_STEP)*EDGE_STEP;
             const threshold=baseAmp+offset;
             let intrude=false;
             if(dir==='up' && ly<threshold) intrude=true;
