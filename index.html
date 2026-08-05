@@ -1071,12 +1071,23 @@ const TERRAIN_BASE_DRAW={
 };
 const TERRAIN_BLEND_RGB={ grass:[0x5c,0x7a,0x3a], desert:[0xca,0xa4,0x6a], mountain:[0x3a,0x2f,0x22] };
 const WAVE_AMP=4.5, WAVE_FREQ=(2*Math.PI)/40;
+// Rocky mountain edges get their own, bolder wave: a jagged coastline reads
+// as rock, unlike the gentle single-frequency grass/desert dune transition.
+const ROCK_WAVE_AMP=7;
 function terrainWaveSeed(a,b){
   const order={grass:0,desert:1,mountain:2};
   const lo=Math.min(order[a],order[b]), hi=Math.max(order[a],order[b]);
   return (lo*3+hi)*1.9+0.7;
 }
 function terrainWave(coord,seed){ return WAVE_AMP*Math.sin(coord*WAVE_FREQ+seed); }
+// Sum of three mismatched-frequency sines instead of one — still a smooth
+// curve at any point, but the combined period never repeats on the map, so
+// the rock/grass line reads as an irregular natural contour, not a ripple.
+function terrainWaveRocky(coord,seed){
+  return ROCK_WAVE_AMP*0.5*Math.sin(coord*WAVE_FREQ*0.8+seed)
+       + ROCK_WAVE_AMP*0.3*Math.sin(coord*WAVE_FREQ*2.3+seed*1.9)
+       + ROCK_WAVE_AMP*0.35*Math.sin(coord*WAVE_FREQ*4.7+seed*3.3);
+}
 // Pre-renders the whole terrain grid into terrainBuffer (a p5.Graphics at
 // native TILE resolution) once per game start: a base-color pass per tile,
 // then a single whole-buffer wavy-boundary blend pass (cheaper than one
@@ -1115,12 +1126,15 @@ function renderTerrainBuffer(){
         if(!nt || nt===type) return;
         const seed=terrainWaveSeed(type,nt);
         const [r,g,b]=TERRAIN_BLEND_RGB[nt];
+        const isRocky=type==='mountain' || nt==='mountain';
+        const wave=isRocky?terrainWaveRocky:terrainWave;
+        const baseAmp=isRocky?ROCK_WAVE_AMP:WAVE_AMP;
         for(let ly=0;ly<TILE;ly++){
           for(let lx=0;lx<TILE;lx++){
             const gpx=x*TILE+lx, gpy=y*TILE+ly;
-            const rawOffset=(dir==='up'||dir==='down') ? terrainWave(gpx,seed) : terrainWave(gpy,seed);
+            const rawOffset=(dir==='up'||dir==='down') ? wave(gpx,seed) : wave(gpy,seed);
             const offset=Math.round(rawOffset/4)*4;
-            const threshold=WAVE_AMP+offset;
+            const threshold=baseAmp+offset;
             let intrude=false;
             if(dir==='up' && ly<threshold) intrude=true;
             else if(dir==='down' && (TILE-1-ly)<threshold) intrude=true;
