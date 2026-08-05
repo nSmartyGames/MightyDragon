@@ -423,19 +423,20 @@ function viewSize(){
   return { w: Math.max(240, Math.floor(r.width)), h: Math.max(200, Math.floor(r.height)) };
 }
 let vs=viewSize();
-// The terrain itself is rendered by a separate p5.js canvas (see "map
-// rendering: p5.js terrain layer" below), layered underneath this one, so
-// PIXI's own background is transparent and only draws buildings/units/fx/fog.
+// The terrain is rendered by a separate p5.js canvas underneath this one
+// (see "map rendering: p5.js terrain layer" below) and fog-of-war by a
+// second p5.js canvas ON TOP of this one (see "p5.js fog-of-war layer"),
+// so PIXI's own background is transparent and it only draws buildings/
+// units/fx in between the two.
 const app = new PIXI.Application({width:vs.w, height:vs.h, backgroundAlpha:0, antialias:false});
 app.view.style.position='absolute'; app.view.style.left='0'; app.view.style.top='0'; app.view.style.zIndex='2';
 boardHost.appendChild(app.view);
 
 const world = new PIXI.Container();
 const layerBuildings = new PIXI.Container();
-const layerFog = new PIXI.Container();
 const layerUnits = new PIXI.Container();
 const layerFx = new PIXI.Container();
-world.addChild(layerBuildings, layerUnits, layerFx, layerFog);
+world.addChild(layerBuildings, layerUnits, layerFx);
 app.stage.addChild(world);
 
 // ================= camera / zoom =================
@@ -455,6 +456,7 @@ function zoomAt(clientX, clientY){
   vs=viewSize();
   app.renderer.resize(vs.w, vs.h);
   if(p5Instance) p5Instance.resizeCanvas(vs.w, vs.h);
+  if(p5FogInstance) p5FogInstance.resizeCanvas(vs.w, vs.h);
   const rect=app.view.getBoundingClientRect();
   const sx=clientX-rect.left, sy=clientY-rect.top;
   const wx=cam.x+sx/zoomFactor, wy=cam.y+sy/zoomFactor;
@@ -519,6 +521,65 @@ let p5Instance=new p5((p)=>{
     p.translate(-cam.x,-cam.y);
     p.scale(ZOOM);
     p.image(terrainBuffer,0,0);
+    p.pop();
+  };
+}, boardHost);
+
+// ================= map rendering: p5.js fog-of-war layer =================
+// Fog is a second p5 canvas layered ABOVE PixiJS (z-index 3, pointer-events
+// off) so it still hides buildings/units the same way the old opaque PIXI
+// sprite fog did, but with soft blurred edges instead of a hard tile grid.
+// A per-tile black/transparent mask is rebuilt only when newly-explored
+// tiles actually change it (fogDirty, set by revealAround), then blurred
+// once as a whole — ctx.filter='blur(...)' on the drawImage compositing it
+// into the p5.Graphics buffer that's actually blitted — rather than
+// blurring every tile rect individually, which would leave seams.
+// revealAround marks fogDirty on every tick a unit uncovers new ground, which
+// during active exploration can be most ticks in a row — rebuilding the full
+// buffer (10k fillRects + a blur pass) that often is wasteful, so it's also
+// throttled to at most once per FOG_REBUILD_MS regardless of how often the
+// flag gets set; a little lag on the reveal itself is imperceptible.
+let fogBuffer=null, fogMaskCanvas=null, fogDirty=true, lastFogBuild=0;
+const FOG_REBUILD_MS=200;
+function renderFogBuffer(){
+  const bw=MAPW*TILE, bh=MAPH*TILE;
+  if(!fogMaskCanvas){ fogMaskCanvas=document.createElement('canvas'); fogMaskCanvas.width=bw; fogMaskCanvas.height=bh; }
+  const mcx=fogMaskCanvas.getContext('2d');
+  mcx.clearRect(0,0,bw,bh);
+  mcx.fillStyle='#000000';
+  for(let y=0;y<MAPH;y++){
+    const erow=explored[y];
+    for(let x=0;x<MAPW;x++){
+      if(!erow[x]) mcx.fillRect(x*TILE,y*TILE,TILE,TILE);
+    }
+  }
+  if(!fogBuffer) fogBuffer=p5FogInstance.createGraphics(bw,bh);
+  const cx=fogBuffer.drawingContext;
+  cx.clearRect(0,0,bw,bh);
+  cx.filter='blur(6px)';
+  cx.drawImage(fogMaskCanvas,0,0);
+  cx.filter='none';
+}
+let p5FogInstance=new p5((p)=>{
+  p.setup=function(){
+    p.pixelDensity(1);
+    const c=p.createCanvas(vs.w, vs.h);
+    c.canvas.style.position='absolute'; c.canvas.style.left='0'; c.canvas.style.top='0';
+    c.canvas.style.zIndex='3'; c.canvas.style.pointerEvents='none';
+    // Deliberately no noSmooth() here — unlike the chunky terrain layer,
+    // the blurred fog buffer should scale with smooth interpolation.
+  };
+  p.draw=function(){
+    p.clear();
+    if(fogDirty && (p.millis()-lastFogBuild)>=FOG_REBUILD_MS){
+      renderFogBuffer(); fogDirty=false; lastFogBuild=p.millis();
+    }
+    if(!fogBuffer) return;
+    p.push();
+    p.scale(zoomFactor);
+    p.translate(-cam.x,-cam.y);
+    p.scale(ZOOM);
+    p.image(fogBuffer,0,0);
     p.pop();
   };
 }, boardHost);
@@ -893,15 +954,13 @@ const TEX = {
     cx.fillStyle='#e0522a';
     cx.beginPath(); cx.arc(6.5,4.8,1.8,0,Math.PI*2); cx.fill();
   }),
-  light: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.beginPath(); cx.arc(size/2,size/2,3,0,Math.PI*2); cx.fill(); cx.strokeStyle='rgba(0,0,0,.6)'; cx.lineWidth=1; cx.stroke(); }),
-  // Ground (grass/desert/mountain) is no longer drawn as PIXI tile sprites —
-  // see the p5.js terrain layer above — only the fog-of-war texture remains.
-  fog: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#0c0805'; cx.fillRect(0,0,size,size); })
+  light: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.beginPath(); cx.arc(size/2,size/2,3,0,Math.PI*2); cx.fill(); cx.strokeStyle='rgba(0,0,0,.6)'; cx.lineWidth=1; cx.stroke(); })
+  // Ground (grass/desert/mountain) and fog-of-war are no longer drawn as
+  // PIXI tile sprites — see the p5.js terrain and fog-of-war layers above.
 };
 
 // ================= terrain generation =================
 let terrain, spiceMap, buildingMap, explored;
-let fogSprites;
 
 function inBounds(x,y){ return x>=0&&y>=0&&x<MAPW&&y<MAPH; }
 
@@ -1046,22 +1105,9 @@ function isNearBase(x,y,r){
 
 // ================= rendering: static world =================
 function buildWorldVisuals(){
-  layerFog.removeChildren(); layerBuildings.removeChildren();
+  layerBuildings.removeChildren();
   renderTerrainBuffer();
-  fogSprites=[];
-  for(let y=0;y<MAPH;y++){
-    fogSprites.push(new Array(MAPW));
-    for(let x=0;x<MAPW;x++){
-      if(explored[y][x]){
-        fogSprites[y][x]=null;
-      } else {
-        const f=new PIXI.Sprite(TEX.fog);
-        f.x=x*SZ; f.y=y*SZ; f.scale.set(ZOOM);
-        layerFog.addChild(f);
-        fogSprites[y][x]=f;
-      }
-    }
-  }
+  renderFogBuffer(); fogDirty=false; lastFogBuild=p5FogInstance.millis();
   redrawSpiceAndBuildings();
 }
 let spiceLabels=[];
@@ -1149,8 +1195,7 @@ function revealAround(tx,ty,radius){
     if(dx*dx+dy*dy>radius*radius) continue;
     if(!explored[y][x]){
       explored[y][x]=true;
-      const f=fogSprites[y][x];
-      if(f){ layerFog.removeChild(f); fogSprites[y][x]=null; }
+      fogDirty=true;
     }
   }
 }
