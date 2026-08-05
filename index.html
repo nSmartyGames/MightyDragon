@@ -2174,10 +2174,44 @@ function gameTick(){
 const ctxMenu=document.getElementById('ctxMenu');
 const modeHint=document.getElementById('modeHint');
 
+// Footprint a building of this uiMode type would occupy if placed at (x,y) —
+// single tile for turbine/silo, 2x2 for the refinery (top-left anchored).
+function placementFootprint(placeType,x,y){
+  return placeType==='place-refinery' ? [[x,y],[x+1,y],[x,y+1],[x+1,y+1]] : [[x,y]];
+}
+// Single source of truth for "can this building go here" — shared by the
+// hover preview and the actual click handler so the preview never lies.
+function placementValid(placeType,x,y){
+  return placementFootprint(placeType,x,y).every(([fx,fy])=>
+    inBounds(fx,fy) && terrain[fy][fx]!=='mountain' && explored[fy][fx] &&
+    !buildingMap.has(fx+','+fy) && !spiceMap.has(fx+','+fy) && !isBaseTile(fx,fy));
+}
+const placePreview=new PIXI.Graphics();
+placePreview.visible=false;
+layerFx.addChild(placePreview);
+function hidePlacementPreview(){ placePreview.visible=false; }
+function isPlaceMode(){ return !!(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo' || uiMode.type==='place-refinery')); }
+function updatePlacementPreview(e){
+  if(!isPlaceMode()){ hidePlacementPreview(); return; }
+  const {x,y}=tileFromEvent(e);
+  const w=uiMode.type==='place-refinery'?2:1;
+  const valid=inBounds(x,y) && placementValid(uiMode.type,x,y);
+  const color=valid?0x33cc33:0xdd3333;
+  placePreview.clear();
+  placePreview.lineStyle(2,color,0.9);
+  placePreview.beginFill(color,0.3);
+  placePreview.drawRect(0,0,SZ*w,SZ*w);
+  placePreview.endFill();
+  placePreview.x=x*SZ; placePreview.y=y*SZ;
+  placePreview.visible=true;
+}
+app.view.addEventListener('pointermove', updatePlacementPreview);
+
 function deselect(){
   if(!state) return;
   state.selectedUnits=[]; uiMode=null; followUnit=null;
   ctxMenu.style.display='none'; modeHint.style.display='none';
+  hidePlacementPreview();
   boardHost.classList.remove('targeting');
   updateSelectionRing();
 }
@@ -2350,9 +2384,7 @@ function handleBoardClick(e){
 
   if(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo')){
     const key=x+','+y;
-    if(terrain[y][x]==='mountain'){ addLog('Cannot build on rocky mountain terrain.'); }
-    else if(buildingMap.has(key) || spiceMap.has(key)){ addLog('That tile is already occupied.'); }
-    else if(!explored[y][x]){ addLog('Choose a tile you have already explored.'); }
+    if(!placementValid(uiMode.type,x,y)){ addLog('Cannot build there — needs clear, explored ground.'); }
     else {
       const cost = uiMode.type==='place-turbine' ? TURBINE_COST : SILO_COST;
       if(ph.spice>=cost){
@@ -2367,20 +2399,12 @@ function handleBoardClick(e){
         }
       }
     }
-    uiMode=null; modeHint.style.display='none'; renderStats();
+    uiMode=null; modeHint.style.display='none'; hidePlacementPreview(); renderStats();
     return;
   }
 
   if(uiMode && uiMode.type==='place-refinery'){
-    const footprint=[[x,y],[x+1,y],[x,y+1],[x+1,y+1]];
-    const blocked = footprint.some(([fx,fy])=>{
-      if(!inBounds(fx,fy)) return true;
-      if(terrain[fy][fx]==='mountain') return true;
-      if(buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy)) return true;
-      if(!explored[fy][fx]) return true;
-      return false;
-    });
-    if(blocked){ addLog('Not enough clear, explored ground here for a 2x2 refinery.'); }
+    if(!placementValid('place-refinery',x,y)){ addLog('Not enough clear, explored ground here for a 2x2 refinery.'); }
     else if(ph.spice>=REFINERY_COST){
       if(isMpClient()){
         mpSend({type:'cmd', kind:'buildRefinery', x, y});
@@ -2388,7 +2412,7 @@ function handleBoardClick(e){
       } else {
         ph.spice-=REFINERY_COST;
         const primaryKey=x+','+y;
-        footprint.forEach(([fx,fy],i)=>{
+        placementFootprint('place-refinery',x,y).forEach(([fx,fy],i)=>{
           const entry=(i===0)
             ? {x:fx,y:fy,type:'refinery',owner:ph.id,primary:true,hp:BUILDING_HP.refinery,hpMax:BUILDING_HP.refinery}
             : {x:fx,y:fy,type:'refinery',owner:ph.id,primary:false,primaryKey};
@@ -2402,7 +2426,7 @@ function handleBoardClick(e){
         redrawSpiceAndBuildings();
       }
     }
-    uiMode=null; modeHint.style.display='none'; renderStats();
+    uiMode=null; modeHint.style.display='none'; hidePlacementPreview(); renderStats();
     return;
   }
 
