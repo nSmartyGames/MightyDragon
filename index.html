@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Galacticus — Spice Throne</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
   :root{
@@ -410,16 +411,19 @@ function viewSize(){
   return { w: Math.max(240, Math.floor(r.width)), h: Math.max(200, Math.floor(r.height)) };
 }
 let vs=viewSize();
-const app = new PIXI.Application({width:vs.w, height:vs.h, background:0x0b0703, antialias:false});
+// The terrain itself is rendered by a separate p5.js canvas (see "map
+// rendering: p5.js terrain layer" below), layered underneath this one, so
+// PIXI's own background is transparent and only draws buildings/units/fx/fog.
+const app = new PIXI.Application({width:vs.w, height:vs.h, backgroundAlpha:0, antialias:false});
+app.view.style.position='absolute'; app.view.style.left='0'; app.view.style.top='0'; app.view.style.zIndex='2';
 boardHost.appendChild(app.view);
 
 const world = new PIXI.Container();
-const layerGround = new PIXI.Container();
 const layerBuildings = new PIXI.Container();
 const layerFog = new PIXI.Container();
 const layerUnits = new PIXI.Container();
 const layerFx = new PIXI.Container();
-world.addChild(layerGround, layerBuildings, layerUnits, layerFx, layerFog);
+world.addChild(layerBuildings, layerUnits, layerFx, layerFog);
 app.stage.addChild(world);
 
 // ================= camera / zoom =================
@@ -438,6 +442,7 @@ function zoomAt(clientX, clientY){
   followUnit=null;
   vs=viewSize();
   app.renderer.resize(vs.w, vs.h);
+  if(p5Instance) p5Instance.resizeCanvas(vs.w, vs.h);
   const rect=app.view.getBoundingClientRect();
   const sx=clientX-rect.left, sy=clientY-rect.top;
   const wx=cam.x+sx/zoomFactor, wy=cam.y+sy/zoomFactor;
@@ -475,6 +480,36 @@ function clampCamera(){
 function centerCameraOn(tx,ty){
   cam.x=tx*SZ - (vs.w/zoomFactor)/2; cam.y=ty*SZ - (vs.h/zoomFactor)/2; clampCamera();
 }
+
+// ================= map rendering: p5.js terrain layer =================
+// The terrain grid (grass/desert/mountain, with wavy sinusoidal boundaries
+// between types) is pre-rendered ONCE into an offscreen p5.Graphics buffer
+// at native tile resolution (renderTerrainBuffer, defined further down,
+// right after generateTerrain's helpers). Each frame this just blits that
+// buffer through the same pan/zoom transform PIXI applies to `world`
+// (world.x=-cam.x*zoomFactor, world.scale=zoomFactor, with sprites already
+// pre-scaled by ZOOM) so the two canvases stay in lockstep with zero
+// per-frame terrain drawing cost. noSmooth() keeps the chunky pixel-art look.
+let terrainBuffer=null;
+let p5Instance=new p5((p)=>{
+  p.setup=function(){
+    p.pixelDensity(1); // match PIXI's resolution:1 canvas so the two stay pixel-aligned
+    const c=p.createCanvas(vs.w, vs.h);
+    c.canvas.style.position='absolute'; c.canvas.style.left='0'; c.canvas.style.top='0';
+    c.canvas.style.zIndex='1'; c.canvas.style.pointerEvents='none';
+    p.noSmooth();
+  };
+  p.draw=function(){
+    p.clear();
+    if(!terrainBuffer) return;
+    p.push();
+    p.scale(zoomFactor);
+    p.translate(-cam.x,-cam.y);
+    p.scale(ZOOM);
+    p.image(terrainBuffer,0,0);
+    p.pop();
+  };
+}, boardHost);
 
 // ================= minimap =================
 // One canvas pixel per map tile (fog = black, otherwise terrain color),
@@ -589,6 +624,29 @@ function wormMouthCanvas(cx,size){
   }
   cx.fillStyle='#1a0503'; cx.beginPath(); cx.arc(cxy,cxy,r*0.34,0,Math.PI*2); cx.fill();
   cx.restore();
+}
+// Structured rocky mountain tiles: overlapping jagged facets with shading
+// and a highlight streak, instead of a single flat triangle.
+function mountainFacets(cx,size,bg,facets,highlight){
+  cx.fillStyle=bg; cx.fillRect(0,0,size,size);
+  facets.forEach(([fx,fb,col])=>{
+    cx.fillStyle=col;
+    cx.beginPath();
+    for(let ly=1;ly<size-1;ly++){
+      const halfw=(fb-ly)*0.55;
+      if(halfw<=0 || ly>=fb) continue;
+      cx.rect(fx-halfw, ly, halfw*2, 1);
+    }
+    cx.fill();
+  });
+  cx.fillStyle=highlight;
+  for(let lx=2;lx<6;lx++) cx.fillRect(lx, 2+Math.abs(lx-3), 1, 1);
+}
+function mountainCanvasA(cx,size){
+  mountainFacets(cx,size,'#3a2f22',[[3,14,'#4a3c2c'],[8,13,'#574636'],[12,15,'#453727']],'rgba(138,122,90,.8)');
+}
+function mountainCanvasB(cx,size){
+  mountainFacets(cx,size,'#352a1e',[[4,15,'#453727'],[9,12,'#4f3f2f'],[13,14,'#3f3225']],'rgba(120,106,78,.75)');
 }
 // Hand-drawn image tiles (base64 PNG, neutral white/light-grey so the existing
 // per-house tint-at-render still works). Trooper/tank are single static
@@ -797,20 +855,98 @@ const TEX = {
     cx.beginPath(); cx.arc(6.5,4.8,1.8,0,Math.PI*2); cx.fill();
   }),
   light: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#ffffff'; cx.beginPath(); cx.arc(size/2,size/2,3,0,Math.PI*2); cx.fill(); cx.strokeStyle='rgba(0,0,0,.6)'; cx.lineWidth=1; cx.stroke(); }),
-  grassA: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#5c7a3a'; cx.fillRect(0,0,size,size); }),
-  grassB: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#547231'; cx.fillRect(0,0,size,size); }),
-  desertA: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#caa46a'; cx.fillRect(0,0,size,size); }),
-  desertB: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#c29a5e'; cx.fillRect(0,0,size,size); }),
-  mountainA: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#3a2f22'; cx.fillRect(0,0,size,size); cx.fillStyle='#4a3c2c'; cx.beginPath(); cx.moveTo(2,size-2); cx.lineTo(size/2,3); cx.lineTo(size-2,size-2); cx.closePath(); cx.fill(); }),
-  mountainB: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#352a1e'; cx.fillRect(0,0,size,size); cx.fillStyle='#453727'; cx.beginPath(); cx.moveTo(2,size-2); cx.lineTo(size/2-2,4); cx.lineTo(size-2,size-2); cx.closePath(); cx.fill(); }),
+  // Ground (grass/desert/mountain) is no longer drawn as PIXI tile sprites —
+  // see the p5.js terrain layer above — only the fog-of-war texture remains.
   fog: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#0c0805'; cx.fillRect(0,0,size,size); })
 };
 
 // ================= terrain generation =================
 let terrain, spiceMap, buildingMap, explored;
-let fogSprites, groundSprites;
+let fogSprites;
 
 function inBounds(x,y){ return x>=0&&y>=0&&x<MAPW&&y<MAPH; }
+
+// ---- wavy (sinusoidal) terrain-type boundaries ----
+// Rather than a hard tile-grid edge between grass/desert/mountain, boundary
+// tiles blend a wavy band of the neighboring type in from each differing
+// edge. The wave is a function of the GLOBAL pixel coordinate along that
+// edge (not tile-local), so both tiles sharing a boundary compute the exact
+// same curve and the result reads as one continuous rounded coastline
+// instead of disjointed per-tile notches.
+const TERRAIN_BASE_DRAW={
+  grass:(cx,size,even)=>{ cx.fillStyle=even?'#5c7a3a':'#547231'; cx.fillRect(0,0,size,size); },
+  desert:(cx,size,even)=>{ cx.fillStyle=even?'#caa46a':'#c29a5e'; cx.fillRect(0,0,size,size); },
+  mountain:(cx,size,even)=>{ even?mountainCanvasA(cx,size):mountainCanvasB(cx,size); }
+};
+const TERRAIN_BLEND_RGB={ grass:[0x5c,0x7a,0x3a], desert:[0xca,0xa4,0x6a], mountain:[0x3a,0x2f,0x22] };
+const WAVE_AMP=4.5, WAVE_FREQ=(2*Math.PI)/40;
+function terrainWaveSeed(a,b){
+  const order={grass:0,desert:1,mountain:2};
+  const lo=Math.min(order[a],order[b]), hi=Math.max(order[a],order[b]);
+  return (lo*3+hi)*1.9+0.7;
+}
+function terrainWave(coord,seed){ return WAVE_AMP*Math.sin(coord*WAVE_FREQ+seed); }
+// Pre-renders the whole terrain grid into terrainBuffer (a p5.Graphics at
+// native TILE resolution) once per game start: a base-color pass per tile,
+// then a single whole-buffer wavy-boundary blend pass (cheaper than one
+// getImageData/putImageData round-trip per tile). The wave offset is
+// quantized to a 4px step so the curve still reads as a chunky, retro-pixel
+// coastline rather than a smooth anti-aliased one.
+function renderTerrainBuffer(){
+  const bw=MAPW*TILE, bh=MAPH*TILE;
+  if(terrainBuffer) terrainBuffer.remove();
+  terrainBuffer=p5Instance.createGraphics(bw,bh);
+  terrainBuffer.noSmooth();
+  const cx=terrainBuffer.drawingContext;
+  cx.imageSmoothingEnabled=false;
+  for(let y=0;y<MAPH;y++){
+    for(let x=0;x<MAPW;x++){
+      const even=(x+y)%2===0;
+      cx.save();
+      cx.translate(x*TILE,y*TILE);
+      TERRAIN_BASE_DRAW[terrain[y][x]](cx,TILE,even);
+      cx.restore();
+    }
+  }
+  const img=cx.getImageData(0,0,bw,bh);
+  const data=img.data;
+  let dirty=false;
+  for(let y=0;y<MAPH;y++){
+    for(let x=0;x<MAPW;x++){
+      const type=terrain[y][x];
+      const neighbors=[
+        ['up', y>0?terrain[y-1][x]:null],
+        ['down', y<MAPH-1?terrain[y+1][x]:null],
+        ['left', x>0?terrain[y][x-1]:null],
+        ['right', x<MAPW-1?terrain[y][x+1]:null]
+      ];
+      neighbors.forEach(([dir,nt])=>{
+        if(!nt || nt===type) return;
+        const seed=terrainWaveSeed(type,nt);
+        const [r,g,b]=TERRAIN_BLEND_RGB[nt];
+        for(let ly=0;ly<TILE;ly++){
+          for(let lx=0;lx<TILE;lx++){
+            const gpx=x*TILE+lx, gpy=y*TILE+ly;
+            const rawOffset=(dir==='up'||dir==='down') ? terrainWave(gpx,seed) : terrainWave(gpy,seed);
+            const offset=Math.round(rawOffset/4)*4;
+            const threshold=WAVE_AMP+offset;
+            let intrude=false;
+            if(dir==='up' && ly<threshold) intrude=true;
+            else if(dir==='down' && (TILE-1-ly)<threshold) intrude=true;
+            else if(dir==='left' && lx<threshold) intrude=true;
+            else if(dir==='right' && (TILE-1-lx)<threshold) intrude=true;
+            if(intrude){
+              const idx=(gpy*bw+gpx)*4;
+              data[idx]=r; data[idx+1]=g; data[idx+2]=b; data[idx+3]=255;
+              dirty=true;
+            }
+          }
+        }
+      });
+    }
+  }
+  if(dirty) cx.putImageData(img,0,0);
+}
 
 function generateTerrain(){
   terrain=[]; for(let y=0;y<MAPH;y++){ terrain.push(new Array(MAPW).fill('grass')); }
@@ -871,20 +1007,12 @@ function isNearBase(x,y,r){
 
 // ================= rendering: static world =================
 function buildWorldVisuals(){
-  layerGround.removeChildren(); layerFog.removeChildren(); layerBuildings.removeChildren();
-  groundSprites=[]; fogSprites=[];
+  layerFog.removeChildren(); layerBuildings.removeChildren();
+  renderTerrainBuffer();
+  fogSprites=[];
   for(let y=0;y<MAPH;y++){
-    groundSprites.push(new Array(MAPW));
     fogSprites.push(new Array(MAPW));
     for(let x=0;x<MAPW;x++){
-      const t=terrain[y][x];
-      const even=(x+y)%2===0;
-      let tex = t==='mountain'? (even?TEX.mountainA:TEX.mountainB) : t==='desert'? (even?TEX.desertA:TEX.desertB) : (even?TEX.grassA:TEX.grassB);
-      const s=new PIXI.Sprite(tex);
-      s.x=x*SZ; s.y=y*SZ; s.scale.set(ZOOM);
-      layerGround.addChild(s);
-      groundSprites[y][x]=s;
-
       if(explored[y][x]){
         fogSprites[y][x]=null;
       } else {
