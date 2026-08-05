@@ -17,59 +17,66 @@
   body{
     margin:0; padding:0; font-family:'Courier New',monospace;
     background:radial-gradient(ellipse at top, #2a1a0a 0%, var(--night) 70%);
-    color:var(--paper); min-height:100vh;
-    display:flex; flex-direction:column; align-items:center;
-    overflow-y:auto;
+    color:var(--paper); overflow:hidden;
   }
-  #app{ display:flex; width:96vw; height:88vh; max-width:1600px; margin:12px; flex:0 0 auto; }
+  /* The map is the page: #app is pinned full-bleed behind the fixed header
+     and fixed action bar, instead of sitting in normal document flow. */
+  #app{ display:flex; position:fixed; inset:0; width:100vw; height:100vh; margin:0; z-index:1; }
   .panel{
     background:linear-gradient(180deg,#241609,#180f06);
     border:2px solid var(--sand-3); border-radius:6px;
     box-shadow:0 0 0 1px #000 inset, 0 8px 24px rgba(0,0,0,.5);
   }
-  #boardWrap{ padding:10px; position:relative; flex:1 1 100%; display:flex; flex-direction:column; min-width:0; }
+  #boardWrap{ padding:0; position:relative; flex:1 1 100%; display:flex; flex-direction:column; min-width:0; border:none; border-radius:0; box-shadow:none; }
   h1{ font-size:19px; letter-spacing:3px; text-transform:uppercase; color:var(--spice); margin:0 0 2px 0; text-shadow:0 0 12px rgba(224,82,42,.5); }
   .sub{ font-size:11px; color:var(--sand-2); letter-spacing:1px; margin-bottom:8px; display:flex; justify-content:space-between;}
-  #boardHost{ border-radius:3px; border:1px solid #000; overflow:hidden; line-height:0; flex:1; min-height:0; cursor:grab; position:relative; touch-action:none; }
+  #boardHost{ overflow:hidden; line-height:0; flex:1; min-height:0; height:100%; cursor:grab; position:relative; touch-action:none; }
   #boardHost.targeting{ cursor:crosshair; }
   #boardHost.dragging{cursor:grabbing;}
   #minimap{
-    position:absolute; top:8px; right:8px; width:150px; height:150px; z-index:18;
+    position:absolute; top:64px; right:8px; width:150px; height:150px; z-index:18;
     border:1px solid var(--rust); border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,.6);
     image-rendering:pixelated; background:#000; cursor:pointer;
   }
-  /* Full-width header strip above the whole game panel: line 1 is the stat
-     cards + house tag + rival summaries, line 2 is the compact 2-line log. */
+  /* Full-width header strip, fixed to the top of the viewport and floating
+     over the fixed map underneath: line 1 is the game title + stat cards +
+     house tag + rival summaries, line 2 is the compact 2-line log. Kept as
+     short as possible so it eats the least amount of map real estate. */
   #hudBar{
-    width:100%; flex:0 0 auto; background:rgba(20,12,4,.95); border-bottom:1px solid var(--rust);
+    position:fixed; top:0; left:0; right:0; width:100%; z-index:40;
+    background:rgba(20,12,4,.95); border-bottom:1px solid var(--rust);
     box-shadow:0 4px 14px rgba(0,0,0,.4); line-height:normal;
   }
-  .hudRow{ display:flex; align-items:center; gap:8px; padding:6px 14px; flex-wrap:wrap; }
-  .houseTag{ font-size:11px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; padding:0 4px; flex:0 0 auto; }
-  .hudDivider{ width:1px; align-self:stretch; background:var(--sand-3); margin:2px 2px; flex:0 0 auto; }
+  .hudRow{ display:flex; align-items:center; gap:5px; padding:3px 10px; flex-wrap:wrap; }
+  .houseTag{ font-size:10px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; padding:0 4px; flex:0 0 auto; }
+  #gameTitle{ color:var(--spice); text-shadow:0 0 8px rgba(224,82,42,.5); }
+  #gameTitle #gameClock{ color:var(--sand-2); font-weight:normal; margin-left:4px; }
+  .hudBtn{ flex:0 0 auto; padding:2px 7px; font-size:11px; line-height:1; }
+  .hudDivider{ width:1px; align-self:stretch; background:var(--sand-3); margin:1px 1px; flex:0 0 auto; }
   .statCard{
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    width:64px; height:50px; position:relative; flex:0 0 auto;
-    background:linear-gradient(180deg,#2c1c0d,#1c1006); border:1px solid var(--sand-3); border-radius:6px;
+    width:44px; height:34px; position:relative; flex:0 0 auto;
+    background:linear-gradient(180deg,#2c1c0d,#1c1006); border:1px solid var(--sand-3); border-radius:5px;
   }
-  .cardIcon{ width:20px; height:20px; background-size:20px 20px; background-position:center; background-repeat:no-repeat; }
-  .cardLabel{ font-size:8px; text-transform:uppercase; letter-spacing:.5px; color:var(--sand-2); margin-top:2px; }
-  .statCard .costBadge{ position:absolute; top:1px; right:2px; bottom:auto; font-size:8px; white-space:nowrap; }
-  #rivalsContainer{ display:flex; gap:10px; flex-wrap:wrap; }
-  .rivalMini{ display:flex; align-items:center; gap:6px; font-size:10px; border-left:3px solid var(--sand-3); padding:2px 0 2px 6px; white-space:nowrap; }
+  .cardIcon{ width:13px; height:13px; background-size:13px 13px; background-position:center; background-repeat:no-repeat; }
+  .cardLabel{ font-size:6px; text-transform:uppercase; letter-spacing:.5px; color:var(--sand-2); margin-top:1px; }
+  .statCard .costBadge{ position:absolute; top:0px; right:2px; bottom:auto; font-size:7px; white-space:nowrap; }
+  #rivalsContainer{ display:flex; gap:8px; flex-wrap:wrap; }
+  .rivalMini{ display:flex; align-items:center; gap:5px; font-size:9px; border-left:3px solid var(--sand-3); padding:1px 0 1px 5px; white-space:nowrap; }
   .rivalMini .rname{ font-weight:bold; text-transform:uppercase; letter-spacing:.5px; }
   .rivalMini .rstat{ color:var(--sand-2); }
   .rivalMini .rstat b{ color:var(--paper); }
   .rivalMini.eliminated{ opacity:.45; }
-  #log{ height:2.7em; overflow-y:auto; font-size:10px; background:#0f0a05; border-top:1px solid var(--sand-3); padding:2px 14px; color:#d8c19a; line-height:1.35; margin:0; }
+  #log{ height:1.6em; overflow-y:auto; font-size:9px; background:#0f0a05; border-top:1px solid var(--sand-3); padding:1px 10px; color:#d8c19a; line-height:1.3; margin:0; }
   #log div:last-child{color:var(--paper); font-weight:bold;}
+  /* Fixed to the viewport bottom (not just the board panel) and always
+     rendered at 40% opacity so the map shows through underneath it. */
   #actionBar{
-    position:absolute; left:0; right:0; bottom:0; width:100%;
-    display:flex; gap:2px; z-index:20; background:rgba(20,12,4,.9); padding:8px;
+    position:fixed; left:0; right:0; bottom:0; width:100%;
+    display:flex; gap:2px; z-index:40; background:rgba(20,12,4,.4); padding:8px;
     border-radius:0; border-top:1px solid var(--rust); box-shadow:0 -6px 18px rgba(0,0,0,.4);
-    line-height:normal; opacity:.4; transition:opacity .15s ease;
+    line-height:normal;
   }
-  #actionBar:hover, #actionBar:focus-within{ opacity:1; }
   #actionBar button.iconBtn{
     flex:1 1 0; width:auto; height:60px; padding:0; position:relative;
     background-size:34px 34px; background-position:center; background-repeat:no-repeat;
@@ -112,9 +119,20 @@
   /* Fixed-height caption so the card doesn't jump size as the story's
      lines (greeting, then each narrated beat) swap in one at a time. */
   #houseGreetLine{ min-height:3.2em; }
-  .hint{font-size:10px; color:#6b5636; margin-top:6px;}
-  .legend{ display:flex; gap:10px; font-size:10px; color:var(--sand-2); margin-top:6px; flex-wrap:wrap; }
+  /* Both float over the fixed map instead of sitting in normal flow, so they
+     never push the board around; stacked in the top-left corner, under the
+     fixed header. */
+  .hint{
+    position:absolute; left:8px; top:98px; z-index:11; font-size:9px; color:#c9b088;
+    background:rgba(20,12,4,.55); padding:4px 8px; border-radius:6px; max-width:44%;
+    line-height:1.4;
+  }
+  .legend{
+    position:absolute; left:8px; top:66px; z-index:11; display:flex; gap:8px; font-size:9px;
+    color:var(--sand-2); flex-wrap:wrap; background:rgba(20,12,4,.55); padding:4px 8px; border-radius:6px; max-width:44%;
+  }
   .legend span{display:flex; align-items:center; gap:4px;}
+  #camHint{ color:var(--paper); }
   .swatch{width:9px; height:9px; border-radius:2px; display:inline-block;}
   #selectBox{
     position:absolute; display:none; pointer-events:none; z-index:15;
@@ -132,7 +150,7 @@
   #ctxMenu button:last-child{border-bottom:none;}
   #ctxMenu .ctx-title{ font-size:9px; color:var(--sand-2); padding:5px 10px; background:#160d05; letter-spacing:1px; }
   #modeHint{
-    position:absolute; top:6px; left:50%; transform:translateX(-50%);
+    position:absolute; top:66px; left:50%; transform:translateX(-50%);
     background:rgba(20,12,4,.85); border:1px solid var(--rust); border-radius:12px;
     padding:4px 12px; font-size:11px; letter-spacing:1px; color:var(--spice);
     display:none; z-index:12; pointer-events:none;
@@ -148,16 +166,16 @@
   .houseCard h3{ margin:0 0 6px 0; font-size:14px; letter-spacing:2px; text-transform:uppercase; }
   .houseCard p{ font-size:11px; color:var(--sand-2); line-height:1.5; margin:0; }
   @media (max-width:700px){
-    body{ align-items:flex-start; }
-    #app{ width:98vw; height:auto; max-width:none; }
-    #boardHost{ min-height:360px; height:74vh; }
-    .hudRow{ font-size:9px; padding:5px 8px; gap:6px; }
-    .statCard{ width:52px; height:44px; }
-    .cardIcon{ width:16px; height:16px; background-size:16px 16px; }
+    .hudRow{ font-size:8px; padding:2px 6px; gap:4px; }
+    .statCard{ width:36px; height:28px; }
+    .cardIcon{ width:11px; height:11px; background-size:11px 11px; }
     #actionBar{ gap:2px; padding:5px; }
     #actionBar button.iconBtn{ height:48px; background-size:26px 26px; }
     .costBadge{ font-size:8px; }
-    #minimap{ width:90px; height:90px; top:5px; right:5px; }
+    #minimap{ width:90px; height:90px; top:52px; right:5px; }
+    #modeHint{ top:52px; }
+    .legend{ top:52px; max-width:60%; }
+    .hint{ top:80px; max-width:60%; }
   }
 </style>
 </head>
@@ -167,6 +185,8 @@
 
 <div id="hudBar">
   <div class="hudRow">
+    <span id="gameTitle" class="houseTag">Galacticus <span id="gameClock">00:00</span></span>
+    <button id="musicToggle" class="hudBtn" title="Toggle music">🔊</button>
     <span id="playerHouseTitle" class="houseTag"></span>
     <div class="statCard" title="Spice bank">
       <span class="cardIcon iconSpice"></span>
@@ -201,8 +221,6 @@
 
 <div id="app">
   <div class="panel" id="boardWrap">
-    <h1>Galacticus</h1>
-    <div class="sub"><span>Spice Throne — <span id="gameClock">00:00</span></span><span id="camHint">drag map / arrow keys to scroll</span></div>
     <div id="boardHost">
       <canvas id="minimap" width="100" height="100" title="Click to jump the camera"></canvas>
       <div id="selectBox"></div>
@@ -224,13 +242,14 @@
     </div>
     <div id="modeHint">MOVE — choose a tile</div>
     <div class="legend">
+      <span id="camHint">drag map / arrow keys to scroll</span>
       <span><i class="swatch" style="background:#3a2f22"></i>Rocky mountain (impassable)</span>
       <span><i class="swatch" style="background:#caa46a"></i>Desert</span>
       <span><i class="swatch" style="background:#5c7a3a"></i>Grass (buildable)</span>
       <span><i class="swatch" style="background:#e0522a"></i>Spice deposit</span>
       <span><i class="swatch" style="background:#111"></i>Unexplored (fog)</span>
     </div>
-    <div class="hint">Click a vehicle to select it, or hold Shift and drag a box to select several at once — the cursor becomes a target reticle. Click a tile to move there, or click an enemy to attack it; the Attack button arms targeting mode for a group, Search &amp; Destroy sends units hunting for any nearby enemy on their own, Retreat pulls them back to the stronghold. Building buttons ask for a grass or desert tile to place on. Drag the map (without Shift) or use arrow keys to scroll, or click the minimap to jump there — fog clears as your units explore. Troopers drain 10 power points per shot, tanks drain 20 every 2 seconds (each wind turbine adds +5 to every shot) — reduce a stronghold's 10000 power to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted; troopers and tanks can never enter one, only fight adjacent to it. A refinery holds as much as 4 silos and comes with a free harvester. Sandworms only have a 1-in-5 chance of swallowing a unit that shares their tile, and give up the chase after 5 seconds. A hit on your units, buildings, or stronghold auto-rallies nearby idle troops and tanks to Search &amp; Destroy.</div>
+    <div class="hint">Click a vehicle to select it, or hold Shift and drag a box to select several at once — the cursor becomes a target reticle. Click a tile to move there, or click an enemy to attack it; the Attack button arms targeting mode for a group, Search &amp; Destroy sends units hunting for any nearby enemy on their own, Retreat pulls them back to the stronghold. Building buttons ask for a grass or desert tile to place on. Drag the map (without Shift) or use arrow keys to scroll, or click the minimap to jump there — fog clears as your units explore. Troopers drain 10 power points per shot, tanks drain 20 every 2 seconds (each wind turbine adds +5 to every shot) — reduce a stronghold's 10k power to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted; troopers and tanks can never enter one, only fight adjacent to it. A refinery holds as much as 4 silos and comes with a free harvester. Sandworms only have a 1-in-5 chance of swallowing a unit that shares their tile, and give up the chase after 5 seconds. A hit on your units, buildings, or stronghold auto-rallies nearby idle troops and tanks to Search &amp; Destroy.</div>
   </div>
 </div>
 
@@ -377,6 +396,55 @@ function ensureAudio(){
   }
   if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
 }
+
+// Free background music: a synthesized desert-wind drone (no external audio
+// file/license to worry about), built the same way the SFX above are —
+// oscillators + filtered noise through Web Audio. Started on the same user
+// gesture that unlocks audioCtx, so autoplay restrictions never bite.
+let musicGain=null, musicStarted=false, musicOn=true;
+function startMusic(){
+  if(!audioCtx || musicStarted) return;
+  musicStarted=true;
+  musicGain=audioCtx.createGain();
+  musicGain.gain.value=musicOn?0.07:0;
+  musicGain.connect(audioCtx.destination);
+
+  // Two detuned low drones (open fifth) give a slow, mournful pad.
+  [55,82.5].forEach((freq,i)=>{
+    const osc=audioCtx.createOscillator();
+    osc.type='sawtooth'; osc.frequency.value=freq;
+    const filter=audioCtx.createBiquadFilter();
+    filter.type='lowpass'; filter.frequency.value=260+i*50;
+    const g=audioCtx.createGain(); g.gain.value=0.5;
+    osc.connect(filter); filter.connect(g); g.connect(musicGain);
+    osc.start();
+  });
+
+  // Slow LFO sweeps a bandpassed noise bed's frequency, like wind gusting over dunes.
+  const bufSize=audioCtx.sampleRate*4;
+  const buf=audioCtx.createBuffer(1,bufSize,audioCtx.sampleRate);
+  const data=buf.getChannelData(0);
+  let last=0;
+  for(let i=0;i<bufSize;i++){ const white=Math.random()*2-1; last=(last+0.02*white)/1.02; data[i]=last*3.5; }
+  const noise=audioCtx.createBufferSource(); noise.buffer=buf; noise.loop=true;
+  const noiseFilter=audioCtx.createBiquadFilter();
+  noiseFilter.type='bandpass'; noiseFilter.frequency.value=500; noiseFilter.Q.value=0.7;
+  const noiseGain=audioCtx.createGain(); noiseGain.gain.value=0.4;
+  noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(musicGain);
+  noise.start();
+
+  const lfo=audioCtx.createOscillator(); lfo.frequency.value=0.045;
+  const lfoGain=audioCtx.createGain(); lfoGain.gain.value=150;
+  lfo.connect(lfoGain); lfoGain.connect(noiseFilter.frequency);
+  lfo.start();
+}
+function toggleMusic(){
+  musicOn=!musicOn;
+  if(musicGain) musicGain.gain.setTargetAtTime(musicOn?0.07:0, audioCtx.currentTime, 0.3);
+  const btn=document.getElementById('musicToggle');
+  if(btn) btn.textContent=musicOn?'🔊':'🔇';
+}
+document.getElementById('musicToggle').addEventListener('click', toggleMusic);
 function playFireSound(){
   if(!audioCtx) return;
   const t0=audioCtx.currentTime;
@@ -482,6 +550,15 @@ boardHost.addEventListener('touchend', (e)=>{
   } else {
     lastTapTime=now; lastTapX=t.clientX; lastTapY=t.clientY;
   }
+});
+// The board now fills the whole (fixed) viewport, so it must be re-sized
+// whenever the window/viewport itself changes, not just on zoom.
+window.addEventListener('resize', ()=>{
+  vs=viewSize();
+  app.renderer.resize(vs.w, vs.h);
+  if(p5Instance) p5Instance.resizeCanvas(vs.w, vs.h);
+  if(p5FogInstance) p5FogInstance.resizeCanvas(vs.w, vs.h);
+  clampCamera();
 });
 
 function clampCamera(){
@@ -1399,6 +1476,13 @@ app.ticker.add((delta)=>{
 });
 
 function renderLog(){ const el=document.getElementById('log'); el.innerHTML=state.log.map(m=>'<div>'+m+'</div>').join(''); el.scrollTop=el.scrollHeight; }
+// Abbreviates big HUD numbers (10000 -> "10k") so the compact stat cards stay narrow.
+function fmtK(n){
+  n=Math.max(0,Math.round(n));
+  if(n<1000) return String(n);
+  const k=n/1000;
+  return (Number.isInteger(k)?k:k.toFixed(1))+'k';
+}
 function renderStats(){
   const ph=playerHouse();
   const titleEl=document.getElementById('playerHouseTitle');
@@ -1408,7 +1492,7 @@ function renderStats(){
   document.getElementById('pCap').textContent=ph.cap;
   document.getElementById('pPower').textContent=ph.power;
   document.getElementById('pArmy').textContent=ph.units.filter(isCombatUnit).length;
-  document.getElementById('pStronghold').textContent=Math.max(0,Math.ceil(ph.baseHp))+'/'+ph.baseHpMax;
+  document.getElementById('pStronghold').textContent=fmtK(Math.max(0,Math.ceil(ph.baseHp)))+'/'+fmtK(ph.baseHpMax);
 
   const rivalsEl=document.getElementById('rivalsContainer');
   rivalsEl.innerHTML='';
@@ -1420,7 +1504,7 @@ function renderStats(){
       '<span class="rname" style="color:'+h.colorCss+'">'+h.name+(h.alive?'':' — Eliminated')+'</span>'+
       '<span class="rstat">Spice <b>'+Math.floor(h.spice)+'</b></span>'+
       '<span class="rstat">Army <b>'+h.units.filter(isCombatUnit).length+'</b></span>'+
-      '<span class="rstat">Stronghold <b>'+Math.max(0,Math.ceil(h.baseHp))+'/'+h.baseHpMax+'</b></span>';
+      '<span class="rstat">Stronghold <b>'+fmtK(Math.max(0,Math.ceil(h.baseHp)))+'/'+fmtK(h.baseHpMax)+'</b></span>';
     rivalsEl.appendChild(div);
   });
 
@@ -2476,6 +2560,7 @@ function deserializeHouse(hd){
 // for newGame()+start() since the client never generates its own terrain.
 function applyMpInit(msg){
   ensureAudio();
+  startMusic();
   stopSim();
   gameOver=false; mpEndShown=false;
   document.getElementById('overlay').style.display='none';
@@ -2811,6 +2896,7 @@ function newGame(chosenId, rivalId){
 }
 async function start(chosenId, rivalId){
   ensureAudio(); // unlock audio here, inside the click gesture that starts the match
+  startMusic();
   stopSim();
   lastAiThink={}; lastWormMove=0; lastSpiceSpawn=0;
   gameOver=false;
