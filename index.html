@@ -371,6 +371,8 @@ const SPICE_SPAWN_INTERVAL_MS=6000;
 const WORM_SURFACE_MS=700;
 const WORM_HUNT_TIMEOUT_MS=5000; // give up chasing after 5s without a kill
 const WORM_WANDER_MS=4000; // ...and wander randomly this long before hunting again
+const WORM_VANISH_CYCLE_MS=120000; // every 2 minutes, a worm near units checks whether to dive deep
+const WORM_HIDE_MS=120000; // ...and stays submerged/harmless for 2 minutes before it can resurface
 const SEARCH_RADIUS=8;
 const DEFEND_ALERT_RADIUS=12; // idle friendly combat units this close to a hit auto-switch to Search & Destroy
 
@@ -1489,7 +1491,7 @@ app.ticker.add((delta)=>{
       if(t>=1) w.moving=false;
     } else { w.sprite.x=w.x*SZ+SZ/2; w.sprite.y=w.y*SZ+SZ/2; }
     w.sprite.alpha = surfacing ? 1 : 0.75+0.15*Math.sin(now/260+w.x*3+w.y*7);
-    w.sprite.visible = !!(explored[w.y] && explored[w.y][w.x]);
+    w.sprite.visible = !isWormHidden(w) && !!(explored[w.y] && explored[w.y][w.x]);
   });
   layerBuildings.children.forEach(c=>{
     if(c._pulse!==undefined){ c._pulse+=0.04*delta; c.alpha=0.85+0.15*Math.sin(c._pulse); }
@@ -1556,6 +1558,9 @@ function isBaseTile(x,y){
 // Worms burrow through sand only — they can't cross grass or rock, so grass
 // near a stronghold is a real safe zone.
 function wormPassable(x,y){ return inBounds(x,y) && terrain[y][x]==='desert'; }
+// A worm that dives deep near units every WORM_VANISH_CYCLE_MS stays
+// submerged and harmless for WORM_HIDE_MS before it can resurface.
+function isWormHidden(w){ return !!(w.hiddenUntil && performance.now()<w.hiddenUntil); }
 function beginStep(u,nx,ny){
   const dIdx=dirIndexFromDelta(nx-u.x, ny-u.y); if(dIdx!==null) u.dir=dIdx;
   u.moveFrom={x:u.x*SZ+SZ/2,y:u.y*SZ+SZ/2}; u.x=nx; u.y=ny;
@@ -1948,7 +1953,17 @@ function moveWorms(){
   const units=allUnits();
   const now=performance.now();
   state.worms.forEach(w=>{
+    if(isWormHidden(w)) return;
+    if(w.hiddenUntil){ w.hiddenUntil=0; w.nextVanishCheck=now+WORM_VANISH_CYCLE_MS; }
     if(w.rest>0){ w.rest--; return; }
+    if(w.nextVanishCheck && now>=w.nextVanishCheck){
+      const nearUnit=units.some(u=>Math.abs(u.x-w.x)+Math.abs(u.y-w.y)<8);
+      if(nearUnit){
+        w.hiddenUntil=now+WORM_HIDE_MS; w.huntStart=null; w.wanderUntil=null;
+        return;
+      }
+      w.nextVanishCheck=now+WORM_VANISH_CYCLE_MS;
+    }
     const wandering=!!(w.wanderUntil && now<w.wanderUntil);
     let best=null,bestDist=8;
     if(!wandering){
@@ -1980,7 +1995,7 @@ function resolveWormStrikes(){
   const now=performance.now();
   state.houses.forEach(house=>{
     house.units=house.units.filter(u=>{
-      const overlapping=state.worms.some(w=>w.x===u.x && w.y===u.y);
+      const overlapping=state.worms.some(w=>w.x===u.x && w.y===u.y && !isWormHidden(w));
       const hit=overlapping && Math.random()<WORM_EAT_CHANCE;
       if(hit){
         addLog((house===ph?'⚠ Your':"House "+house.name+"'s")+' '+u.type+' is swallowed as a sandworm erupts from the dune'+(u.carrying>0?' (lost '+Math.floor(u.carrying)+' spice)':'')+'.');
@@ -2945,7 +2960,7 @@ function newGame(chosenId, rivalId){
     let x,y,tries=0;
     do{ x=Math.floor(Math.random()*MAPW); y=Math.floor(Math.random()*MAPH); tries++; }
     while(tries<50 && (!wormPassable(x,y) || isNearBase(x,y,10)));
-    state.worms.push({x,y,rest:0,dir:0,frame:0,sprite:null});
+    state.worms.push({x,y,rest:0,dir:0,frame:0,sprite:null,hiddenUntil:0,nextVanishCheck:performance.now()+WORM_VANISH_CYCLE_MS});
   }
 }
 async function start(chosenId, rivalId){
