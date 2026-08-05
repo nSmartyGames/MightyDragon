@@ -104,11 +104,14 @@
   .overlay-base p{font-size:13px; color:var(--sand-2); line-height:1.6;}
   .overlay-base .sub2{font-size:12px;}
   .overlay-base button{margin:16px auto 0; justify-content:center;}
-  .greetCard{ max-width:340px; }
+  .greetCard{ max-width:380px; }
   #houseGreetAvatar{
     width:160px; height:160px; image-rendering:pixelated; border:2px solid var(--rust);
     border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.5);
   }
+  /* Fixed-height caption so the card doesn't jump size as the story's
+     lines (greeting, then each narrated beat) swap in one at a time. */
+  #houseGreetLine{ min-height:3.2em; }
   .hint{font-size:10px; color:#6b5636; margin-top:6px;}
   .legend{ display:flex; gap:10px; font-size:10px; color:var(--sand-2); margin-top:6px; flex-wrap:wrap; }
   .legend span{display:flex; align-items:center; gap:4px;}
@@ -342,9 +345,18 @@ const DEFEND_ALERT_RADIUS=12; // idle friendly combat units this close to a hit 
 
 // ================= the three Great Houses =================
 const HOUSE_DEFS=[
-  { id:'horicus',    name:'Horicus',    headName:'Kestrel Horicus',  color:0xc1441e, colorCss:'#c1441e', tagline:'Fire-forged raiders of the southern flats — aggressive and resilient in a fight.' },
-  { id:'andromedus', name:'Andromedus', headName:'Selvane Andromedus', color:0x3d6a9a, colorCss:'#3d6a9a', tagline:'Star-charting merchants who out-trade every rival and out-build every siege.' },
-  { id:'catarnicus', name:'Catarnicus', headName:'Threll Catarnicus', color:0x4a8a3a, colorCss:'#4a8a3a', tagline:'Venom-blooded strategists — patient for a hundred turns, merciless on the hundred-and-first.' }
+  { id:'horicus',    name:'Horicus',    headName:'Kestrel Horicus',  color:0xc1441e, colorCss:'#c1441e', tagline:'Fire-forged raiders of the southern flats — aggressive and resilient in a fight.',
+    story:[ 'Long ago, the southern flats burned, and House Horicus rose from the ash to rule them.',
+            'We do not hide behind walls, heir. We strike first, and we strike hard.',
+            'Prove your fire is hotter than the desert\'s, and the Spice Throne will remember your name.' ] },
+  { id:'andromedus', name:'Andromedus', headName:'Selvane Andromedus', color:0x3d6a9a, colorCss:'#3d6a9a', tagline:'Star-charting merchants who out-trade every rival and out-build every siege.',
+    story:[ 'Our ancestors read the stars to chart the spice roads no other House dared cross.',
+            'Where others spend blood, we spend silver — and build fortunes that outlast empires.',
+            'Trade wisely, heir, and even the Spice Throne itself can be bought.' ] },
+  { id:'catarnicus', name:'Catarnicus', headName:'Threll Catarnicus', color:0x4a8a3a, colorCss:'#4a8a3a', tagline:'Venom-blooded strategists — patient for a hundred turns, merciless on the hundred-and-first.',
+    story:[ 'The desert taught House Catarnicus patience — venom does not strike until it is certain.',
+            'We have outlasted a hundred rivals who mistook our silence for weakness.',
+            'Wait, watch, and when the moment comes, heir, do not hesitate.' ] }
 ];
 const HOUSE_SPAWNS={ horicus:{x:10,y:90}, andromedus:{x:90,y:90}, catarnicus:{x:50,y:10} };
 const HOUSE_PERSONALITY={
@@ -2828,11 +2840,13 @@ function pickDeepMaleVoice(){
   });
 }
 // The house head's talking-head portrait greets the player right after they
-// pick their House: speaks (Web Speech API, pitched deep/guttural with a
-// non-US accented voice where available) "Hello, <head>. House <name>."
-// while cycling the 10-frame talk animation, with the line also shown as an
-// on-screen caption. Falls back to just the caption+portrait, auto-advancing
-// after a beat, if speech synthesis isn't available.
+// pick their House, then tells the House's short origin story: a greeting
+// line followed by hd.story's lines, spoken one at a time (Web Speech API,
+// pitched deep/guttural with a non-US accented voice where available) while
+// each line is also shown as an on-screen caption, subtitle-style, and the
+// 10-frame talk animation runs continuously across the whole sequence.
+// Falls back to just cycling the captions on a timer if speech synthesis
+// isn't available.
 let greetMouthTimer=null;
 async function showHouseGreeting(houseId, onDone){
   ensureAudio();
@@ -2842,11 +2856,11 @@ async function showHouseGreeting(houseId, onDone){
   const nameEl=document.getElementById('houseGreetName');
   const lineEl=document.getElementById('houseGreetLine');
   const skipBtn=document.getElementById('houseGreetSkip');
-  const line='Hello, '+hd.headName+'. House '+hd.name+'.';
+  const lines=['Hello, '+hd.headName+'. House '+hd.name+'.'].concat(hd.story||[]);
   avatar.src=frames[0];
   nameEl.textContent=hd.headName;
   nameEl.style.color=hd.colorCss;
-  lineEl.textContent=line;
+  lineEl.textContent=lines[0];
   document.getElementById('houseOverlay').style.display='none';
   document.getElementById('houseGreetOverlay').style.display='flex';
 
@@ -2863,26 +2877,43 @@ async function showHouseGreeting(houseId, onDone){
   skipBtn.onclick=finish;
 
   if(window.speechSynthesis){
-    const utter=new SpeechSynthesisUtterance(line);
-    utter.rate=0.8;    // slow, weighty cadence
-    utter.pitch=0.35;  // deep, guttural
-    utter.volume=1;
     const voice=await pickDeepMaleVoice();
-    if(voice) utter.voice=voice;
-    if(finished) return; // Continue was clicked while voices were loading
-    utter.onstart=()=>{
-      let i=0;
-      greetMouthTimer=setInterval(()=>{ avatar.src=frames[i]; i=(i+1)%frames.length; }, 100);
+    if(finished) return; // Continue was clicked while the voice was loading
+    let idx=0;
+    const speakNext=()=>{
+      if(finished) return;
+      if(idx>=lines.length){ finish(); return; }
+      lineEl.textContent=lines[idx];
+      const utter=new SpeechSynthesisUtterance(lines[idx]);
+      utter.rate=0.8;    // slow, weighty cadence
+      utter.pitch=0.35;  // deep, guttural
+      utter.volume=1;
+      if(voice) utter.voice=voice;
+      utter.onstart=()=>{
+        if(!greetMouthTimer){
+          let i=0;
+          greetMouthTimer=setInterval(()=>{ avatar.src=frames[i]; i=(i+1)%frames.length; }, 100);
+        }
+      };
+      utter.onend=()=>{ idx++; speakNext(); };
+      utter.onerror=()=>{ idx++; speakNext(); };
+      speechSynthesis.speak(utter);
     };
-    utter.onend=()=>{ finish(); };
-    utter.onerror=()=>{ finish(); };
     speechSynthesis.cancel();
-    speechSynthesis.speak(utter);
+    speakNext();
     // Safety net: some browsers silently drop utterances (muted tab, no
-    // voices installed) without ever firing onend, so don't strand the player.
-    setTimeout(()=>{ if(!finished) finish(); }, 6000);
+    // voices installed) without ever firing onend, so don't strand the
+    // player — scales with the number of lines still to be spoken.
+    setTimeout(()=>{ if(!finished) finish(); }, 4000*lines.length);
   } else {
-    setTimeout(finish, 1800);
+    let idx=0;
+    const showNext=()=>{
+      if(finished) return;
+      if(idx>=lines.length){ finish(); return; }
+      lineEl.textContent=lines[idx]; idx++;
+      setTimeout(showNext, 1800);
+    };
+    showNext();
   }
 }
 function showHouseSelect(){
