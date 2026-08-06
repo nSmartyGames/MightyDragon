@@ -192,6 +192,8 @@
 
 <div id="loadErr">Graphics library failed to load — check your network connection and reload the page.</div>
 
+<audio id="bgMusic" src="audio/ironmarch.mp3" loop preload="auto"></audio>
+
 <div id="hudBar">
   <div class="hudRow">
     <span id="gameTitle" class="houseTag">Galacticus <span id="gameClock">00:00</span></span>
@@ -411,81 +413,23 @@ function ensureAudio(){
   if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
 }
 
-// Free background soundtrack: entirely procedurally composed at runtime
-// with the Web Audio API (drone pad + wind bed + a generative desert-scale
-// melody below), the same way the SFX above are synthesized. Nothing here
-// is a licensed/external audio asset, so there's no rights-clearance concern
-// ever — it's 100% original, generated code. Started on the same user
-// gesture that unlocks audioCtx, so autoplay restrictions never bite.
-let musicGain=null, musicStarted=false, musicOn=true;
+// Background soundtrack: a looping local audio file (vendored into
+// audio/ironmarch.mp3, no external host/CDN to depend on), played at half
+// volume. Started on the same user gesture that unlocks audioCtx, so
+// autoplay restrictions never bite.
+const MUSIC_VOLUME=0.5;
+const bgMusic=document.getElementById('bgMusic');
+let musicStarted=false, musicOn=true;
+bgMusic.volume=MUSIC_VOLUME;
 function startMusic(){
-  if(!audioCtx || musicStarted) return;
+  if(musicStarted) return;
   musicStarted=true;
-  musicGain=audioCtx.createGain();
-  musicGain.gain.value=musicOn?0.07:0;
-  musicGain.connect(audioCtx.destination);
-
-  // Two detuned low drones (open fifth) give a slow, mournful pad.
-  [55,82.5].forEach((freq,i)=>{
-    const osc=audioCtx.createOscillator();
-    osc.type='sawtooth'; osc.frequency.value=freq;
-    const filter=audioCtx.createBiquadFilter();
-    filter.type='lowpass'; filter.frequency.value=260+i*50;
-    const g=audioCtx.createGain(); g.gain.value=0.5;
-    osc.connect(filter); filter.connect(g); g.connect(musicGain);
-    osc.start();
-  });
-
-  // Slow LFO sweeps a bandpassed noise bed's frequency, like wind gusting over dunes.
-  const bufSize=audioCtx.sampleRate*4;
-  const buf=audioCtx.createBuffer(1,bufSize,audioCtx.sampleRate);
-  const data=buf.getChannelData(0);
-  let last=0;
-  for(let i=0;i<bufSize;i++){ const white=Math.random()*2-1; last=(last+0.02*white)/1.02; data[i]=last*3.5; }
-  const noise=audioCtx.createBufferSource(); noise.buffer=buf; noise.loop=true;
-  const noiseFilter=audioCtx.createBiquadFilter();
-  noiseFilter.type='bandpass'; noiseFilter.frequency.value=500; noiseFilter.Q.value=0.7;
-  const noiseGain=audioCtx.createGain(); noiseGain.gain.value=0.4;
-  noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(musicGain);
-  noise.start();
-
-  const lfo=audioCtx.createOscillator(); lfo.frequency.value=0.045;
-  const lfoGain=audioCtx.createGain(); lfoGain.gain.value=150;
-  lfo.connect(lfoGain); lfoGain.connect(noiseFilter.frequency);
-  lfo.start();
-
-  // Generative melody: plucked notes drawn at random from an A Phrygian
-  // dominant scale (the "exotic/desert" scale — half-step then stacked
-  // major intervals) give it a Dune-ish modal feel without ever repeating
-  // the exact same tune twice. Each pluck is fed through a short feedback
-  // delay for atmosphere. Routed through musicGain so the mute toggle
-  // silences it along with the drone.
-  const melodyDelay=audioCtx.createDelay(1.0);
-  melodyDelay.delayTime.value=0.42;
-  const melodyFeedback=audioCtx.createGain(); melodyFeedback.gain.value=0.3;
-  melodyDelay.connect(melodyFeedback); melodyFeedback.connect(melodyDelay);
-  melodyDelay.connect(musicGain);
-  const SCALE=[220.00,233.08,277.18,293.66,329.63,349.23,392.00,440.00];
-  function pluckNote(freq,t){
-    const osc=audioCtx.createOscillator(), g=audioCtx.createGain();
-    osc.type='triangle'; osc.frequency.value=freq;
-    g.gain.setValueAtTime(0.0001,t);
-    g.gain.linearRampToValueAtTime(0.11,t+0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001,t+1.1);
-    osc.connect(g); g.connect(musicGain); g.connect(melodyDelay);
-    osc.start(t); osc.stop(t+1.2);
-  }
-  (function scheduleMelody(){
-    if(!musicStarted) return;
-    if(audioCtx.state==='running'){
-      pluckNote(SCALE[Math.floor(Math.random()*SCALE.length)], audioCtx.currentTime+0.05);
-    }
-    setTimeout(scheduleMelody, 1400+Math.random()*1800);
-  })();
+  bgMusic.volume=musicOn?MUSIC_VOLUME:0;
+  bgMusic.play().catch(()=>{}); // ignored: browser autoplay policy edge cases, not fatal
 }
 function toggleMusic(){
   musicOn=!musicOn;
-  if(musicGain) musicGain.gain.setTargetAtTime(musicOn?0.07:0, audioCtx.currentTime, 0.3);
+  bgMusic.volume=musicOn?MUSIC_VOLUME:0;
   const btn=document.getElementById('musicToggle');
   if(btn) btn.textContent=musicOn?'🔊':'🔇';
 }
