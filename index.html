@@ -411,9 +411,11 @@ function ensureAudio(){
   if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
 }
 
-// Free background music: a synthesized desert-wind drone (no external audio
-// file/license to worry about), built the same way the SFX above are —
-// oscillators + filtered noise through Web Audio. Started on the same user
+// Free background soundtrack: entirely procedurally composed at runtime
+// with the Web Audio API (drone pad + wind bed + a generative desert-scale
+// melody below), the same way the SFX above are synthesized. Nothing here
+// is a licensed/external audio asset, so there's no rights-clearance concern
+// ever — it's 100% original, generated code. Started on the same user
 // gesture that unlocks audioCtx, so autoplay restrictions never bite.
 let musicGain=null, musicStarted=false, musicOn=true;
 function startMusic(){
@@ -451,6 +453,35 @@ function startMusic(){
   const lfoGain=audioCtx.createGain(); lfoGain.gain.value=150;
   lfo.connect(lfoGain); lfoGain.connect(noiseFilter.frequency);
   lfo.start();
+
+  // Generative melody: plucked notes drawn at random from an A Phrygian
+  // dominant scale (the "exotic/desert" scale — half-step then stacked
+  // major intervals) give it a Dune-ish modal feel without ever repeating
+  // the exact same tune twice. Each pluck is fed through a short feedback
+  // delay for atmosphere. Routed through musicGain so the mute toggle
+  // silences it along with the drone.
+  const melodyDelay=audioCtx.createDelay(1.0);
+  melodyDelay.delayTime.value=0.42;
+  const melodyFeedback=audioCtx.createGain(); melodyFeedback.gain.value=0.3;
+  melodyDelay.connect(melodyFeedback); melodyFeedback.connect(melodyDelay);
+  melodyDelay.connect(musicGain);
+  const SCALE=[220.00,233.08,277.18,293.66,329.63,349.23,392.00,440.00];
+  function pluckNote(freq,t){
+    const osc=audioCtx.createOscillator(), g=audioCtx.createGain();
+    osc.type='triangle'; osc.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.linearRampToValueAtTime(0.11,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+1.1);
+    osc.connect(g); g.connect(musicGain); g.connect(melodyDelay);
+    osc.start(t); osc.stop(t+1.2);
+  }
+  (function scheduleMelody(){
+    if(!musicStarted) return;
+    if(audioCtx.state==='running'){
+      pluckNote(SCALE[Math.floor(Math.random()*SCALE.length)], audioCtx.currentTime+0.05);
+    }
+    setTimeout(scheduleMelody, 1400+Math.random()*1800);
+  })();
 }
 function toggleMusic(){
   musicOn=!musicOn;
@@ -496,6 +527,31 @@ function playDestructionSound(){
   nGain.gain.exponentialRampToValueAtTime(0.001,t0+0.3);
   noise.connect(nGain); nGain.connect(audioCtx.destination);
   noise.start(t0);
+}
+// A soft physical thud (something touching down) followed by a bright
+// two-note rising chime (construction confirmed) — distinct from the harsher
+// fire/destruction SFX above, played for any house's building placement.
+function playBuildSound(){
+  if(!audioCtx) return;
+  const t0=audioCtx.currentTime;
+  const thud=audioCtx.createOscillator(), thudGain=audioCtx.createGain();
+  thud.type='sine';
+  thud.frequency.setValueAtTime(180,t0);
+  thud.frequency.exponentialRampToValueAtTime(60,t0+0.09);
+  thudGain.gain.setValueAtTime(0.22,t0);
+  thudGain.gain.exponentialRampToValueAtTime(0.001,t0+0.1);
+  thud.connect(thudGain); thudGain.connect(audioCtx.destination);
+  thud.start(t0); thud.stop(t0+0.11);
+  [[520,0.05],[780,0.13]].forEach(([freq,delay])=>{
+    const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+    osc.type='triangle'; osc.frequency.value=freq;
+    const start=t0+delay;
+    gain.gain.setValueAtTime(0.001,start);
+    gain.gain.linearRampToValueAtTime(0.14,start+0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001,start+0.16);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(start); osc.stop(start+0.18);
+  });
 }
 
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
@@ -2445,6 +2501,7 @@ function handleBoardClick(e){
           ph.spice-=cost;
           if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); ph.power+=TURBINE_DMG_BONUS; addLog('Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'); }
           else { buildingMap.set(key,{x,y,type:'silo',owner:ph.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
+          playBuildSound();
           redrawSpiceAndBuildings();
         }
       }
@@ -2473,6 +2530,7 @@ function handleBoardClick(e){
         const freeHarvester=makeUnit(ph.id,'harvester',spawn.x,spawn.y);
         ph.units.push(freeHarvester); ensureSprite(freeHarvester);
         addLog('Refinery constructed — capacity +'+REFINERY_CAP_BONUS+', a new harvester joins the fleet.');
+        playBuildSound();
         redrawSpiceAndBuildings();
       }
     }
@@ -2773,6 +2831,7 @@ function applyRemoteCommand(msg){
       house.spice-=cost;
       if(msg.kind==='buildTurbine'){ buildingMap.set(key,{x:msg.x,y:msg.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); house.power+=TURBINE_DMG_BONUS; addLog('House '+house.name+' raises a wind turbine.'); }
       else { buildingMap.set(key,{x:msg.x,y:msg.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); house.cap+=SILO_CAP_BONUS; addLog('House '+house.name+' builds a silo.'); }
+      playBuildSound();
       redrawSpiceAndBuildings();
     }
   } else if(msg.kind==='buildRefinery'){
@@ -2792,6 +2851,7 @@ function applyRemoteCommand(msg){
       const freeHarvester=makeUnit(house.id,'harvester',spawn.x,spawn.y);
       house.units.push(freeHarvester); ensureSprite(freeHarvester);
       addLog('House '+house.name+' completes a refinery.');
+      playBuildSound();
       redrawSpiceAndBuildings();
     }
   }
