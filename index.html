@@ -141,6 +141,8 @@
     user-select:none; font-weight:bold; width:fit-content;
   }
   .hint-text{ padding:0 8px 6px 8px; }
+  .hint-text>div{ margin-top:4px; }
+  .hint-text>div:first-child{ margin-top:0; }
   /* Collapsed = just the "H▸" bar; higher specificity than .hint so it
      wins over the max-width:60% mobile override below. */
   .hint.collapsed{ max-width:none; }
@@ -272,7 +274,15 @@
     </div>
     <div class="hint collapsed" id="hintBox">
       <div class="hint-bar" id="hintBar" title="Toggle help"><span>H</span><span id="hintArrow">▸</span></div>
-      <div class="hint-text">Click a vehicle to select it, or hold Shift and drag a box to select several at once — the cursor becomes a target reticle. Click a tile to move there, or click an enemy to attack it; the Attack button arms targeting mode for a group, Search &amp; Destroy sends units hunting for any nearby enemy on their own, Retreat pulls them back to the stronghold. Building buttons ask for a grass or desert tile to place on. Drag the map (without Shift) or use arrow keys to scroll, or click the minimap to jump there — fog clears as your units explore. Troopers drain 10 power points per shot, tanks drain 20 every 2 seconds (each wind turbine adds +5 to every shot) — reduce a stronghold's 10k power to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted; troopers and tanks can never enter one, only fight adjacent to it. A refinery holds as much as 4 silos and comes with a free harvester. Sandworms only have a 1-in-5 chance of swallowing a unit that shares their tile, and give up the chase after 5 seconds. A hit on your units, buildings, or stronghold auto-rallies nearby idle troops and tanks to Search &amp; Destroy.</div>
+      <div class="hint-text">
+        <div>Click a unit to select it, Shift+drag to box-select several. Click a tile to move, an enemy to attack.</div>
+        <div>Attack arms group targeting. Search &amp; Destroy auto-hunts nearby enemies. Retreat pulls units back to base.</div>
+        <div>Buildings need a clear grass or desert tile.</div>
+        <div>Drag the map, use arrow keys, or click the minimap to scroll. Fog clears as you explore.</div>
+        <div>Troopers drain 10 power/shot, tanks 20/2s (turbines add +5). Drain a stronghold's 10k power to eliminate it.</div>
+        <div>Harvesters unload at a silo or refinery — build one or spice is wasted. A refinery = 4 silos plus a free harvester.</div>
+        <div>Troopers and tanks fight refineries adjacent, never enter them. Sandworms have a 1-in-5 swallow chance and give up after 5s. A hit auto-rallies idle units to Search &amp; Destroy.</div>
+      </div>
     </div>
   </div>
 </div>
@@ -289,7 +299,7 @@
 <div id="onlineOverlay" class="overlay-base">
   <div class="card">
     <h2>Play Online</h2>
-    <p class="sub2" id="onlineIntro">Create a room and send the code to a friend, or join theirs. Both sides then pick a House and the duel begins — no fog of war in online matches yet.</p>
+    <p class="sub2" id="onlineIntro">Create a room and send the code to a friend, or join theirs. Both sides pick a House, then the duel begins.</p>
     <div id="onlineChoice">
       <button id="onlineCreate" style="justify-content:center;">Create Room ▶</button>
       <button id="onlineJoin" style="justify-content:center; margin-top:8px;">Join Room ▶</button>
@@ -746,14 +756,26 @@ function renderFogBuffer(){
   mcx.fillStyle='#000000';
   for(let y=0;y<MAPH;y++){
     const erow=explored[y];
+    const up=y>0?explored[y-1]:null, down=y<MAPH-1?explored[y+1]:null;
     for(let x=0;x<MAPW;x++){
-      if(!erow[x]) mcx.fillRect(x*TILE,y*TILE,TILE,TILE);
+      if(erow[x]) continue;
+      // Rasterizing a circular reveal onto a square grid leaves stray
+      // single-tile fog gaps surrounded by explored ground — visual noise,
+      // not meaningful fog, that turns into ugly blotches once blurred.
+      // Drop any unexplored tile with 3+ explored orthogonal neighbors.
+      let exploredNeighbors=0;
+      if(erow[x-1]) exploredNeighbors++;
+      if(erow[x+1]) exploredNeighbors++;
+      if(up && up[x]) exploredNeighbors++;
+      if(down && down[x]) exploredNeighbors++;
+      if(exploredNeighbors>=3) continue;
+      mcx.fillRect(x*TILE,y*TILE,TILE,TILE);
     }
   }
   if(!fogBuffer) fogBuffer=p5FogInstance.createGraphics(bw,bh);
   const cx=fogBuffer.drawingContext;
   cx.clearRect(0,0,bw,bh);
-  cx.filter='blur(6px)';
+  cx.filter='blur(10px)';
   cx.drawImage(fogMaskCanvas,0,0);
   cx.filter='none';
 }
@@ -3107,7 +3129,7 @@ function applyMpInit(msg){
   terrain=msg.terrain;
   buildingMap=new Map(msg.buildingMap);
   spiceMap=new Map(msg.spiceMap.map(dep=>[dep.x+','+dep.y, dep]));
-  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(true)); // no fog online
+  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(false));
   state={
     startTime:performance.now(), log:[], selectedUnits:[],
     worms:msg.worms.map(w=>({x:w.x,y:w.y,rest:w.rest||0,dir:w.dir||0,frame:0,sprite:null})),
@@ -3119,6 +3141,8 @@ function applyMpInit(msg){
   selectionRings=[]; activeFx=[];
   syncAllSprites();
   const ph=playerHouse();
+  revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
+  ph.units.forEach(u=>revealAround(u.x,u.y,VISION_RADIUS));
   centerCameraOn(ph.base.x, ph.base.y);
   renderStats(); renderLog(); updateClock(); renderMinimap();
 }
@@ -3157,6 +3181,10 @@ function applyMpSnapshot(msg){
     if(w.sprite){ w.sprite.x=w.x*SZ+SZ/2; w.sprite.y=w.y*SZ+SZ/2; }
   });
   state.log=msg.log;
+  // The client never runs gameTick (only the host simulates), so its own
+  // vision has to be revealed here instead, once per snapshot, around its
+  // own units only — same rule as the host's gameTick reveal.
+  playerHouse().units.forEach(u=>revealAround(u.x,u.y,VISION_RADIUS));
   syncAllSprites();
   redrawSpiceAndBuildings();
   renderStats(); renderLog(); renderMinimap(); updateClock();
@@ -3420,11 +3448,10 @@ function newGame(chosenId, rivalId){
   generateTerrain();
   activeDefs.forEach(hd=>{ const sp=HOUSE_SPAWNS[hd.id]; carveGrassArea(sp.x,sp.y,7); });
   buildingMap=new Map();
-  // Online matches have no fog of war yet (each side would need its own
-  // vision grid — a bigger change deferred for later) — both sides just see
-  // everything from the start.
-  const noFog=!!mp;
-  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(noFog));
+  // Fog of war on for everyone, single-player or online — each side reveals
+  // tiles around its own units only (see revealAround calls in gameTick and,
+  // for the online client, applyMpInit/applyMpSnapshot).
+  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(false));
   state={
     startTime:performance.now(), log:[], selectedUnits:[],
     worms:[],
