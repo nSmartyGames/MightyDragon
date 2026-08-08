@@ -2519,6 +2519,16 @@ function spawnAttackFx(u,targetX,targetY){
 function alertNearbyDefenders(house,x,y){
   house.units.forEach(u=>{
     if(!isCombatUnit(u)) return;
+    // Flyers never auto-scramble off this passive alert — they only fight
+    // when explicitly ordered (or already mid-engagement), and once a
+    // strafing run sends one home it stays parked. A base under sustained
+    // fire re-alerts on every single hit; a parked jet's move order clears
+    // to null the instant it lands, so without this exclusion the very next
+    // hit would read it as idle and sweep it right back into 'engage' —
+    // "parked" has to mean immune to auto-launch, not just protected
+    // mid-flight (which a one-tick order.kind check can't tell apart from
+    // a freshly-landed, genuinely-idle jet).
+    if(isFlyer(u.type)) return;
     if(u.order && u.order.kind==='attack') return; // already committed to a specific fight
     const d=Math.max(Math.abs(u.x-x),Math.abs(u.y-y));
     if(d<=DEFEND_ALERT_RADIUS) u.order={kind:'engage'};
@@ -2698,6 +2708,30 @@ function stepHouseUnits(house){
     if(!u.order || u.moving) return;
     if(u.order.kind==='engage'){
       if(!isCombatUnit(u)){ u.order=null; return; }
+      // A flyer whose specific Attack-order target died en route (or was
+      // never given one) can land here via alertNearbyDefenders sweeping up
+      // idle combat units during a raid — Search & Destroy is meant to be a
+      // standing stance, but for jets/bombers that would defeat the one-pass
+      // strafing-run behavior below just as much as leaving Attack orders
+      // unpatched would, so the same immediate-RTB rule applies here too.
+      if(isFlyer(u.type)){
+        const t=findEngageTarget(house,u);
+        if(t){
+          const dist=Math.max(Math.abs(u.x-t.x),Math.abs(u.y-t.y));
+          if(dist<=1){
+            const prevAttackAt=u._lastAttack;
+            if(t.kind==='building') applyBuildingAttack(house,u,t.targetHouse,t.buildingKey);
+            else applyCombatUnitAttack(house,u,t.targetHouse,t.targetUnit,t.kind==='base');
+            if(u._lastAttack!==prevAttackAt){
+              const home=findOwnedAirport(house)||house.base;
+              const spot=findFreeSpawnTile(home.x,home.y);
+              u.order={kind:'move', x:spot.x, y:spot.y};
+            }
+          } else if(t.kind==='unit') stepToward(u,t.x,t.y);
+          else { const ap=approachTile(u.x,u.y,t.x,t.y); stepToward(u,ap.x,ap.y); }
+        }
+        return;
+      }
       const t=findEngageTarget(house,u);
       if(t){
         const dist=Math.max(Math.abs(u.x-t.x),Math.abs(u.y-t.y));
@@ -2735,10 +2769,22 @@ function stepHouseUnits(house){
       const dist=Math.max(Math.abs(u.x-tx),Math.abs(u.y-ty));
       if(dist<=1){
         if(!isCombatUnit(u)){ u.order=null; return; }
+        const prevAttackAt=u._lastAttack;
         const killed = buildingKey
           ? applyBuildingAttack(house,u,targetHouse,buildingKey)
           : applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase);
-        if(killed) u.order=null;
+        // Jets/bombers make one strafing pass per Attack order, not a standing
+        // gunfight like troopers/tanks: once this call actually fires (not
+        // just cooldown-gated — compare _lastAttack, since a miss and "still
+        // on cooldown" both return false from apply*Attack), head home
+        // instead of looping the same attack. If the defender's turret fire
+        // catches it before it clears the area, it's simply gone from
+        // house.units by the time this runs again — no special-casing needed.
+        if(isFlyer(u.type) && u._lastAttack!==prevAttackAt){
+          const home=findOwnedAirport(house)||house.base;
+          const spot=findFreeSpawnTile(home.x,home.y);
+          u.order={kind:'move', x:spot.x, y:spot.y};
+        } else if(killed) u.order=null;
       } else if(targetUnit){
         stepToward(u,tx,ty);
       } else {
