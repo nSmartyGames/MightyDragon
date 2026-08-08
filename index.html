@@ -160,7 +160,10 @@
   }
   /* Fixed to the board's top-left corner rather than anchored next to the
      selected unit, so it never covers the nearby tiles/enemies the new
-     click-to-move-or-attack interaction relies on clicking. */
+     click-to-move-or-attack interaction relies on clicking. top:8px here is
+     only a pre-JS fallback — #hudBar floats fixed above the board with a
+     higher z-index, so openCtxMenuFor() overwrites top on every open to sit
+     just below hudBar's actual rendered height instead of under it. */
   #ctxMenu{
     position:absolute; top:8px; left:8px; display:none; flex-direction:column;
     background:#241609; border:1px solid var(--rust); border-radius:4px;
@@ -3047,6 +3050,12 @@ function openCtxMenuFor(){
   const anyCombat=sel.some(isCombatUnit);
   document.getElementById('ctxAttack').style.display=anyCombat?'flex':'none';
   document.getElementById('ctxEngage').style.display=anyCombat?'flex':'none';
+  // #hudBar (title/stats row + the #log history bar) is a fixed, floating
+  // header with a higher z-index than ctxMenu's hardcoded top:8px, so the
+  // menu used to render right underneath it, hidden. hudBar's height isn't
+  // fixed (it can wrap), so read its real rendered bottom edge each time
+  // instead of hardcoding a taller offset that could still be wrong.
+  ctxMenu.style.top=(document.getElementById('hudBar').getBoundingClientRect().bottom+8)+'px';
   ctxMenu.style.display='flex'; modeHint.textContent='Click a tile to move, or an enemy to attack'; modeHint.style.display='block';
 }
 document.getElementById('ctxAttack').onclick=()=>{
