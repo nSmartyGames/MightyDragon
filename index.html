@@ -3192,7 +3192,12 @@ function dropFromSelection(u){
 // menu step needed. The context menu also offers an explicit Attack mode
 // (for clarity commanding a group), the standing Search & Destroy stance,
 // and Retreat.
-function selectUnit(u){ selectUnits([u]); openUnitPreview(u); }
+// openUnitPreview used to fire automatically here on every single-unit
+// select, but its full-screen modal renders on top of the action menu
+// selectUnits() just opened — right when a player most wants to give a
+// command (Attack/Retreat/etc.), the menu is invisible behind the preview
+// until it's closed or times out. Selecting a unit now only opens the menu.
+function selectUnit(u){ selectUnits([u]); }
 function selectUnits(units){
   state.selectedUnits=units; uiMode=null; updateSelectionRing();
   boardHost.classList.add('targeting'); openCtxMenuFor();
