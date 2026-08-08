@@ -107,6 +107,7 @@
   #buildAirport{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="2" y="6.5" width="12" height="3" fill="%23ffffff"/><rect x="4" y="7.6" width="1.8" height="0.8" fill="%23888"/><rect x="7.5" y="7.6" width="1.8" height="0.8" fill="%23888"/><rect x="11" y="7.6" width="1.8" height="0.8" fill="%23888"/></svg>'); }
   #recruitJet{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1 L10 8 L14 12 L8 10 L2 12 L6 8 Z" fill="%23ffffff"/></svg>'); }
   #recruitBomber{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="7" y="1" width="2" height="12" fill="%23e0e0e0"/><path d="M8 4 L15 10 L8 8.5 L1 10 Z" fill="%23e0e0e0"/><circle cx="8" cy="12" r="1.3" fill="%23555555"/></svg>'); }
+  #buildTurret{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="9" r="5" fill="%23ffffff"/><rect x="7" y="2" width="2" height="6" fill="%23e0e0e0"/><circle cx="8" cy="9" r="1.8" fill="%23888"/></svg>'); }
   .iconSpice{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAnElEQVR4nM2Suw0EIQxEhyuHVkwtiFIoBlohNKV4IxACe4/ggptwxBv/AP5epRS58UyYmWUFSikiItNzbzARofcOAGitAQCIaL6ptdrwEDNLjHF2snfwsSrvyjnDez8rhxDcEWDBWsjQDPgG7yHHCCEEZy5lUUoJrTV9BOBlswpsjqCFaPDUerZxouEx8/GZVO33Hd4VvAI33k/1AAM6uACEHTo3AAAAAElFTkSuQmCC'); }
   .iconCapacity{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAi0lEQVR4nN2SsRXDIAxEv/O8CMswDjAKj1moNAgtoziV/QgI7BRpchXijtMhgAVyzseKB9gAnHOD0Fp7rUVEPZxS2vazCCEMglIKIqJyMUYAXqt4s84tBoPTWYPG7f1GG7ePrl1lMDDGTBMA1Fo/6uUMnuAfDbz3U7HGqc/YT7rlbhN8iyvB6gf+FG8TqylG5bxpTQAAAABJRU5ErkJggg=='); }
   .iconPower{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaklEQVR4nM2SQQrAIAwEN6XvTb4SP+hXtpdaaNFEsIXOSYkZNioQwJPozBYVZ1gWyKiQRRcRAYB91Gxm176UMheHD1Q1vcRQQJK11lBwG6HN1ciagT8843cCVWVv/XqC7kdquHsqWE6wzAGHm0qrAAzDnwAAAABJRU5ErkJggg=='); }
@@ -277,6 +278,7 @@
         <button id="buildSilo" class="iconBtn" title="Silo — 70 spice"><span class="costBadge">70</span></button>
         <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice"><span class="costBadge">110</span></button>
         <button id="buildAirport" class="iconBtn" title="Airport — 190 spice"><span class="costBadge">190</span></button>
+        <button id="buildTurret" class="iconBtn" title="Turret — 90 spice"><span class="costBadge">90</span></button>
         <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice"><span class="costBadge">25</span></button>
         <button id="recruitJet" class="iconBtn" title="Fighter jet — 130 spice, needs an airport, 5min build"><span class="costBadge">130</span></button>
         <button id="recruitBomber" class="iconBtn" title="Cluster bomber — 220 spice, needs an airport, 5min build"><span class="costBadge">220</span></button>
@@ -411,13 +413,17 @@ const BASE_HP_MAX=10000; // stronghold "power points"
 const TROOP_SHOT_DMG=10; // one trooper shot drains 10 power points, from a base or a unit
 const TANK_SHOT_DMG=20; // one tank shot drains 20 power points
 const TANK_ATTACK_COOLDOWN_MS=2000; // tanks fire once every 2 seconds
-const JET_SHOT_DMG=14; const JET_ATTACK_COOLDOWN_MS=650; // fast, light strafing runs
-const BOMBER_SHOT_DMG=18; const BOMBER_ATTACK_COOLDOWN_MS=2600; // slow, heavy payload
+const JET_ATTACK_COOLDOWN_MS=650; // fast, light strafing runs
+const BOMBER_ATTACK_COOLDOWN_MS=2600; // slow, heavy payload
+const AIR_SHOT_DMG=100, AIR_SHOTS_PER_BURST=3, AIR_HIT_CHANCE=0.5;
 const BOMBER_AOE_RADIUS=2, BOMBER_AOE_DMG=15; // cluster bomb splash on every enemy in radius of the impact tile
 const TURBINE_DMG_BONUS=5; // each wind turbine adds +5 damage to every shot the house's units fire
 // Building hit points — much softer than the 10000hp stronghold, so a raid
 // that reaches the interior of a base can actually knock out its economy.
-const BUILDING_HP={ turbine:350, silo:450, refinery:450, airport:500 };
+const BUILDING_HP={ turbine:350, silo:450, refinery:450, airport:500, turret:400 };
+const TURRET_COST=90;
+const TURRET_DMG=150, TURRET_COOLDOWN_MS=2000;
+const TURRET_RANGE=5;
 // Jets and bombers are airborne — they never path around mountains or other
 // units/buildings, they fly straight there.
 const FLYER_TYPES={ jet:true, bomber:true };
@@ -2219,6 +2225,7 @@ function renderStats(){
   document.getElementById('buildSilo').disabled=ph.spice<SILO_COST || gameOver;
   document.getElementById('buildRefinery').disabled=ph.spice<REFINERY_COST || gameOver;
   document.getElementById('buildAirport').disabled=ph.spice<AIRPORT_COST || gameOver;
+  document.getElementById('buildTurret').disabled=ph.spice<TURRET_COST || gameOver;
   document.getElementById('recruitTroop').disabled=ph.spice<TROOP_COST || gameOver;
   const airportOwned=hasAirport(ph);
   const jetProducing=!!(ph.airProd && ph.airProd.jet);
@@ -2452,8 +2459,9 @@ function harvestAt(u){
 const COMBAT_STATS={
   trooper:{ dmg:TROOP_SHOT_DMG, cooldown:ATTACK_COOLDOWN_MS },
   tank:{ dmg:TANK_SHOT_DMG, cooldown:TANK_ATTACK_COOLDOWN_MS },
-  jet:{ dmg:JET_SHOT_DMG, cooldown:JET_ATTACK_COOLDOWN_MS },
-  bomber:{ dmg:BOMBER_SHOT_DMG, cooldown:BOMBER_ATTACK_COOLDOWN_MS },
+  jet:{ dmg:AIR_SHOT_DMG, cooldown:JET_ATTACK_COOLDOWN_MS },
+  bomber:{ dmg:AIR_SHOT_DMG, cooldown:BOMBER_ATTACK_COOLDOWN_MS },
+  turret:{ dmg:TURRET_DMG, cooldown:TURRET_COOLDOWN_MS },
 };
 function isCombatUnit(u){ return !!COMBAT_STATS[u.type]; }
 function removeUnitVisuals(u){
@@ -2467,7 +2475,7 @@ function removeUnitVisuals(u){
 // Fires the attacker's shot FX at the target's current screen position:
 // a laser+spark for troopers, a lobbed bomb burst for tanks.
 function spawnAttackFx(u,targetX,targetY){
-  if(u.type==='tank' || u.type==='bomber') spawnBombFx(targetX,targetY);
+  if(u.type==='tank' || u.type==='bomber' || u.type==='turret') spawnBombFx(targetX,targetY);
   else if(u.sprite) spawnLaserFx(u.sprite.x,u.sprite.y,targetX,targetY);
   playFireSound();
 }
@@ -2518,7 +2526,18 @@ function applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase){
   u._lastAttack=now; u._lastCombatAt=now;
   // house.power is the sum of that house's wind-turbine bonuses — every shot,
   // trooper or tank, hits harder by that flat amount.
-  const dmg=stats.dmg+(house.power||0);
+  const isAirBurst=(u.type==='jet' || u.type==='bomber');
+  let dmg=0, anyHit=false;
+  const shots=isAirBurst?AIR_SHOTS_PER_BURST:1;
+  for(let i=0;i<shots;i++){
+    if(isAirBurst && Math.random()>=AIR_HIT_CHANCE) continue;
+    anyHit=true;
+    dmg+=stats.dmg+(house.power||0);
+  }
+  if(!anyHit){
+    addLog('House '+house.name+"'s "+u.type+' fires a burst and misses.');
+    return false;
+  }
   if(targetIsBase){
     // Attacks only ever drain stronghold power — a house's banked spice is
     // never touched by combat, no matter what's under fire.
@@ -2572,7 +2591,18 @@ function applyBuildingAttack(house,u,targetHouse,buildingKey){
   const resolved=resolveBuildingTarget(buildingKey);
   if(!resolved) return true; // already destroyed by someone else
   u._lastAttack=now; u._lastCombatAt=now;
-  const dmg=stats.dmg+(house.power||0);
+  const isAirBurst=(u.type==='jet' || u.type==='bomber');
+  let dmg=0, anyHit=false;
+  const shots=isAirBurst?AIR_SHOTS_PER_BURST:1;
+  for(let i=0;i<shots;i++){
+    if(isAirBurst && Math.random()>=AIR_HIT_CHANCE) continue;
+    anyHit=true;
+    dmg+=stats.dmg+(house.power||0);
+  }
+  if(!anyHit){
+    addLog('House '+house.name+"'s "+u.type+' fires a burst and misses.');
+    return false;
+  }
   const b=resolved.b;
   b.hp-=dmg;
   const pos=buildingScreenPos(b);
@@ -2589,6 +2619,7 @@ function applyBuildingAttack(house,u,targetHouse,buildingKey){
     if(b.type==='turbine') targetHouse.power=Math.max(0,targetHouse.power-TURBINE_DMG_BONUS);
     else if(b.type==='silo') targetHouse.cap=Math.max(START_CAP,targetHouse.cap-SILO_CAP_BONUS);
     else if(b.type==='refinery') targetHouse.cap=Math.max(START_CAP,targetHouse.cap-REFINERY_CAP_BONUS);
+    else if(b.type==='turret'){}
     redrawSpiceAndBuildings();
     return true;
   }
@@ -2611,6 +2642,23 @@ function findEngageTarget(house,u){
     if(bd2<=bd){ bd=bd2; best={kind:'base', targetHouse:r, x:r.base.x, y:r.base.y}; }
   });
   return best;
+}
+// Nearest living enemy unit within range — unit-only (no buildings/base),
+// used by turret defense which only ever fires at units.
+function findNearestEnemyUnitInRange(house,x,y,range){
+  let best=null,bd=range;
+  enemyHousesOf(house).forEach(r=>r.units.forEach(t=>{
+    const d=Math.max(Math.abs(x-t.x),Math.abs(y-t.y));
+    if(d<=bd){ bd=d; best={targetHouse:r, targetUnit:t}; }
+  }));
+  return best;
+}
+function tickTurretDefense(house){
+  buildingMap.forEach(b=>{
+    if(b.owner!==house.id || b.type!=='turret') return;
+    const t=findNearestEnemyUnitInRange(house,b.x,b.y,TURRET_RANGE);
+    if(t) applyCombatUnitAttack(house,b,t.targetHouse,t.targetUnit,false);
+  });
 }
 function stepHouseUnits(house){
   house.units.forEach(u=>{
@@ -2812,6 +2860,11 @@ function aiTurnForHouse(house){
       const spot=findFreeTileNear(house.base.x,house.base.y);
       buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo});
       house.spice-=SILO_COST; house.cap+=SILO_CAP_BONUS; spentEcon+=SILO_COST; redrawSpiceAndBuildings();
+    } else if(budget>=TURRET_COST && Math.random()<0.4){
+      const spot=findFreeTileNear(house.base.x,house.base.y);
+      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turret',owner:house.id,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret});
+      house.spice-=TURRET_COST; spentEcon+=TURRET_COST; redrawSpiceAndBuildings();
+      addLog('House '+house.name+' builds a turret.');
     } else if(!hasAirport(house) && budget>=AIRPORT_COST && Math.random()<0.3){
       const spot=findFreeFootprintNear(house.base.x,house.base.y,'place-airport');
       if(spot){
@@ -2962,6 +3015,7 @@ function gameTick(){
     autoHarvestAndReturn(h);
     autoAssignHarvesters(h);
     tickAirProduction(h);
+    tickTurretDefense(h);
   });
 
   const ph=playerHouse();
@@ -3011,7 +3065,7 @@ const placePreview=new PIXI.Graphics();
 placePreview.visible=false;
 layerFx.addChild(placePreview);
 function hidePlacementPreview(){ placePreview.visible=false; }
-function isPlaceMode(){ return !!(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo' || uiMode.type==='place-refinery' || uiMode.type==='place-airport')); }
+function isPlaceMode(){ return !!(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo' || uiMode.type==='place-turret' || uiMode.type==='place-refinery' || uiMode.type==='place-airport')); }
 function updatePlacementPreview(e){
   if(!isPlaceMode()){ hidePlacementPreview(); return; }
   const {x,y}=tileFromEvent(e);
@@ -3209,19 +3263,21 @@ function handleBoardClick(e){
   if(!inBounds(x,y)) return;
   const ph=playerHouse();
 
-  if(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo')){
+  if(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo' || uiMode.type==='place-turret')){
     const key=x+','+y;
     if(!placementValid(uiMode.type,x,y)){ addLog('Cannot build there — needs clear, explored ground.'); }
     else {
-      const cost = uiMode.type==='place-turbine' ? TURBINE_COST : SILO_COST;
+      const cost = uiMode.type==='place-turbine' ? TURBINE_COST : uiMode.type==='place-silo' ? SILO_COST : TURRET_COST;
       if(ph.spice>=cost){
         if(isMpClient()){
-          mpSend({type:'cmd', kind: uiMode.type==='place-turbine'?'buildTurbine':'buildSilo', x, y});
-          addLog((uiMode.type==='place-turbine'?'Wind turbine':'Silo')+' requested.');
+          const kind = uiMode.type==='place-turbine'?'buildTurbine':uiMode.type==='place-silo'?'buildSilo':'buildTurret';
+          mpSend({type:'cmd', kind, x, y});
+          addLog((uiMode.type==='place-turbine'?'Wind turbine':uiMode.type==='place-silo'?'Silo':'Turret')+' requested.');
         } else {
           ph.spice-=cost;
           if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); ph.power+=TURBINE_DMG_BONUS; addLog('Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'); }
-          else { buildingMap.set(key,{x,y,type:'silo',owner:ph.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
+          else if(uiMode.type==='place-silo'){ buildingMap.set(key,{x,y,type:'silo',owner:ph.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
+          else { buildingMap.set(key,{x,y,type:'turret',owner:ph.id,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret}); addLog('Turret constructed.'); }
           redrawSpiceAndBuildings();
         }
       }
@@ -3357,6 +3413,11 @@ document.getElementById('buildAirport').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<AIRPORT_COST || gameOver) return;
   uiMode={type:'place-airport'}; modeHint.textContent='PLACE AIRPORT — choose the top-left of a clear 2x2 area'; modeHint.style.display='block';
+};
+document.getElementById('buildTurret').onclick=()=>{
+  const ph=playerHouse();
+  if(!ph || ph.spice<TURRET_COST || gameOver) return;
+  uiMode={type:'place-turret'}; modeHint.textContent='PLACE TURRET — choose a grass/desert tile'; modeHint.style.display='block';
 };
 document.getElementById('recruitTroop').onclick=()=>{
   const ph=playerHouse();
@@ -3612,15 +3673,16 @@ function applyRemoteCommand(msg){
       house.units.push(t); ensureSprite(t);
       addLog('House '+house.name+' recruits a tank.');
     }
-  } else if(msg.kind==='buildTurbine' || msg.kind==='buildSilo'){
+  } else if(msg.kind==='buildTurbine' || msg.kind==='buildSilo' || msg.kind==='buildTurret'){
     const key=msg.x+','+msg.y;
-    const cost=msg.kind==='buildTurbine'?TURBINE_COST:SILO_COST;
+    const cost=msg.kind==='buildTurbine'?TURBINE_COST:msg.kind==='buildSilo'?SILO_COST:TURRET_COST;
     const ok=house.spice>=cost && !buildingMap.has(key) && !spiceMap.has(key)
       && terrain[msg.y] && terrain[msg.y][msg.x]!=='mountain' && !isBaseTile(msg.x,msg.y);
     if(ok){
       house.spice-=cost;
       if(msg.kind==='buildTurbine'){ buildingMap.set(key,{x:msg.x,y:msg.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); house.power+=TURBINE_DMG_BONUS; addLog('House '+house.name+' raises a wind turbine.'); }
-      else { buildingMap.set(key,{x:msg.x,y:msg.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); house.cap+=SILO_CAP_BONUS; addLog('House '+house.name+' builds a silo.'); }
+      else if(msg.kind==='buildSilo'){ buildingMap.set(key,{x:msg.x,y:msg.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); house.cap+=SILO_CAP_BONUS; addLog('House '+house.name+' builds a silo.'); }
+      else { buildingMap.set(key,{x:msg.x,y:msg.y,type:'turret',owner:house.id,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret}); addLog('House '+house.name+' builds a turret.'); }
       redrawSpiceAndBuildings();
     }
   } else if(msg.kind==='buildRefinery'){
