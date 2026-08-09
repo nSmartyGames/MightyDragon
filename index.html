@@ -2712,6 +2712,20 @@ function stepHouseUnits(house){
             }
           } else if(t.kind==='unit') stepToward(u,t.x,t.y);
           else { const ap=approachTile(u.x,u.y,t.x,t.y); stepToward(u,ap.x,ap.y); }
+        } else {
+          // Nothing in immediate range — overfly toward the nearest living
+          // rival's stronghold instead of sitting parked, same hunt fallback
+          // ground units already get below. It still only fires once it's
+          // actually adjacent to something (findEngageTarget catches units/
+          // buildings/the base itself along the way), then RTBs same as any
+          // other landed shot above — this is a patrol leg, not a one-way trip.
+          const rivals=enemyHousesOf(house);
+          if(rivals.length){
+            let nearest=rivals[0], bd=Infinity;
+            rivals.forEach(r=>{ const d=Math.max(Math.abs(u.x-r.base.x),Math.abs(u.y-r.base.y)); if(d<bd){ bd=d; nearest=r; } });
+            const ap=approachTile(u.x,u.y,nearest.base.x,nearest.base.y);
+            stepToward(u,ap.x,ap.y);
+          }
         }
         return;
       }
