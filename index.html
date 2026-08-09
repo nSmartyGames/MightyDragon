@@ -3976,6 +3976,22 @@ function newGame(chosenId, rivalId){
     buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:h.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo});
     h.cap+=SILO_CAP_BONUS;
   });
+  // Every house also starts with an airport already built next to its
+  // stronghold (same footprint-search the AI itself uses to place one), so
+  // air power is available and visible from turn one instead of gated
+  // behind AIRPORT_COST plus AIRPORT_PRODUCTION_MS before a player ever
+  // sees a jet exist at all.
+  state.houses.forEach(h=>{
+    const spot=findFreeFootprintNear(h.base.x,h.base.y,'place-airport');
+    if(!spot) return;
+    const primaryKey=spot.x+','+spot.y;
+    placementFootprint('place-airport',spot.x,spot.y).forEach(([fx,fy],i)=>{
+      const entry=(i===0)
+        ? {x:fx,y:fy,type:'airport',owner:h.id,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
+        : {x:fx,y:fy,type:'airport',owner:h.id,primary:false,primaryKey};
+      buildingMap.set(fx+','+fy, entry);
+    });
+  });
   for(let i=0;i<WORM_COUNT;i++){
     let x,y,tries=0;
     do{ x=Math.floor(Math.random()*MAPW); y=Math.floor(Math.random()*MAPH); tries++; }
@@ -3995,6 +4011,15 @@ async function start(chosenId, rivalId){
   document.getElementById('houseGreetOverlay').style.display='none';
   newGame(chosenId, rivalId);
   state.houses.forEach(h=>{ h.units.push(makeUnit(h.id,'harvester', h.base.x, h.base.y)); });
+  // One jet starts already parked at the new airport, same spawn placement
+  // tickAirProduction uses for a freshly-completed one — pairs with the
+  // free starting airport above so aircraft are on the map from turn one.
+  state.houses.forEach(h=>{
+    const airport=findOwnedAirport(h);
+    if(!airport) return;
+    const spawn=findFreeSpawnTile(airport.x,airport.y);
+    h.units.push(makeUnit(h.id,'jet',spawn.x,spawn.y));
+  });
   learning=await loadLearning();
   const ph=playerHouse();
   if(mp){
