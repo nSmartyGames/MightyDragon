@@ -62,16 +62,18 @@
   }
   .hudBtn{ flex:0 0 auto; padding:2px 7px; font-size:11px; line-height:1; }
   .hudDivider{ width:1px; align-self:stretch; background:var(--sand-3); margin:1px 1px; flex:0 0 auto; }
-  .statCard{
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    width:44px; height:34px; position:relative; flex:0 0 auto;
+  /* The player's own Spice/Capacity/Power/Army/Stronghold used to be five
+     separate boxed cards (icon + label + number each); collapsed into one
+     card with a single accent-colored letter ahead of each number so the
+     whole group reads compactly at a glance instead of eating five card-widths. */
+  .statCombo{
+    display:flex; align-items:center; gap:9px; padding:0 10px; height:34px; flex:0 0 auto;
     background:linear-gradient(180deg,#2c1c0d,#1c1006); border:1px solid var(--sand-3); border-radius:5px;
   }
-  .cardIcon{ width:13px; height:13px; background-size:13px 13px; background-position:center; background-repeat:no-repeat; }
-  .cardLabel{ font-size:6px; text-transform:uppercase; letter-spacing:.5px; color:var(--sand-2); margin-top:1px; }
-  .statCard .costBadge{ position:absolute; top:0px; right:2px; bottom:auto; font-size:7px; white-space:nowrap; }
+  .statItem{ display:flex; align-items:baseline; gap:3px; font-size:11px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .statItem b{ color:var(--spice); font-size:9px; letter-spacing:.5px; }
   #rivalsContainer{ display:flex; gap:8px; flex-wrap:wrap; }
-  /* One card per rival, styled like the player's own .statCard boxes
+  /* One card per rival, styled like the player's own .statCombo card
      (background + border) rather than the old single inline row — only
      rendered once that rival's stronghold has actually been explored (see
      renderStats), so scouting is what reveals a rival's numbers, not just
@@ -208,8 +210,7 @@
   .houseCard p{ font-size:11px; color:var(--sand-2); line-height:1.5; margin:0; }
   @media (max-width:700px){
     .hudRow{ font-size:8px; padding:2px 6px; gap:4px; }
-    .statCard{ width:36px; height:28px; }
-    .cardIcon{ width:11px; height:11px; background-size:11px 11px; }
+    .statCombo{ height:28px; gap:6px; padding:0 7px; }
     #actionBar{ gap:2px; padding:5px; }
     #actionBar button.iconBtn{ height:48px; background-size:26px 26px; }
     .costBadge{ font-size:8px; }
@@ -229,30 +230,12 @@
     <span id="gameTitle" class="houseTag"><span class="brandIcon" title="Galacticus"></span><span id="gameClock">00:00</span></span>
     <button id="musicToggle" class="hudBtn" title="Toggle music">🔊</button>
     <span id="playerHouseTitle" class="houseTag"></span>
-    <div class="statCard" title="Spice bank">
-      <span class="cardIcon iconSpice"></span>
-      <span class="cardLabel">Spice</span>
-      <b id="pSpice" class="costBadge">0</b>
-    </div>
-    <div class="statCard" title="Silo capacity">
-      <span class="cardIcon iconCapacity"></span>
-      <span class="cardLabel">Capacity</span>
-      <span id="pCap" class="costBadge">100</span>
-    </div>
-    <div class="statCard" title="Power">
-      <span class="cardIcon iconPower"></span>
-      <span class="cardLabel">Power</span>
-      <span id="pPower" class="costBadge">0</span>
-    </div>
-    <div class="statCard" title="Army (troopers)">
-      <span class="cardIcon iconArmy"></span>
-      <span class="cardLabel">Army</span>
-      <span id="pArmy" class="costBadge">0</span>
-    </div>
-    <div class="statCard" title="Stronghold">
-      <span class="cardIcon iconStronghold"></span>
-      <span class="cardLabel">Stronghold</span>
-      <span id="pStronghold" class="costBadge">160/160</span>
+    <div class="statCombo">
+      <span class="statItem" title="Spice bank"><b>S</b><span id="pSpice">0</span></span>
+      <span class="statItem" title="Silo capacity"><b>C</b><span id="pCap">100</span></span>
+      <span class="statItem" title="Power"><b>P</b><span id="pPower">0</span></span>
+      <span class="statItem" title="Army (troopers)"><b>A</b><span id="pArmy">0</span></span>
+      <span class="statItem" title="Stronghold"><b>H</b><span id="pStronghold">160/160</span></span>
     </div>
     <div class="hudDivider"></div>
     <div id="rivalsContainer"></div>
