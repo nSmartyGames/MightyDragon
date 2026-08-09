@@ -2396,10 +2396,14 @@ function findFreeTileNear(cx,cy){
 }
 // Like findFreeTileNear but for a 2x2 footprint (airport/refinery) — scans
 // outward for a spot where the whole footprint is clear, not just one tile.
-function findFreeFootprintNear(cx,cy,placeType){
+// ignoreFog lets newGame()'s free-starting-airport grant use this before
+// any tile has been explored yet (placementValid's explored check is right
+// for interactive player placement, but would make every call here return
+// null during initial world setup, silently skipping the airport).
+function findFreeFootprintNear(cx,cy,placeType,ignoreFog){
   for(let r=1;r<10;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
     const x=cx+dx,y=cy+dy;
-    if(placementValid(placeType,x,y)) return {x,y};
+    if(placementValid(placeType,x,y,ignoreFog)) return {x,y};
   }
   return null;
 }
@@ -3132,9 +3136,9 @@ function placementFootprint(placeType,x,y){
 }
 // Single source of truth for "can this building go here" — shared by the
 // hover preview and the actual click handler so the preview never lies.
-function placementValid(placeType,x,y){
+function placementValid(placeType,x,y,ignoreFog){
   return placementFootprint(placeType,x,y).every(([fx,fy])=>
-    inBounds(fx,fy) && terrain[fy][fx]!=='mountain' && explored[fy][fx] &&
+    inBounds(fx,fy) && terrain[fy][fx]!=='mountain' && (ignoreFog || explored[fy][fx]) &&
     !buildingMap.has(fx+','+fy) && !spiceMap.has(fx+','+fy) && !isBaseTile(fx,fy));
 }
 const placePreview=new PIXI.Graphics();
@@ -3982,7 +3986,7 @@ function newGame(chosenId, rivalId){
   // behind AIRPORT_COST plus AIRPORT_PRODUCTION_MS before a player ever
   // sees a jet exist at all.
   state.houses.forEach(h=>{
-    const spot=findFreeFootprintNear(h.base.x,h.base.y,'place-airport');
+    const spot=findFreeFootprintNear(h.base.x,h.base.y,'place-airport',true);
     if(!spot) return;
     const primaryKey=spot.x+','+spot.y;
     placementFootprint('place-airport',spot.x,spot.y).forEach(([fx,fy],i)=>{
