@@ -2684,7 +2684,7 @@ function dropFromSelection(u){
 // menu step needed. The context menu also offers an explicit Attack mode
 // (for clarity commanding a group), the standing Search & Destroy stance,
 // and Retreat.
-function selectUnit(u){ selectUnits([u]); openUnitPreview(u); }
+function selectUnit(u){ selectUnits([u]); }
 function selectUnits(units){
   state.selectedUnits=units; uiMode=null; updateSelectionRing();
   boardHost.classList.add('targeting'); openCtxMenuFor();
