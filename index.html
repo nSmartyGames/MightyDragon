@@ -1593,7 +1593,11 @@ function renderTerrainBuffer(){
   // renderFogBuffer already uses for its soft edge — so the seam between the
   // two bands, and their fade back into the tile's own untouched texture,
   // comes from the blur itself instead of a hand-computed wavy cutoff.
-  const EDGE_BAND=8, EDGE_BLUR=4;
+  // Band covers ~20% of a tile's width on each side of the boundary (not
+  // half the tile), so only a thin strip of pixels near the seam blends —
+  // the blur radius is kept just as small so it doesn't spread the softened
+  // zone past that ~20% either.
+  const EDGE_BAND=Math.max(1,Math.round(TILE*0.2)), EDGE_BLUR=Math.max(1,Math.round(EDGE_BAND*0.6));
   const edgeCanvas=document.createElement('canvas');
   edgeCanvas.width=bw; edgeCanvas.height=bh;
   const ecx=edgeCanvas.getContext('2d');
