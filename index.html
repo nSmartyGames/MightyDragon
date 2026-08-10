@@ -1047,6 +1047,24 @@ function loadImageTexture(dataUri){
     img.src=dataUri;
   });
 }
+// Plain (non-PIXI) HTMLImageElement loader for art drawn straight into a
+// 2D canvas context, e.g. the terrain buffer below.
+function loadRawImage(dataUri){
+  return new Promise((resolve)=>{
+    const img=new Image();
+    img.onload=()=>resolve(img);
+    img.src=dataUri;
+  });
+}
+// Two hand-drawn sand tiles (pre-downsampled to native 16px TILE size),
+// alternated by tile parity so the desert floor reads as textured sand
+// instead of a flat speckle fill. Loaded async; renderTerrainBuffer falls
+// back to the old procedural speckleGround() until they're ready.
+const SAND_TILE_PNG={
+  a:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAB10lEQVR4nD1SW27bQBAjZx+SbCdNE3/2qr1TT9MzBE0CJJEjydqdYT9clJ8ECJIz5O9fPwGBBkDhNJNEkmAoiBsIEpIUGfxHSgESoNlNHBBAgiQgABDJLAVBEDkPCndv7k1QqUcjw5siQkFLBAEYSUHRW1s/b04RvZSpb3N4Iy2i5zykVECANIIEJWdKbV/qcCxlXD7+0Mz7RrIO0zq/9H295TYpAFmuEX44PK6Xt76vdTz0vo3jgxTL/FqGIyCAUhhoIFOu0+m8LG8kUx2Y0933H92v+zbX4QSiTve322RIIL1t+/puVtx3hKU0LPMLALPU+5bLoe8bINKyEBDDe05jKiPN9nVGhVnJeRC0Le+9XUs93H5lxkwwenNvrS25DIe7c7TW97X3TfLp9GRg2y7/SzugVAeh5zy492V+AWXJAKY8rpfX8D3XCRAgAwjA+3U8nAm29TIeH0FYHsfpYZ1fSj2U6d5yJSjJbnMYj4/7Pm/rh+XS9q8y3KVULp/PlnJri+TJkiCSJoV7+3p/lmuYvoHJ0tD2pbVtOj4xVbPa9u26zQABZmNiYj6dvV+976WMHr0MR9Ja31KutJQksyQIZBYCkOSWC4RQAIAQcgKSCIK3qROIvxkaL+ue34oKAAAAAElFTkSuQmCC',
+  b:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAB+klEQVR4nC2QWW7UUBQFz7lvsjvd6USREB9ICLFClsV22AMkSBAnPfrZd+CjWUBJVcUf37+18f58eBl3H2rdHKaf4/apXydA7h8/HaefkquIXM+vD09fdL1mptT7aff02d2O7y+ljX0+1HFfh93x7RdEPBSRHj58nc+T9ou4KSmXw5/l+j5sHkyXlKsuy3H6xVRIQUQ4TtMzIupwn0USgFJHNzXTMuxNO8k27gEgoNrDNaXKoOQiw90j3OfTaxCkAEy5Sa5u6qaBSLnlMka4Q3W9yvHtmZQybFKqEY7wcEMEKQAQEa7u5r6I1GHY5zbsIkykggh3ipBCEECAgaCIUNr4EeGn9+e8rpdS7hDo17dSt4gAGRG4QSAA17XrbLrkOmZhXvo55VaHvVDcDQiAAgkSEeHuvhJS6/Z/dBu2YQogwiXlm1IgEEGSklJqAMwWXed8Pb+GrpIqgIhbpZMSHgSCDDcAYCC81vssktM4eljKVZcZfjOnSHJb4Xbbxdxa287nKbsvJEvbqs4iKRClbkwXAJJyuEnKAIA4HV4IyYTo2t201DuRbNYvh9+ADJs9Kc7olzd3zbnVtiWTpDLUYUemtZ88FJTadqWM82ky7SByHYfxwc1s7WBILkM/T7ZcchtNe2kbXa/z6W8dt2ZLSkWE5/cXSYlC1/UfeCRBChEdvJcAAAAASUVORK5CYII='
+};
+const SAND_TILE_IMG={a:null,b:null};
 // Only the harvester/tank vehicle sprites get chroma-keyed — troopers and
 // buildings render as originally baked.
 function loadImageTextureStripped(dataUri){
@@ -1291,7 +1309,11 @@ const TERRAIN_BASE_DRAW={
   // olive-grey (not the green the old '#5c7a3a' fallback and ROCK_IMG
   // photo-tile — itself an orange sand crop, not rock at all — gave it.
   grass:(cx,size,even,tileX,tileY)=>speckleGround(cx,size,tileX,tileY,'grass'),
-  desert:(cx,size,even,tileX,tileY)=>speckleGround(cx,size,tileX,tileY,'desert'),
+  desert:(cx,size,even,tileX,tileY)=>{
+    const img=even?SAND_TILE_IMG.a:SAND_TILE_IMG.b;
+    if(img){ cx.imageSmoothingEnabled=false; cx.drawImage(img,0,0,size,size); }
+    else speckleGround(cx,size,tileX,tileY,'desert');
+  },
   mountain:(cx,size,even)=>{ even?mountainCanvasA(cx,size):mountainCanvasB(cx,size); }
 };
 const WAVE_AMP=9, WAVE_FREQ=(2*Math.PI)/40;
@@ -3878,7 +3900,9 @@ Promise.all([
   // grey blob that read as the same building as the refinery on the map.
   loadImageTexture(TILE_PNG.refineryBldg).then(t=>{ TEX.refineryBody=t; }),
   loadImageTexture(TILE_PNG.airportBldg).then(t=>{ TEX.airport=t; }),
-  loadImageTexture(TILE_PNG.strongholdBldg).then(t=>{ TEX.base=t; })
+  loadImageTexture(TILE_PNG.strongholdBldg).then(t=>{ TEX.base=t; }),
+  loadRawImage(SAND_TILE_PNG.a).then(img=>{ SAND_TILE_IMG.a=img; }),
+  loadRawImage(SAND_TILE_PNG.b).then(img=>{ SAND_TILE_IMG.b=img; })
 ]).then(showModeSelect);
 })();
 </script>
