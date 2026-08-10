@@ -902,7 +902,7 @@ function renderFogBuffer(){
   if(!fogBuffer) fogBuffer=p5FogInstance.createGraphics(bw,bh);
   const cx=fogBuffer.drawingContext;
   cx.clearRect(0,0,bw,bh);
-  cx.filter='blur(10px)';
+  cx.filter='blur(19px)'; // +90% over the original 10px, per request — thicker fog edge
   cx.drawImage(fogMaskCanvas,0,0);
   cx.filter='none';
   // Crisp torn-edge autotile pass, drawn on top of the blur. Post-declutter
