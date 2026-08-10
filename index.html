@@ -1065,6 +1065,19 @@ const SAND_TILE_PNG={
   b:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAB+klEQVR4nC2QWW7UUBQFz7lvsjvd6USREB9ICLFClsV22AMkSBAnPfrZd+CjWUBJVcUf37+18f58eBl3H2rdHKaf4/apXydA7h8/HaefkquIXM+vD09fdL1mptT7aff02d2O7y+ljX0+1HFfh93x7RdEPBSRHj58nc+T9ou4KSmXw5/l+j5sHkyXlKsuy3H6xVRIQUQ4TtMzIupwn0USgFJHNzXTMuxNO8k27gEgoNrDNaXKoOQiw90j3OfTaxCkAEy5Sa5u6qaBSLnlMka4Q3W9yvHtmZQybFKqEY7wcEMEKQAQEa7u5r6I1GHY5zbsIkykggh3ipBCEECAgaCIUNr4EeGn9+e8rpdS7hDo17dSt4gAGRG4QSAA17XrbLrkOmZhXvo55VaHvVDcDQiAAgkSEeHuvhJS6/Z/dBu2YQogwiXlm1IgEEGSklJqAMwWXed8Pb+GrpIqgIhbpZMSHgSCDDcAYCC81vssktM4eljKVZcZfjOnSHJb4Xbbxdxa287nKbsvJEvbqs4iKRClbkwXAJJyuEnKAIA4HV4IyYTo2t201DuRbNYvh9+ADJs9Kc7olzd3zbnVtiWTpDLUYUemtZ88FJTadqWM82ky7SByHYfxwc1s7WBILkM/T7ZcchtNe2kbXa/z6W8dt2ZLSkWE5/cXSYlC1/UfeCRBChEdvJcAAAAASUVORK5CYII='
 };
 const SAND_TILE_IMG={a:null,b:null};
+// Buildable-plateau ("grass") and impassable-rock ("mountain") tiles, cropped
+// from the same reference sheet as the sand tiles above (decorative border
+// trimmed off so they tile edge-to-edge without a visible grid seam).
+const GRASS_TILE_PNG={
+  a:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAB9ElEQVR4nAXBW3LUMBAAwHlKttdOUlRxOy7CB8fliwrEu7YlS5oZuvHXzx9t2JwUELbvb979+DquV5ke+S6dM/d7bN/W498xpfT36yUR8fVnx481CO/fn+iAAAR4H7cm4SAkvj6PclbdCIdLjyCh2vp11WnK29viEYEwzKON0evrLISECPvzDHNCgPftERFJdcqJhUWYhbZ1yVmRUIUiPCfJWYaHzFM676IqeSJN2lp384iopQMGAASACJMwM3u4hAe4h4WHP+tJhAQQAcyERPfdAUCT9j6WR05Z5LWfDGhmo3upbZ5SN4+IQIAAANjeVjfTJHnKIlVy1lE7IBIRQJRSmXiMMc8TEiKhKmMWIhIVUZF2D0ZCsG2dEOH5PKacpjklEfcIBELw8HZbSipElJekWcz9Kk1V1nUZ5gDYuuVJiXDfr3K23vqxn8fzEjdjxNY7ma3rnHNCxJRUmM6ztt5TSvfdRBgCeu8kqnftNhwBzAIAVcXMzrOMYetjMbNS7+d+QkQAiGNAIBGpSrgbgAqLYFJGQETcW2fiPGsEELKUZ2FAJrLhRpFUIYKQAaGUWmsX5pzTMDM3IpCIEJX390cSbsP6GBDQaiutMZEKL3NGRAMRYcIqpbZy1t4tZwWA8EjK5W6tjZyTm59XRcJ1W4a5e/wHnlRVBxfIEpAAAAAASUVORK5CYII=',
+  b:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAB9klEQVR4nAXBSZbbNhQAwD8CJKXWs5NF+26+SpY5qr1K0oOaIAngD6nCv//66ea1aGF4/fGwGf25t6/TSt3bhMLe7duf9/jancvvf76EIT/+/bSX+1CEX/9BAgIcE6P3UgSBOvLxts/rWjfSCPFMVsKYXx+Xr/Xx2C7PnpkZq1nr1/vzVCZCcG+CQZfD98ctMoM0uQSxIU/kZd20KhO+LAQQKQIiHim1FjvPIMGFtOro8+gRme/XLJyYYAnIrMIs7BlSMLtFelaOfrQE9AB3QKZEcpuesFbFMNZaisi1Nw80d/GwOUDKsOieCGAMgnB/3Cu4ssBWr+OSEB1jWqIBtZF5XUhsZtu6FEZmVGURCaAkCRY5DyMkAF+3BRE+Pve1lnUtKrJQrgJMcMzo5jdWQKK6FikSEbOPonK/b+YJQGN6XRQJ3z+Pow0f83y2/XlIpiPiGDPCt9taagE0KVKZ9nb1MUHKtPGoDAZjTlqqep/hkQnhiYhFOcP7eYb5sm3T3Xu31gASEyQghZCZVCUiKKEqMyMEEyAz9ja5MohawK2wwHEyICKZBRCsVZQAkSbA8+xknYlBSxtR2JFAXiQHyOsfN2Juw83dPGefxzW2QikqpQLii4YIHa3L2z4iuk0TleYMCcbsbrN3p+IRe+vAeLut7hGR/wOCf2iDX6OTRwAAAABJRU5ErkJggg=='
+};
+const GRASS_TILE_IMG={a:null,b:null};
+const ROCK_TILE_PNG={
+  a:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAACgUlEQVR4nAXB6W4TRwAA4Dk9O3t4bSd2GpyrEKiEEBEgXqwv0x99qqqqaBs5ITZkjWNv7Nmdmd05+T745x+/PwsZfYwhnFzNXOeW9xUM8Wg2Vq0eTnIpNC95W7dNo4c5J5vNfnW/RhgNy2y7O9RbkSaMUvKjqosibfat90F9XVfrmg3oy/MZSfIEIEgpqR535Si/ubl21lnj1ptnrftGKBf809PBOlcW3DpPvHNJMvDeO+/fvJrXjWpbBSMw1uU5987/8+UBI/jpw+vJKK/rhsQAAADbnfj86TehukZIACIhJE+Zi+HN9Xwyzg9CpZwtHtYZT8ji9rvt7Pu3v8q2k30PIei0raUYDGjT6jLj1jkA4tflj+Eo8z6Qs/nRavm02e4hQq3Ssu2EkEeT4UFLpXqWDNTeMM4mlCIEQQgkL7KEPm93IkKw3zdZlmCMEIJ9b4qCm85EACKACMNW9gVn5L9/l874q4sTjNHtXZCyAwB4F85fHHe9e1zXecFNH6XsBgkVjSSXL0+h9YeDhIi+e3v119+Ly4tfiow3rU44q9Z1mrLgIoLgeDTsVEdMZ7TspFRQ4wEbv351FkBcPW4RgowSjPHiruKcDYtUHFotewQxWq421gZGyWr1lHA2Ox7NT4+8C9b4plXWud4YngzyLIEIoABiWWQhRCH15cWMUioaWeT89GT8/+IbBKDIecYTxqj3EWNEGCblMJNKxxAxRHV9sNYLoWWrPt5cX8ynX26/lWWKML57qF5MR6QRSjQqhBBDvLuvEEEQAGe97vssTb5Xu8koN8Z1vZ1OSx8CmYwLo3tj3PnZVMmulRoTvKvF2elxb1wIVnUGAJDlHGGYDehPKS6WSXNSq9EAAAAASUVORK5CYII=',
+  b:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAACW0lEQVR4nAXB2Y7bNhQAUC6XpGTJsj3x2OksaYqi7wX6O/2RPvQr+5AA2YBm7I4zHkvWRlGXl7fnyL//+nOOlFvDUiy3VZG5D/987Tu/328SJWlUDLR8Uw7NkDtbNz0wc/NyleuStQyHcyPUMstAyMP3l/u7baYNGjnVQ1t3wdn22gNyUlpOAUc/Zc6VVR5FKqtFYj4cz9Vy8ePcSCkFc1nkeWYBlN6sl34K1prFwrnMOsEY4sP9rVLycmnXVSGVXC8LbXRd9xACjp2Xgp0zfsbLscc5KiGbpkei/f5m8iFSCog6pTkitO1AE0opX+suy932ZolzfDlfu36klHLnkAiUxkhFmbtg4M26NFIzc932/z79KHMnhNisSiEZkY7Pr/v9xgBYLW1mAUAJIcbRN+1gLSwW7vn5FTGOftJKL8vF+8dd3/vLtTfOGGc0aMCZNAAkLvLs4e7267ejc2CMHn1Q0+wDPj5swejvT2fzTlsD4BZWEvsQusGXRb7bbf471Uqq7U317nF3qVsiJsL97fp8apq6g0SkpZxn1EpPgNWyQIwPdzsl5eF4nhEBIMZkjC5yx4kUGBMmpJiEYGbmxL+8/+nTl6dPX56YxaoqmTnMc9cORETEkCQLlkopY4A5IYkw4R+///Z8qk+nCyWiSFoplztmIViAb70WUitFMVFia80wemZ+u9tUZfbx8yFivL/bzhgpkVISmBkMrFaFBT1Hwhi1VOPgz+emXOS//vz29dJNfq5WhZRCyQB+mv0wIZJzRgjBia3RPswzUkp8uXYGYBgnsACgU+L/AZiOh79Emn84AAAAAElFTkSuQmCC'
+};
+const ROCK_TILE_IMG={a:null,b:null};
 // Only the harvester/tank vehicle sprites get chroma-keyed — troopers and
 // buildings render as originally baked.
 function loadImageTextureStripped(dataUri){
@@ -1308,13 +1321,21 @@ const TERRAIN_BASE_DRAW={
   // Reference tileset's buildable rock plateau reads as a desaturated
   // olive-grey (not the green the old '#5c7a3a' fallback and ROCK_IMG
   // photo-tile — itself an orange sand crop, not rock at all — gave it.
-  grass:(cx,size,even,tileX,tileY)=>speckleGround(cx,size,tileX,tileY,'grass'),
+  grass:(cx,size,even,tileX,tileY)=>{
+    const img=even?GRASS_TILE_IMG.a:GRASS_TILE_IMG.b;
+    if(img){ cx.imageSmoothingEnabled=false; cx.drawImage(img,0,0,size,size); }
+    else speckleGround(cx,size,tileX,tileY,'grass');
+  },
   desert:(cx,size,even,tileX,tileY)=>{
     const img=even?SAND_TILE_IMG.a:SAND_TILE_IMG.b;
     if(img){ cx.imageSmoothingEnabled=false; cx.drawImage(img,0,0,size,size); }
     else speckleGround(cx,size,tileX,tileY,'desert');
   },
-  mountain:(cx,size,even)=>{ even?mountainCanvasA(cx,size):mountainCanvasB(cx,size); }
+  mountain:(cx,size,even)=>{
+    const img=even?ROCK_TILE_IMG.a:ROCK_TILE_IMG.b;
+    if(img){ cx.imageSmoothingEnabled=false; cx.drawImage(img,0,0,size,size); }
+    else{ even?mountainCanvasA(cx,size):mountainCanvasB(cx,size); }
+  }
 };
 const WAVE_AMP=9, WAVE_FREQ=(2*Math.PI)/40;
 // Fine 2px quantization reads as a jagged hand-drawn contour; the old 6px
@@ -1479,8 +1500,11 @@ function renderTerrainBuffer(){
 function generateTerrain(){
   terrain=[]; for(let y=0;y<MAPH;y++){ terrain.push(new Array(MAPW).fill('grass')); }
   const total=MAPW*MAPH;
-  paintBlobs(Math.floor(total*0.20), 26, 'mountain', ()=>true);
-  paintBlobs(Math.floor(total*0.40), 34, 'desert', (x,y)=>terrain[y][x]!=='mountain');
+  // Few seeds relative to target size (each blob grows to ~500+ tiles) so the
+  // map reads as a handful of large, clearly separated zones — a mountain
+  // range, a desert — rather than a scattered patchwork of small pockets.
+  paintBlobs(Math.floor(total*0.20), 4, 'mountain', ()=>true);
+  paintBlobs(Math.floor(total*0.40), 5, 'desert', (x,y)=>terrain[y][x]!=='mountain');
   // remainder stays grass (~40%)
 }
 function paintBlobs(targetCount, numSeeds, type, allowed){
@@ -3902,7 +3926,11 @@ Promise.all([
   loadImageTexture(TILE_PNG.airportBldg).then(t=>{ TEX.airport=t; }),
   loadImageTexture(TILE_PNG.strongholdBldg).then(t=>{ TEX.base=t; }),
   loadRawImage(SAND_TILE_PNG.a).then(img=>{ SAND_TILE_IMG.a=img; }),
-  loadRawImage(SAND_TILE_PNG.b).then(img=>{ SAND_TILE_IMG.b=img; })
+  loadRawImage(SAND_TILE_PNG.b).then(img=>{ SAND_TILE_IMG.b=img; }),
+  loadRawImage(GRASS_TILE_PNG.a).then(img=>{ GRASS_TILE_IMG.a=img; }),
+  loadRawImage(GRASS_TILE_PNG.b).then(img=>{ GRASS_TILE_IMG.b=img; }),
+  loadRawImage(ROCK_TILE_PNG.a).then(img=>{ ROCK_TILE_IMG.a=img; }),
+  loadRawImage(ROCK_TILE_PNG.b).then(img=>{ ROCK_TILE_IMG.b=img; })
 ]).then(showModeSelect);
 })();
 </script>
