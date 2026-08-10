@@ -1520,109 +1520,21 @@ const TERRAIN_BASE_DRAW={
   desert:(cx,size,even,tileX,tileY)=>speckleGround(cx,size,tileX,tileY,'desert'),
   mountain:(cx,size,even)=>{ even?mountainCanvasA(cx,size):mountainCanvasB(cx,size); }
 };
-const WAVE_AMP=9, WAVE_FREQ=(2*Math.PI)/40;
-// Fine 2px quantization reads as a jagged hand-drawn contour; the old 6px
-// step was as coarse as the amplitude itself, so it barely deviated from a
-// straight tile edge.
-const EDGE_STEP=2;
-// Rocky mountain edges get their own, bolder wave and extra speckle scatter
-// (below) so a rock/grass or rock/desert line reads unmistakably as broken
-// rock, not just a deeper dune ripple.
-const ROCK_WAVE_AMP=12;
-// Chunky pixel-art border pass: a distinct 4px band drawn right on top of the
-// wavy fill above, at every terrain-type transition. Its path reuses the same
-// wave functions as control points, spline-smooths them, then re-quantizes to
-// a blocky BORDER_BAND grid so it reads as a hand-drawn outline, not an AA line.
-const BORDER_SAMPLE_STEP=4, BORDER_BAND=4, BORDER_SHADE_MUL=0.55;
 // Deterministic pseudo-random hash (no Math.random() dependency at render
-// time) used to speckle loose rock/sand pixels across the rocky blend band.
+// time) used to speckle loose rock/sand pixels in the base tile fill.
 function pixelHash(x,y){
   let h=(x*374761393+y*668265263)|0;
   h=(h^(h>>>13))*1274126177|0;
   h=h^(h>>>16);
   return ((h>>>0)%1000)/1000;
 }
-function terrainWaveSeed(a,b){
-  const order={grass:0,desert:1,mountain:2};
-  const lo=Math.min(order[a],order[b]), hi=Math.max(order[a],order[b]);
-  return (lo*3+hi)*1.9+0.7;
-}
-function terrainWave(coord,seed){ return WAVE_AMP*Math.sin(coord*WAVE_FREQ+seed); }
-// Sum of three mismatched-frequency sines instead of one — still a smooth
-// curve at any point, but the combined period never repeats on the map, so
-// the rock/grass line reads as an irregular natural contour, not a ripple.
-function terrainWaveRocky(coord,seed){
-  return ROCK_WAVE_AMP*0.5*Math.sin(coord*WAVE_FREQ*0.8+seed)
-       + ROCK_WAVE_AMP*0.3*Math.sin(coord*WAVE_FREQ*2.3+seed*1.9)
-       + ROCK_WAVE_AMP*0.35*Math.sin(coord*WAVE_FREQ*4.7+seed*3.3);
-}
-// Catmull-Rom spline over a run's sampled (unquantized) wave offsets, used to
-// smooth the chunky border's path before it gets re-quantized to BORDER_BAND.
-function catmullRom1D(p0,p1,p2,p3,t){
-  const t2=t*t, t3=t2*t;
-  return 0.5*((2*p1) + (-p0+p2)*t
-    + (2*p0-5*p1+4*p2-p3)*t2
-    + (-p0+3*p1-3*p2+p3)*t3);
-}
-function smoothOffsetsToPerPixel(offsets, step){
-  const out=[];
-  for(let i=0;i<offsets.length-1;i++){
-    const p0=offsets[Math.max(0,i-1)], p1=offsets[i],
-          p2=offsets[i+1], p3=offsets[Math.min(offsets.length-1,i+2)];
-    for(let s=0;s<step;s++){ out.push(catmullRom1D(p0,p1,p2,p3,s/step)); }
-  }
-  out.push(offsets[offsets.length-1]);
-  return out;
-}
-// Maximal same-type-pair runs along each boundary row/column, so the border
-// pass can walk one smoothed spline per contiguous stretch instead of one
-// per-tile segment (which would reintroduce visible tile-grid joints).
-function collectHorizontalRuns(){ // boundary between row y-1 and y
-  const runs=[];
-  for(let y=1;y<MAPH;y++){
-    let run=null;
-    for(let x=0;x<MAPW;x++){
-      const a=terrain[y-1][x], b=terrain[y][x];
-      if(a!==b){
-        if(run && run.a===a && run.b===b){ run.xEnd=x; }
-        else { if(run) runs.push(run); run={y,xStart:x,xEnd:x,a,b}; }
-      } else if(run){ runs.push(run); run=null; }
-    }
-    if(run) runs.push(run);
-  }
-  return runs;
-}
-function collectVerticalRuns(){ // boundary between column x-1 and x
-  const runs=[];
-  for(let x=1;x<MAPW;x++){
-    let run=null;
-    for(let y=0;y<MAPH;y++){
-      const a=terrain[y][x-1], b=terrain[y][x];
-      if(a!==b){
-        if(run && run.a===a && run.b===b){ run.yEnd=y; }
-        else { if(run) runs.push(run); run={x,yStart:y,yEnd:y,a,b}; }
-      } else if(run){ runs.push(run); run=null; }
-    }
-    if(run) runs.push(run);
-  }
-  return runs;
-}
 function darken(rgb,m){ return [Math.round(rgb[0]*m),Math.round(rgb[1]*m),Math.round(rgb[2]*m)]; }
-// Border color: the harder-of-the-two-types' dark shade, darkened further so
-// the outline reads as a distinct feature from the terrain fill beneath it.
-// mountain has no GROUND_PALETTE entry, so it falls back to TERRAIN_BLEND_RGB.
-function borderColorFor(a,b){
-  const order={grass:0,desert:1,mountain:2};
-  const harder=order[a]>order[b]?a:b;
-  const base=(GROUND_PALETTE[harder]&&GROUND_PALETTE[harder].dark)||TERRAIN_BLEND_RGB[harder];
-  return darken(base,BORDER_SHADE_MUL);
-}
 // Pre-renders the whole terrain grid into terrainBuffer (a p5.Graphics at
-// native TILE resolution) once per game start: a base-color pass per tile,
-// then a single whole-buffer wavy-boundary blend pass (cheaper than one
-// getImageData/putImageData round-trip per tile). The wave offset is
-// quantized to EDGE_STEP so the curve reads as a chunky, angular coastline
-// (retro-pixel corners) rather than a smooth anti-aliased one.
+// native TILE resolution) once per game start: a crisp, unmodified base-color
+// pass per tile (the original per-type fill), then a filter-blurred edge
+// blend pass (see below) so tiles whose type differs from a neighbor read as
+// a soft transition instead of a hard grid line — without touching the tiles
+// themselves.
 function renderTerrainBuffer(){
   const bw=MAPW*TILE, bh=MAPH*TILE;
   if(terrainBuffer) terrainBuffer.remove();
@@ -1639,34 +1551,13 @@ function renderTerrainBuffer(){
       cx.restore();
     }
   }
-  const img=cx.getImageData(0,0,bw,bh);
-  const data=img.data;
-  let dirty=false;
-  function paintPixel(gpx,gpy,r,g,b){
-    const idx=(gpy*bw+gpx)*4;
-    data[idx]=r; data[idx+1]=g; data[idx+2]=b; data[idx+3]=255;
-    dirty=true;
-  }
-  // Shared 4x4 block painter for the chunky border pass (step 3 + diagonal
-  // corners both funnel through this instead of hand-rolling a rasterizer).
-  // bx/by are the top-left of the block, already snapped to the BORDER_BAND
-  // grid by the caller; clip to buffer bounds since a smoothed/snapped offset
-  // can push a block slightly past the map edge.
-  function paintChunkyBand(bx,by,r,g,b){
-    for(let dx=0;dx<BORDER_BAND;dx++){
-      const gpx=bx+dx;
-      if(gpx<0||gpx>=bw) continue;
-      for(let dy=0;dy<BORDER_BAND;dy++){
-        const gpy=by+dy;
-        if(gpy<0||gpy>=bh) continue;
-        paintPixel(gpx,gpy,r,g,b);
-      }
-    }
-  }
   // Faint reddish-orange "spice bloom" haze: soft, large-scale blotches of
   // richer sand scattered across the desert, matching the mottled patches
   // on the reference map. Low-frequency sum-of-sines (not the per-pixel
   // hash used for rock speckle) so blotches span many tiles, not one.
+  const img=cx.getImageData(0,0,bw,bh);
+  const data=img.data;
+  let dirty=false;
   const BLOOM_R=0xb8, BLOOM_G=0x50, BLOOM_B=0x1e;
   function bloomNoise(px,py){
     return Math.sin(px*0.017+py*0.011+1.7)*0.5
@@ -1691,157 +1582,51 @@ function renderTerrainBuffer(){
       }
     }
   }
-  for(let y=0;y<MAPH;y++){
-    for(let x=0;x<MAPW;x++){
-      const type=terrain[y][x];
-      const neighbors=[
-        ['up', y>0?terrain[y-1][x]:null],
-        ['down', y<MAPH-1?terrain[y+1][x]:null],
-        ['left', x>0?terrain[y][x-1]:null],
-        ['right', x<MAPW-1?terrain[y][x+1]:null]
-      ];
-      neighbors.forEach(([dir,nt])=>{
-        if(!nt || nt===type) return;
-        const seed=terrainWaveSeed(type,nt);
-        const flatColor=TERRAIN_BLEND_RGB[nt];
-        const isRocky=type==='mountain' || nt==='mountain';
-        const wave=isRocky?terrainWaveRocky:terrainWave;
-        const baseAmp=isRocky?ROCK_WAVE_AMP:WAVE_AMP;
-        for(let ly=0;ly<TILE;ly++){
-          for(let lx=0;lx<TILE;lx++){
-            const gpx=x*TILE+lx, gpy=y*TILE+ly;
-            const rawOffset=(dir==='up'||dir==='down') ? wave(gpx,seed) : wave(gpy,seed);
-            const offset=Math.round(rawOffset/EDGE_STEP)*EDGE_STEP;
-            const threshold=baseAmp+offset;
-            const depth=(dir==='up')?threshold-ly
-                       :(dir==='down')?threshold-(TILE-1-ly)
-                       :(dir==='left')?threshold-lx
-                       :threshold-(TILE-1-lx);
-            // A single clean contour line (no loose scatter past it) reads
-            // as a crisp joint; the old scatter band blurred sand/rock
-            // edges into a noisy, "mixed" stripe instead of a clear seam.
-            if(depth>0){
-              const [r,g,b]=GROUND_PALETTE[nt]?speckledColorAt(nt,gpx,gpy):flatColor;
-              paintPixel(gpx,gpy,r,g,b);
-            }
-          }
-        }
-      });
-      // Diagonal corners: where two orthogonally-different biomes meet at a
-      // shared corner, the two independent edge waves above can leave a hard
-      // square notch. Round it off with a small quarter-circle carve so all
-      // three-way junctions read as continuous, not tile-cornered.
-      const diag=[
-        ['up','left', y>0?terrain[y-1][x]:null, x>0?terrain[y][x-1]:null, y>0&&x>0?terrain[y-1][x-1]:null],
-        ['up','right', y>0?terrain[y-1][x]:null, x<MAPW-1?terrain[y][x+1]:null, y>0&&x<MAPW-1?terrain[y-1][x+1]:null],
-        ['down','left', y<MAPH-1?terrain[y+1][x]:null, x>0?terrain[y][x-1]:null, y<MAPH-1&&x>0?terrain[y+1][x-1]:null],
-        ['down','right', y<MAPH-1?terrain[y+1][x]:null, x<MAPW-1?terrain[y][x+1]:null, y<MAPH-1&&x<MAPW-1?terrain[y+1][x+1]:null]
-      ];
-      diag.forEach(([vDir,hDir,vt,ht,dt])=>{
-        if(!dt || dt===type || !vt || !ht) return;
-        if(vt===type || ht===type) return; // not a true diagonal-only junction
-        const r0=ROCK_WAVE_AMP*0.55;
-        const cornerLy = vDir==='up'?0:TILE-1;
-        const cornerLx = hDir==='left'?0:TILE-1;
-        const flatColor=TERRAIN_BLEND_RGB[dt];
-        for(let ly=0;ly<TILE*0.5;ly++){
-          for(let lx=0;lx<TILE*0.5;lx++){
-            const py=vDir==='up'?ly:TILE-1-ly;
-            const px=hDir==='left'?lx:TILE-1-lx;
-            const dist=Math.hypot(py-cornerLy, px-cornerLx);
-            if(dist<r0){
-              const gpx=x*TILE+px, gpy=y*TILE+py;
-              const [r,g,b]=GROUND_PALETTE[dt]?speckledColorAt(dt,gpx,gpy):flatColor;
-              paintPixel(gpx,gpy,r,g,b);
-            }
-          }
-        }
-      });
-    }
-  }
-  // ---- Chunky pixel-art border pass ----
-  // A distinct 4px outline drawn right on top of the wavy fill above, at
-  // every terrain-type transition. Its path reuses the same wave functions
-  // as control points sampled every BORDER_SAMPLE_STEP native px, Catmull-Rom
-  // smoothed to per-pixel resolution, then re-quantized to the BORDER_BAND
-  // grid via the shared paintChunkyBand block painter — a distinct chunky
-  // band, not an anti-aliased line, and never mistaken for the softer
-  // boundary-blend fill it's drawn over.
-  collectHorizontalRuns().forEach(run=>{
-    const {y,xStart,xEnd,a,b}=run;
-    const isRocky=a==='mountain'||b==='mountain';
-    const wave=isRocky?terrainWaveRocky:terrainWave;
-    const seed=terrainWaveSeed(a,b);
-    const baseY=y*TILE;
-    const gpxStart=xStart*TILE, gpxEnd=(xEnd+1)*TILE;
-    const offsets=[];
-    for(let gpx=gpxStart; gpx<=gpxEnd; gpx+=BORDER_SAMPLE_STEP) offsets.push(wave(gpx,seed));
-    const smoothed=smoothOffsetsToPerPixel(offsets,BORDER_SAMPLE_STEP);
-    const [cr,cg,cb]=borderColorFor(a,b);
-    for(let i=0;i<smoothed.length;i+=BORDER_BAND){
-      const gpx=gpxStart+i;
-      const bx=Math.floor(gpx/BORDER_BAND)*BORDER_BAND;
-      const by=baseY+Math.round(smoothed[i]/BORDER_BAND)*BORDER_BAND;
-      paintChunkyBand(bx,by,cr,cg,cb);
-    }
-  });
-  collectVerticalRuns().forEach(run=>{
-    const {x,yStart,yEnd,a,b}=run;
-    const isRocky=a==='mountain'||b==='mountain';
-    const wave=isRocky?terrainWaveRocky:terrainWave;
-    const seed=terrainWaveSeed(a,b);
-    const baseX=x*TILE;
-    const gpyStart=yStart*TILE, gpyEnd=(yEnd+1)*TILE;
-    const offsets=[];
-    for(let gpy=gpyStart; gpy<=gpyEnd; gpy+=BORDER_SAMPLE_STEP) offsets.push(wave(gpy,seed));
-    const smoothed=smoothOffsetsToPerPixel(offsets,BORDER_SAMPLE_STEP);
-    const [cr,cg,cb]=borderColorFor(a,b);
-    for(let i=0;i<smoothed.length;i+=BORDER_BAND){
-      const gpy=gpyStart+i;
-      const by=Math.floor(gpy/BORDER_BAND)*BORDER_BAND;
-      const bx=baseX+Math.round(smoothed[i]/BORDER_BAND)*BORDER_BAND;
-      paintChunkyBand(bx,by,cr,cg,cb);
-    }
-  });
-  // Diagonal corners: don't spline these — the existing quarter-circle carve
-  // above (r0=ROCK_WAVE_AMP*0.55) is already an exact smooth arc. Walk that
-  // same arc directly and feed its points through the shared chunky-block
-  // painter instead of scanning the quarter-tile of pixels again.
-  for(let y=0;y<MAPH;y++){
-    for(let x=0;x<MAPW;x++){
-      const type=terrain[y][x];
-      const diag=[
-        ['up','left', y>0?terrain[y-1][x]:null, x>0?terrain[y][x-1]:null, y>0&&x>0?terrain[y-1][x-1]:null],
-        ['up','right', y>0?terrain[y-1][x]:null, x<MAPW-1?terrain[y][x+1]:null, y>0&&x<MAPW-1?terrain[y-1][x+1]:null],
-        ['down','left', y<MAPH-1?terrain[y+1][x]:null, x>0?terrain[y][x-1]:null, y<MAPH-1&&x>0?terrain[y+1][x-1]:null],
-        ['down','right', y<MAPH-1?terrain[y+1][x]:null, x<MAPW-1?terrain[y][x+1]:null, y<MAPH-1&&x<MAPW-1?terrain[y+1][x+1]:null]
-      ];
-      diag.forEach(([vDir,hDir,vt,ht,dt])=>{
-        if(!dt || dt===type || !vt || !ht) return;
-        if(vt===type || ht===type) return; // not a true diagonal-only junction
-        const r0=ROCK_WAVE_AMP*0.55;
-        const cornerLy=vDir==='up'?0:TILE-1;
-        const cornerLx=hDir==='left'?0:TILE-1;
-        // Direction from the corner toward the tile interior: for the 'up'/
-        // 'left' edge the corner sits at 0 so the interior is the positive
-        // direction; for 'down'/'right' the corner sits at TILE-1 so the
-        // interior is negative — matches the existing carve's ly/lx reflection.
-        const signX=hDir==='left'?1:-1;
-        const signY=vDir==='up'?1:-1;
-        const dTheta=4/r0; // ~4px of arc length per step
-        const [cr,cg,cb]=borderColorFor(vt,dt);
-        for(let theta=0; theta<=Math.PI/2+1e-9; theta+=dTheta){
-          const px=cornerLx+signX*r0*Math.cos(theta);
-          const py=cornerLy+signY*r0*Math.sin(theta);
-          const gpx=x*TILE+px, gpy=y*TILE+py;
-          const bx=Math.floor(gpx/BORDER_BAND)*BORDER_BAND;
-          const by=Math.floor(gpy/BORDER_BAND)*BORDER_BAND;
-          paintChunkyBand(bx,by,cr,cg,cb);
-        }
-      });
-    }
-  }
   if(dirty) cx.putImageData(img,0,0);
+  // ---- Filter-based edge blend ----
+  // Tiles above are drawn crisp and untouched (the original per-type fill).
+  // Where two different terrain types meet, each side's own flat color is
+  // painted a short band into the OTHER tile (same "sand encroaches on
+  // grass" idea the old per-pixel blend used) as a hard-edged rectangle on a
+  // separate transparent canvas. That canvas is then composited back onto
+  // the buffer through a canvas `filter: blur(...)` — the same technique
+  // renderFogBuffer already uses for its soft edge — so the seam between the
+  // two bands, and their fade back into the tile's own untouched texture,
+  // comes from the blur itself instead of a hand-computed wavy cutoff.
+  const EDGE_BAND=8, EDGE_BLUR=4;
+  const edgeCanvas=document.createElement('canvas');
+  edgeCanvas.width=bw; edgeCanvas.height=bh;
+  const ecx=edgeCanvas.getContext('2d');
+  for(let y=0;y<MAPH;y++){
+    for(let x=0;x<MAPW;x++){
+      const type=terrain[y][x];
+      if(x<MAPW-1){
+        const nt=terrain[y][x+1];
+        if(nt!==type){
+          const [nr,ng,nb]=TERRAIN_BLEND_RGB[nt];
+          ecx.fillStyle=`rgb(${nr},${ng},${nb})`;
+          ecx.fillRect(x*TILE+TILE-EDGE_BAND, y*TILE, EDGE_BAND, TILE);
+          const [tr,tg,tb]=TERRAIN_BLEND_RGB[type];
+          ecx.fillStyle=`rgb(${tr},${tg},${tb})`;
+          ecx.fillRect((x+1)*TILE, y*TILE, EDGE_BAND, TILE);
+        }
+      }
+      if(y<MAPH-1){
+        const nt=terrain[y+1][x];
+        if(nt!==type){
+          const [nr,ng,nb]=TERRAIN_BLEND_RGB[nt];
+          ecx.fillStyle=`rgb(${nr},${ng},${nb})`;
+          ecx.fillRect(x*TILE, y*TILE+TILE-EDGE_BAND, TILE, EDGE_BAND);
+          const [tr,tg,tb]=TERRAIN_BLEND_RGB[type];
+          ecx.fillStyle=`rgb(${tr},${tg},${tb})`;
+          ecx.fillRect(x*TILE, (y+1)*TILE, TILE, EDGE_BAND);
+        }
+      }
+    }
+  }
+  cx.filter=`blur(${EDGE_BLUR}px)`;
+  cx.drawImage(edgeCanvas,0,0);
+  cx.filter='none';
 }
 
 function generateTerrain(){
