@@ -126,6 +126,20 @@
     position:absolute; right:2px; bottom:1px; font-size:9px; color:var(--sand-2);
     background:rgba(10,6,2,.75); padding:1px 3px; border-radius:3px; line-height:1.2;
   }
+  /* Hourglass shown above the jet/bomber recruit button, in the bottom
+     action bar, for the ~5 minutes it takes to build — a visible cue on the
+     button itself (not just the countdown text in .costBadge) that
+     production is under way. Hidden unless .active is toggled on. */
+  .prodHourglass{
+    position:absolute; left:50%; top:-15px; transform:translateX(-50%);
+    font-size:13px; line-height:1; display:none; pointer-events:none;
+    animation:prodHourglassPulse 1.1s ease-in-out infinite;
+  }
+  .prodHourglass.active{ display:block; }
+  @keyframes prodHourglassPulse{
+    0%,100%{ opacity:.55; transform:translateX(-50%) scale(1); }
+    50%{ opacity:1; transform:translateX(-50%) scale(1.2); }
+  }
   button{
     font-family:inherit; background:linear-gradient(180deg,#4a3220,#2c1c0d); color:var(--paper);
     border:1px solid var(--sand-3); border-radius:4px; padding:8px 10px; font-size:12px; cursor:pointer;
@@ -271,8 +285,8 @@
         <button id="buildAirport" class="iconBtn" title="Airport — 190 spice"><span class="costBadge">190</span></button>
         <button id="buildTurret" class="iconBtn" title="Turret — 90 spice"><span class="costBadge">90</span></button>
         <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice"><span class="costBadge">25</span></button>
-        <button id="recruitJet" class="iconBtn" title="Fighter jet — 130 spice, needs an airport, 5min build"><span class="costBadge">130</span></button>
-        <button id="recruitBomber" class="iconBtn" title="Cluster bomber — 220 spice, needs an airport, 5min build"><span class="costBadge">220</span></button>
+        <button id="recruitJet" class="iconBtn" title="Fighter jet — 130 spice, needs an airport, 5min build"><span class="costBadge">130</span><span class="prodHourglass" id="jetHourglass">⏳</span></button>
+        <button id="recruitBomber" class="iconBtn" title="Cluster bomber — 220 spice, needs an airport, 5min build"><span class="costBadge">220</span><span class="prodHourglass" id="bomberHourglass">⏳</span></button>
         <button id="recruitTank" class="iconBtn" title="Recruit tank — 100 spice"><span class="costBadge">100</span></button>
       </div>
     </div>
@@ -646,9 +660,6 @@ const layerUnits = new PIXI.Container();
 const layerFx = new PIXI.Container();
 world.addChild(layerBuildings, layerUnits, layerFx);
 app.stage.addChild(world);
-// house.id -> PIXI.Text hourglass shown above that house's airport while it
-// has any jet/bomber queued — see the app.ticker block below.
-const airProdIcons={};
 
 // ================= camera / zoom =================
 const cam={x:0,y:0};
@@ -1988,28 +1999,6 @@ app.ticker.add((delta)=>{
       r.x=u.sprite.x; r.y=u.sprite.y; r.visible=on;
     });
   }
-  // Hourglass over an owned airport while it has jets/bombers queued — an
-  // aircraft used to take the full 5-minute build with zero indication
-  // anywhere on the map that anything was happening, which read as "it
-  // never shows up". A gently pulsing icon right over the airport makes the
-  // in-progress build visible the whole time, not just as a countdown on
-  // the recruit button.
-  state.houses.forEach(h=>{
-    const producing=h.alive && !!(h.airProd && Object.keys(h.airProd).length);
-    const airport=producing?findOwnedAirport(h):null;
-    if(!airport){ const icon=airProdIcons[h.id]; if(icon) icon.visible=false; return; }
-    let icon=airProdIcons[h.id];
-    if(!icon){
-      icon=new PIXI.Text('⏳',{fontSize:14});
-      icon.anchor.set(0.5);
-      layerFx.addChild(icon);
-      airProdIcons[h.id]=icon;
-    }
-    const pos=buildingScreenPos(airport);
-    icon.x=pos.x; icon.y=pos.y-SZ*1.1;
-    icon.scale.set(1+0.12*Math.sin(now/260));
-    icon.visible = (h===ph) || !!(explored[airport.y] && explored[airport.y][airport.x]);
-  });
 });
 
 function renderLog(){ const el=document.getElementById('log'); el.innerHTML=state.log.map(m=>'<div>'+m+'</div>').join(''); el.scrollTop=el.scrollHeight; }
@@ -3397,6 +3386,13 @@ setInterval(()=>{
   const bomberBadge=document.querySelector('#recruitBomber .costBadge');
   if(jetBadge) jetBadge.textContent=airProdBadgeText(ph.airProd&&ph.airProd.jet, JET_COST, now);
   if(bomberBadge) bomberBadge.textContent=airProdBadgeText(ph.airProd&&ph.airProd.bomber, BOMBER_COST, now);
+  // Pulsing hourglass above each recruit button, in the bottom action bar,
+  // for as long as that type has anything queued — a visible-on-the-button
+  // cue for the ~5min build, separate from the numeric countdown above.
+  const jetHourglass=document.getElementById('jetHourglass');
+  const bomberHourglass=document.getElementById('bomberHourglass');
+  if(jetHourglass) jetHourglass.classList.toggle('active', !!(ph.airProd && ph.airProd.jet && ph.airProd.jet.length));
+  if(bomberHourglass) bomberHourglass.classList.toggle('active', !!(ph.airProd && ph.airProd.bomber && ph.airProd.bomber.length));
 }, 500);
 document.getElementById('restartBtn').onclick=()=>{
   if(mp){ if(mp.peer) mp.peer.destroy(); mp=null; showModeSelect(); }
