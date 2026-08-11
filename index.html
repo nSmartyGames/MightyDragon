@@ -3223,14 +3223,23 @@ function handleBoardClick(e){
 
   // Unit(s) selected: clicking the map commands them directly. A friendly
   // unit under the cursor re-selects it alone instead of stacking a move
-  // order onto it; combat units attack an enemy unit/building/stronghold
-  // under the cursor; anything else is a move order (non-combat units and
-  // any unit with no attack available just move). Selection persists after
-  // a command so follow-up orders can be issued right away — only Cancel,
-  // Escape, or selecting something else clears it.
+  // order onto it; clicking a unit already IN the selection just re-shows
+  // its menu instead of falling through to the move logic below, which used
+  // to quietly issue a move order to the unit's own tile (a no-op move that
+  // also hid the menu) — a wasted click that made the menu look like it kept
+  // popping open and shutting on every click on the unit itself. Combat
+  // units attack an enemy unit/building/stronghold under the cursor;
+  // anything else is a move order (non-combat units and any unit with no
+  // attack available just move). Selection persists after a command so
+  // follow-up orders can be issued right away — only Cancel, Escape, or
+  // selecting something else clears it.
   if(state.selectedUnits.length){
     const friendlyAtTile=ph.units.find(o=>o.x===x && o.y===y);
-    if(friendlyAtTile && !state.selectedUnits.includes(friendlyAtTile)){ selectUnit(friendlyAtTile); return; }
+    if(friendlyAtTile){
+      if(!state.selectedUnits.includes(friendlyAtTile)) selectUnit(friendlyAtTile);
+      else openCtxMenuFor();
+      return;
+    }
     const target=enemyTargetAt(ph,x,y);
     if(target){
       const attackers=state.selectedUnits.filter(isCombatUnit);
