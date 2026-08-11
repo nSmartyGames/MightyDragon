@@ -33,6 +33,13 @@
   #boardHost{ overflow:hidden; line-height:0; flex:1; min-height:0; height:100%; cursor:grab; position:relative; touch-action:none; }
   #boardHost.targeting{ cursor:crosshair; }
   #boardHost.dragging{cursor:grabbing;}
+  /* Soft fog framing the edges of the visible viewport (distinct from the
+     fog-of-war layer, which tracks exploration) — sits above the terrain/
+     unit/fog-of-war canvases (z-index 1-3) but below the minimap/menus. */
+  #edgeVignette{
+    position:absolute; inset:0; z-index:4; pointer-events:none;
+    background:radial-gradient(ellipse at center, rgba(10,6,2,0) 55%, rgba(10,6,2,.6) 100%);
+  }
   #minimap{
     position:absolute; top:64px; right:8px; width:150px; height:150px; z-index:18;
     border:1px solid var(--rust); border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,.6);
@@ -246,6 +253,7 @@
 <div id="app">
   <div class="panel" id="boardWrap">
     <div id="boardHost">
+      <div id="edgeVignette"></div>
       <canvas id="minimap" width="100" height="100" title="Click to jump the camera"></canvas>
       <div id="selectBox"></div>
       <div id="ctxMenu">
@@ -638,6 +646,9 @@ const layerUnits = new PIXI.Container();
 const layerFx = new PIXI.Container();
 world.addChild(layerBuildings, layerUnits, layerFx);
 app.stage.addChild(world);
+// house.id -> PIXI.Text hourglass shown above that house's airport while it
+// has any jet/bomber queued — see the app.ticker block below.
+const airProdIcons={};
 
 // ================= camera / zoom =================
 const cam={x:0,y:0};
@@ -1977,6 +1988,28 @@ app.ticker.add((delta)=>{
       r.x=u.sprite.x; r.y=u.sprite.y; r.visible=on;
     });
   }
+  // Hourglass over an owned airport while it has jets/bombers queued — an
+  // aircraft used to take the full 5-minute build with zero indication
+  // anywhere on the map that anything was happening, which read as "it
+  // never shows up". A gently pulsing icon right over the airport makes the
+  // in-progress build visible the whole time, not just as a countdown on
+  // the recruit button.
+  state.houses.forEach(h=>{
+    const producing=h.alive && !!(h.airProd && Object.keys(h.airProd).length);
+    const airport=producing?findOwnedAirport(h):null;
+    if(!airport){ const icon=airProdIcons[h.id]; if(icon) icon.visible=false; return; }
+    let icon=airProdIcons[h.id];
+    if(!icon){
+      icon=new PIXI.Text('⏳',{fontSize:14});
+      icon.anchor.set(0.5);
+      layerFx.addChild(icon);
+      airProdIcons[h.id]=icon;
+    }
+    const pos=buildingScreenPos(airport);
+    icon.x=pos.x; icon.y=pos.y-SZ*1.1;
+    icon.scale.set(1+0.12*Math.sin(now/260));
+    icon.visible = (h===ph) || !!(explored[airport.y] && explored[airport.y][airport.x]);
+  });
 });
 
 function renderLog(){ const el=document.getElementById('log'); el.innerHTML=state.log.map(m=>'<div>'+m+'</div>').join(''); el.scrollTop=el.scrollHeight; }
@@ -2027,10 +2060,8 @@ function renderStats(){
   document.getElementById('buildTurret').disabled=ph.spice<TURRET_COST || gameOver;
   document.getElementById('recruitTroop').disabled=ph.spice<TROOP_COST || gameOver;
   const airportOwned=hasAirport(ph);
-  const jetProducing=!!(ph.airProd && ph.airProd.jet);
-  const bomberProducing=!!(ph.airProd && ph.airProd.bomber);
-  document.getElementById('recruitJet').disabled=!airportOwned || jetProducing || ph.spice<JET_COST || gameOver;
-  document.getElementById('recruitBomber').disabled=!airportOwned || bomberProducing || ph.spice<BOMBER_COST || gameOver;
+  document.getElementById('recruitJet').disabled=!airportOwned || ph.spice<JET_COST || gameOver;
+  document.getElementById('recruitBomber').disabled=!airportOwned || ph.spice<BOMBER_COST || gameOver;
   document.getElementById('recruitTank').disabled=ph.spice<TANK_COST || gameOver;
 }
 
@@ -2218,25 +2249,35 @@ function findOwnedAirport(house){
 function hasAirport(house){ return !!findOwnedAirport(house); }
 // Airport production runs on wall-clock time (AIRPORT_PRODUCTION_MS), not
 // the sim tick — spice is spent up front, the unit appears once tickAirProduction
-// notices the deadline has passed. house.airProd holds at most one in-flight
-// deadline per unit type, keyed by type.
+// notices a deadline has passed. house.airProd[type] is a QUEUE (array) of
+// deadlines, one per aircraft on order — recruiting used to be blocked
+// outright while one was already building (a hard "only one plane" limit);
+// now each new order is appended and matures AIRPORT_PRODUCTION_MS after the
+// previous one in that type's queue (or after now, if the queue was empty),
+// so the airport keeps producing back-to-back instead of sitting idle
+// between orders.
 function startAirUnitProduction(house,unitType,cost){
   house.spice-=cost;
   house.airProd=house.airProd||{};
-  house.airProd[unitType]=performance.now()+AIRPORT_PRODUCTION_MS;
+  const queue=house.airProd[unitType]=house.airProd[unitType]||[];
+  const prevDeadline=queue.length?queue[queue.length-1]:performance.now();
+  queue.push(prevDeadline+AIRPORT_PRODUCTION_MS);
 }
 function tickAirProduction(house){
   if(!house.airProd) return;
   const now=performance.now();
   Object.keys(house.airProd).forEach(type=>{
-    if(now<house.airProd[type]) return;
-    delete house.airProd[type];
-    const airport=findOwnedAirport(house);
-    const origin=airport||house.base;
-    const spawn=findFreeSpawnTile(origin.x,origin.y);
-    const u=makeUnit(house.id,type,spawn.x,spawn.y);
-    house.units.push(u); ensureSprite(u);
-    addLog('House '+house.name+"'s "+(type==='jet'?'fighter jet':'cluster bomber')+' takes off from the airport.');
+    const queue=house.airProd[type];
+    while(queue.length && now>=queue[0]){
+      queue.shift();
+      const airport=findOwnedAirport(house);
+      const origin=airport||house.base;
+      const spawn=findFreeSpawnTile(origin.x,origin.y);
+      const u=makeUnit(house.id,type,spawn.x,spawn.y);
+      house.units.push(u); ensureSprite(u);
+      addLog('House '+house.name+"'s "+(type==='jet'?'fighter jet':'cluster bomber')+' takes off from the airport.');
+    }
+    if(queue.length===0) delete house.airProd[type];
   });
 }
 
@@ -3310,7 +3351,6 @@ document.getElementById('recruitJet').onclick=()=>{
   const ph=playerHouse();
   if(!ph || gameOver) return;
   if(!hasAirport(ph)){ addLog('Build an airport before recruiting fighter jets.'); return; }
-  if(ph.airProd && ph.airProd.jet) return;
   if(ph.spice<JET_COST) return;
   if(isMpClient()){ mpSend({type:'cmd', kind:'recruitJet'}); addLog('Fighter jet requested.'); return; }
   startAirUnitProduction(ph,'jet',JET_COST);
@@ -3320,7 +3360,6 @@ document.getElementById('recruitBomber').onclick=()=>{
   const ph=playerHouse();
   if(!ph || gameOver) return;
   if(!hasAirport(ph)){ addLog('Build an airport before recruiting cluster bombers.'); return; }
-  if(ph.airProd && ph.airProd.bomber) return;
   if(ph.spice<BOMBER_COST) return;
   if(isMpClient()){ mpSend({type:'cmd', kind:'recruitBomber'}); addLog('Cluster bomber requested.'); return; }
   startAirUnitProduction(ph,'bomber',BOMBER_COST);
@@ -3343,14 +3382,21 @@ function formatCountdown(msLeft){
   const s=Math.max(0,Math.ceil(msLeft/1000));
   return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
 }
+// Shows the soonest deadline in that type's queue, plus a "x N" suffix once
+// more than one of that type is queued up behind it.
+function airProdBadgeText(queue, fallback, now){
+  if(!queue || !queue.length) return fallback;
+  const suffix = queue.length>1 ? ' ×'+queue.length : '';
+  return formatCountdown(queue[0]-now)+suffix;
+}
 setInterval(()=>{
   if(!state) return;
   const ph=playerHouse(); if(!ph) return;
   const now=performance.now();
   const jetBadge=document.querySelector('#recruitJet .costBadge');
   const bomberBadge=document.querySelector('#recruitBomber .costBadge');
-  if(jetBadge) jetBadge.textContent=(ph.airProd&&ph.airProd.jet)?formatCountdown(ph.airProd.jet-now):JET_COST;
-  if(bomberBadge) bomberBadge.textContent=(ph.airProd&&ph.airProd.bomber)?formatCountdown(ph.airProd.bomber-now):BOMBER_COST;
+  if(jetBadge) jetBadge.textContent=airProdBadgeText(ph.airProd&&ph.airProd.jet, JET_COST, now);
+  if(bomberBadge) bomberBadge.textContent=airProdBadgeText(ph.airProd&&ph.airProd.bomber, BOMBER_COST, now);
 }, 500);
 document.getElementById('restartBtn').onclick=()=>{
   if(mp){ if(mp.peer) mp.peer.destroy(); mp=null; showModeSelect(); }
@@ -3597,12 +3643,12 @@ function applyRemoteCommand(msg){
       redrawSpiceAndBuildings();
     }
   } else if(msg.kind==='recruitJet'){
-    if(hasAirport(house) && !(house.airProd&&house.airProd.jet) && house.spice>=JET_COST){
+    if(hasAirport(house) && house.spice>=JET_COST){
       startAirUnitProduction(house,'jet',JET_COST);
       addLog('House '+house.name+' begins fighter jet production.');
     }
   } else if(msg.kind==='recruitBomber'){
-    if(hasAirport(house) && !(house.airProd&&house.airProd.bomber) && house.spice>=BOMBER_COST){
+    if(hasAirport(house) && house.spice>=BOMBER_COST){
       startAirUnitProduction(house,'bomber',BOMBER_COST);
       addLog('House '+house.name+' begins cluster bomber production.');
     }
