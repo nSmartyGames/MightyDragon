@@ -46,8 +46,9 @@
     image-rendering:pixelated; background:#000; cursor:pointer;
   }
   /* Full-width header strip, fixed to the top of the viewport and floating
-     over the fixed map underneath: line 1 is the game title + stat cards +
-     house tag + rival summaries, line 2 is the compact 2-line log. Kept as
+     over the fixed map underneath: a single row holding the game title,
+     stat cards, house tag, rival summaries, and — to the right of the rival
+     cards — the compact 2-line log plus its history-expand button. Kept as
      short as possible so it eats the least amount of map real estate. */
   #hudBar{
     position:fixed; top:0; left:0; right:0; width:100%; z-index:40;
@@ -93,7 +94,17 @@
   .rivalCard .rrow{ display:flex; justify-content:space-between; gap:10px; color:var(--sand-2); }
   .rivalCard .rrow b{ color:var(--paper); font-weight:normal; }
   .rivalCard.eliminated{ opacity:.45; }
-  #log{ height:1.6em; overflow-y:auto; font-size:9px; background:#0f0a05; border-top:1px solid var(--sand-3); padding:1px 10px; color:#d8c19a; line-height:1.3; margin:0; }
+  /* Sits to the right of the rival cards now (used to be its own full-width
+     row below them) — a small boxed 2-line scrollback, matching the rival
+     cards' own box styling. logHistoryBtn expands it in place to show more
+     of state.log instead of just the last couple lines. */
+  #log{
+    flex:1 1 180px; max-width:340px; max-height:2.4em; overflow-y:auto; font-size:9px;
+    background:#0f0a05; border:1px solid var(--sand-3); border-radius:5px;
+    padding:2px 8px; color:#d8c19a; line-height:1.2; margin:0;
+    transition:max-height .15s ease;
+  }
+  #log.expanded{ max-height:220px; }
   #log div:last-child{color:var(--paper); font-weight:bold;}
   /* Fixed to the viewport bottom (not just the board panel) and always
      rendered at 40% opacity so the map shows through underneath it. */
@@ -260,8 +271,9 @@
     </div>
     <div class="hudDivider"></div>
     <div id="rivalsContainer"></div>
+    <div id="log"></div>
+    <button id="logHistoryBtn" class="hudBtn" title="Show full log history">📜</button>
   </div>
-  <div id="log"></div>
 </div>
 
 <div id="app">
@@ -595,6 +607,9 @@ function toggleMusic(){
   if(btn) btn.textContent=musicOn?'🔊':'🔇';
 }
 document.getElementById('musicToggle').addEventListener('click', toggleMusic);
+document.getElementById('logHistoryBtn').addEventListener('click', ()=>{
+  document.getElementById('log').classList.toggle('expanded');
+});
 document.getElementById('hintBar').addEventListener('click', ()=>{
   const collapsed = document.getElementById('hintBox').classList.toggle('collapsed');
   document.getElementById('hintArrow').textContent = collapsed ? '▸' : '▾';
@@ -918,7 +933,7 @@ function renderFogBuffer(){
   if(!fogBuffer) fogBuffer=p5FogInstance.createGraphics(bw,bh);
   const cx=fogBuffer.drawingContext;
   cx.clearRect(0,0,bw,bh);
-  cx.filter='blur(19px)'; // +90% over the original 10px, per request — thicker fog edge
+  cx.filter='blur(34px)'; // +80% over the prior 19px, per request — thicker fog edge still
   cx.drawImage(fogMaskCanvas,0,0);
   cx.filter='none';
   // Crisp torn-edge autotile pass, drawn on top of the blur. Post-declutter
