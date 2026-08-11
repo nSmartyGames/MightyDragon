@@ -33,14 +33,22 @@
   #boardHost{ overflow:hidden; line-height:0; flex:1; min-height:0; height:100%; cursor:grab; position:relative; touch-action:none; }
   #boardHost.targeting{ cursor:crosshair; }
   #boardHost.dragging{cursor:grabbing;}
+  /* Soft fog framing the edges of the visible viewport (distinct from the
+     fog-of-war layer, which tracks exploration) — sits above the terrain/
+     unit/fog-of-war canvases (z-index 1-3) but below the minimap/menus. */
+  #edgeVignette{
+    position:absolute; inset:0; z-index:4; pointer-events:none;
+    background:radial-gradient(ellipse at center, rgba(10,6,2,0) 55%, rgba(10,6,2,.6) 100%);
+  }
   #minimap{
     position:absolute; top:64px; right:8px; width:150px; height:150px; z-index:18;
     border:1px solid var(--rust); border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,.6);
     image-rendering:pixelated; background:#000; cursor:pointer;
   }
   /* Full-width header strip, fixed to the top of the viewport and floating
-     over the fixed map underneath: line 1 is the game title + stat cards +
-     house tag + rival summaries, line 2 is the compact 2-line log. Kept as
+     over the fixed map underneath: a single row holding the game title,
+     stat cards, house tag, rival summaries, and — to the right of the rival
+     cards — the compact 2-line log plus its history-expand button. Kept as
      short as possible so it eats the least amount of map real estate. */
   #hudBar{
     position:fixed; top:0; left:0; right:0; width:100%; z-index:40;
@@ -49,25 +57,54 @@
   }
   .hudRow{ display:flex; align-items:center; gap:5px; padding:3px 10px; flex-wrap:wrap; }
   .houseTag{ font-size:10px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; padding:0 4px; flex:0 0 auto; }
-  #gameTitle{ color:var(--spice); text-shadow:0 0 8px rgba(224,82,42,.5); }
+  #gameTitle{ color:var(--spice); text-shadow:0 0 8px rgba(224,82,42,.5); display:flex; align-items:center; }
   #gameTitle #gameClock{ color:var(--sand-2); font-weight:normal; margin-left:4px; }
+  /* Brand mark: a small hand-pixelled Arrakis (a shaded, cratered desert
+     globe in the game's own rust palette) stands in for a text wordmark —
+     see the SVG rect grid below, same data-URI icon convention already used
+     by #buildAirport/#recruitJet elsewhere in this file. */
+  .brandIcon{
+    display:inline-block; width:16px; height:16px; background-size:16px 16px;
+    background-position:center; background-repeat:no-repeat; image-rendering:pixelated;
+    background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><rect x="3" y="0" width="5" height="1" fill="%23e0522a"/><rect x="2" y="1" width="2" height="1" fill="%23c1441e"/><rect x="4" y="1" width="5" height="1" fill="%23e0522a"/><rect x="1" y="2" width="4" height="1" fill="%23c1441e"/><rect x="5" y="2" width="5" height="1" fill="%23e0522a"/><rect x="0" y="3" width="6" height="1" fill="%23c1441e"/><rect x="6" y="3" width="5" height="1" fill="%23e0522a"/><rect x="0" y="4" width="7" height="1" fill="%23c1441e"/><rect x="7" y="4" width="4" height="1" fill="%23e0522a"/><rect x="0" y="5" width="1" height="1" fill="%236b1f0c"/><rect x="1" y="5" width="7" height="1" fill="%23c1441e"/><rect x="8" y="5" width="3" height="1" fill="%23e0522a"/><rect x="0" y="6" width="2" height="1" fill="%236b1f0c"/><rect x="2" y="6" width="7" height="1" fill="%23c1441e"/><rect x="9" y="6" width="2" height="1" fill="%23e0522a"/><rect x="0" y="7" width="11" height="1" fill="%238a2e12"/><rect x="1" y="8" width="9" height="1" fill="%238a2e12"/><rect x="2" y="9" width="3" height="1" fill="%236b1f0c"/><rect x="5" y="9" width="4" height="1" fill="%23c1441e"/><rect x="3" y="10" width="3" height="1" fill="%236b1f0c"/><rect x="6" y="10" width="2" height="1" fill="%23c1441e"/></svg>');
+  }
   .hudBtn{ flex:0 0 auto; padding:2px 7px; font-size:11px; line-height:1; }
   .hudDivider{ width:1px; align-self:stretch; background:var(--sand-3); margin:1px 1px; flex:0 0 auto; }
-  .statCard{
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    width:44px; height:34px; position:relative; flex:0 0 auto;
+  /* The player's own Spice/Capacity/Power/Army/Stronghold used to be five
+     separate boxed cards (icon + label + number each); collapsed into one
+     card with a single accent-colored letter ahead of each number so the
+     whole group reads compactly at a glance instead of eating five card-widths. */
+  .statCombo{
+    display:flex; align-items:center; gap:9px; padding:0 10px; height:34px; flex:0 0 auto;
     background:linear-gradient(180deg,#2c1c0d,#1c1006); border:1px solid var(--sand-3); border-radius:5px;
   }
-  .cardIcon{ width:13px; height:13px; background-size:13px 13px; background-position:center; background-repeat:no-repeat; }
-  .cardLabel{ font-size:6px; text-transform:uppercase; letter-spacing:.5px; color:var(--sand-2); margin-top:1px; }
-  .statCard .costBadge{ position:absolute; top:0px; right:2px; bottom:auto; font-size:7px; white-space:nowrap; }
+  .statItem{ display:flex; align-items:baseline; gap:3px; font-size:11px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .statItem b{ color:var(--spice); font-size:9px; letter-spacing:.5px; }
   #rivalsContainer{ display:flex; gap:8px; flex-wrap:wrap; }
-  .rivalMini{ display:flex; align-items:center; gap:5px; font-size:9px; border-left:3px solid var(--sand-3); padding:1px 0 1px 5px; white-space:nowrap; }
-  .rivalMini .rname{ font-weight:bold; text-transform:uppercase; letter-spacing:.5px; }
-  .rivalMini .rstat{ color:var(--sand-2); }
-  .rivalMini .rstat b{ color:var(--paper); }
-  .rivalMini.eliminated{ opacity:.45; }
-  #log{ height:1.6em; overflow-y:auto; font-size:9px; background:#0f0a05; border-top:1px solid var(--sand-3); padding:1px 10px; color:#d8c19a; line-height:1.3; margin:0; }
+  /* One card per rival, styled like the player's own .statCombo card
+     (background + border) rather than the old single inline row — only
+     rendered once that rival's stronghold has actually been explored (see
+     renderStats), so scouting is what reveals a rival's numbers, not just
+     picking them as your opponent. */
+  .rivalCard{
+    display:flex; flex-direction:column; gap:1px; padding:2px 8px; min-width:100px;
+    background:linear-gradient(180deg,#2c1c0d,#1c1006); border:1px solid var(--sand-3);
+    border-left-width:3px; border-radius:5px; font-size:9px; white-space:nowrap;
+  }
+  .rivalCard .rrow{ display:flex; justify-content:space-between; gap:10px; color:var(--sand-2); }
+  .rivalCard .rrow b{ color:var(--paper); font-weight:normal; }
+  .rivalCard.eliminated{ opacity:.45; }
+  /* Sits to the right of the rival cards now (used to be its own full-width
+     row below them) — a small boxed 2-line scrollback, matching the rival
+     cards' own box styling. logHistoryBtn expands it in place to show more
+     of state.log instead of just the last couple lines. */
+  #log{
+    flex:1 1 180px; max-width:340px; max-height:2.4em; overflow-y:auto; font-size:9px;
+    background:#0f0a05; border:1px solid var(--sand-3); border-radius:5px;
+    padding:2px 8px; color:#d8c19a; line-height:1.2; margin:0;
+    transition:max-height .15s ease;
+  }
+  #log.expanded{ max-height:220px; }
   #log div:last-child{color:var(--paper); font-weight:bold;}
   /* Fixed to the viewport bottom (not just the board panel) and always
      rendered at 40% opacity so the map shows through underneath it. */
@@ -90,6 +127,7 @@
   #buildAirport{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="2" y="6.5" width="12" height="3" fill="%23ffffff"/><rect x="4" y="7.6" width="1.8" height="0.8" fill="%23888"/><rect x="7.5" y="7.6" width="1.8" height="0.8" fill="%23888"/><rect x="11" y="7.6" width="1.8" height="0.8" fill="%23888"/></svg>'); }
   #recruitJet{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1 L10 8 L14 12 L8 10 L2 12 L6 8 Z" fill="%23ffffff"/></svg>'); }
   #recruitBomber{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="7" y="1" width="2" height="12" fill="%23e0e0e0"/><path d="M8 4 L15 10 L8 8.5 L1 10 Z" fill="%23e0e0e0"/><circle cx="8" cy="12" r="1.3" fill="%23555555"/></svg>'); }
+  #buildTurret{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="9" r="5" fill="%23ffffff"/><rect x="7" y="2" width="2" height="6" fill="%23e0e0e0"/><circle cx="8" cy="9" r="1.8" fill="%23888"/></svg>'); }
   .iconSpice{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAnElEQVR4nM2Suw0EIQxEhyuHVkwtiFIoBlohNKV4IxACe4/ggptwxBv/AP5epRS58UyYmWUFSikiItNzbzARofcOAGitAQCIaL6ptdrwEDNLjHF2snfwsSrvyjnDez8rhxDcEWDBWsjQDPgG7yHHCCEEZy5lUUoJrTV9BOBlswpsjqCFaPDUerZxouEx8/GZVO33Hd4VvAI33k/1AAM6uACEHTo3AAAAAElFTkSuQmCC'); }
   .iconCapacity{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAi0lEQVR4nN2SsRXDIAxEv/O8CMswDjAKj1moNAgtoziV/QgI7BRpchXijtMhgAVyzseKB9gAnHOD0Fp7rUVEPZxS2vazCCEMglIKIqJyMUYAXqt4s84tBoPTWYPG7f1GG7ePrl1lMDDGTBMA1Fo/6uUMnuAfDbz3U7HGqc/YT7rlbhN8iyvB6gf+FG8TqylG5bxpTQAAAABJRU5ErkJggg=='); }
   .iconPower{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaklEQVR4nM2SQQrAIAwEN6XvTb4SP+hXtpdaaNFEsIXOSYkZNioQwJPozBYVZ1gWyKiQRRcRAYB91Gxm176UMheHD1Q1vcRQQJK11lBwG6HN1ciagT8843cCVWVv/XqC7kdquHsqWE6wzAGHm0qrAAzDnwAAAABJRU5ErkJggg=='); }
@@ -98,6 +136,20 @@
   .costBadge{
     position:absolute; right:2px; bottom:1px; font-size:9px; color:var(--sand-2);
     background:rgba(10,6,2,.75); padding:1px 3px; border-radius:3px; line-height:1.2;
+  }
+  /* Hourglass shown above the jet/bomber recruit button, in the bottom
+     action bar, for the ~5 minutes it takes to build — a visible cue on the
+     button itself (not just the countdown text in .costBadge) that
+     production is under way. Hidden unless .active is toggled on. */
+  .prodHourglass{
+    position:absolute; left:50%; top:-15px; transform:translateX(-50%);
+    font-size:13px; line-height:1; display:none; pointer-events:none;
+    animation:prodHourglassPulse 1.1s ease-in-out infinite;
+  }
+  .prodHourglass.active{ display:block; }
+  @keyframes prodHourglassPulse{
+    0%,100%{ opacity:.55; transform:translateX(-50%) scale(1); }
+    50%{ opacity:1; transform:translateX(-50%) scale(1.2); }
   }
   button{
     font-family:inherit; background:linear-gradient(180deg,#4a3220,#2c1c0d); color:var(--paper);
@@ -141,6 +193,8 @@
     user-select:none; font-weight:bold; width:fit-content;
   }
   .hint-text{ padding:0 8px 6px 8px; }
+  .hint-text>div{ margin-top:4px; }
+  .hint-text>div:first-child{ margin-top:0; }
   /* Collapsed = just the "H▸" bar; higher specificity than .hint so it
      wins over the max-width:60% mobile override below. */
   .hint.collapsed{ max-width:none; }
@@ -158,7 +212,10 @@
   }
   /* Fixed to the board's top-left corner rather than anchored next to the
      selected unit, so it never covers the nearby tiles/enemies the new
-     click-to-move-or-attack interaction relies on clicking. */
+     click-to-move-or-attack interaction relies on clicking. top:8px here is
+     only a pre-JS fallback — #hudBar floats fixed above the board with a
+     higher z-index, so openCtxMenuFor() overwrites top on every open to sit
+     just below hudBar's actual rendered height instead of under it. */
   #ctxMenu{
     position:absolute; top:8px; left:8px; display:none; flex-direction:column;
     background:#241609; border:1px solid var(--rust); border-radius:4px;
@@ -185,8 +242,7 @@
   .houseCard p{ font-size:11px; color:var(--sand-2); line-height:1.5; margin:0; }
   @media (max-width:700px){
     .hudRow{ font-size:8px; padding:2px 6px; gap:4px; }
-    .statCard{ width:36px; height:28px; }
-    .cardIcon{ width:11px; height:11px; background-size:11px 11px; }
+    .statCombo{ height:28px; gap:6px; padding:0 7px; }
     #actionBar{ gap:2px; padding:5px; }
     #actionBar button.iconBtn{ height:48px; background-size:26px 26px; }
     .costBadge{ font-size:8px; }
@@ -203,43 +259,27 @@
 
 <div id="hudBar">
   <div class="hudRow">
-    <span id="gameTitle" class="houseTag">Galacticus <span id="gameClock">00:00</span></span>
+    <span id="gameTitle" class="houseTag"><span class="brandIcon" title="Galacticus"></span><span id="gameClock">00:00</span></span>
     <button id="musicToggle" class="hudBtn" title="Toggle music">🔊</button>
     <span id="playerHouseTitle" class="houseTag"></span>
-    <div class="statCard" title="Spice bank">
-      <span class="cardIcon iconSpice"></span>
-      <span class="cardLabel">Spice</span>
-      <b id="pSpice" class="costBadge">0</b>
-    </div>
-    <div class="statCard" title="Silo capacity">
-      <span class="cardIcon iconCapacity"></span>
-      <span class="cardLabel">Capacity</span>
-      <span id="pCap" class="costBadge">100</span>
-    </div>
-    <div class="statCard" title="Power">
-      <span class="cardIcon iconPower"></span>
-      <span class="cardLabel">Power</span>
-      <span id="pPower" class="costBadge">0</span>
-    </div>
-    <div class="statCard" title="Army (troopers)">
-      <span class="cardIcon iconArmy"></span>
-      <span class="cardLabel">Army</span>
-      <span id="pArmy" class="costBadge">0</span>
-    </div>
-    <div class="statCard" title="Stronghold">
-      <span class="cardIcon iconStronghold"></span>
-      <span class="cardLabel">Stronghold</span>
-      <span id="pStronghold" class="costBadge">160/160</span>
+    <div class="statCombo">
+      <span class="statItem" title="Spice bank"><b>S</b><span id="pSpice">0</span></span>
+      <span class="statItem" title="Silo capacity"><b>C</b><span id="pCap">100</span></span>
+      <span class="statItem" title="Power"><b>P</b><span id="pPower">0</span></span>
+      <span class="statItem" title="Army (troopers)"><b>A</b><span id="pArmy">0</span></span>
+      <span class="statItem" title="Stronghold"><b>H</b><span id="pStronghold">160/160</span></span>
     </div>
     <div class="hudDivider"></div>
     <div id="rivalsContainer"></div>
+    <div id="log"></div>
+    <button id="logHistoryBtn" class="hudBtn" title="Show full log history">📜</button>
   </div>
-  <div id="log"></div>
 </div>
 
 <div id="app">
   <div class="panel" id="boardWrap">
     <div id="boardHost">
+      <div id="edgeVignette"></div>
       <canvas id="minimap" width="100" height="100" title="Click to jump the camera"></canvas>
       <div id="selectBox"></div>
       <div id="ctxMenu">
@@ -255,9 +295,10 @@
         <button id="buildSilo" class="iconBtn" title="Silo — 70 spice"><span class="costBadge">70</span></button>
         <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice"><span class="costBadge">110</span></button>
         <button id="buildAirport" class="iconBtn" title="Airport — 190 spice"><span class="costBadge">190</span></button>
+        <button id="buildTurret" class="iconBtn" title="Turret — 90 spice"><span class="costBadge">90</span></button>
         <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice"><span class="costBadge">25</span></button>
-        <button id="recruitJet" class="iconBtn" title="Fighter jet — 130 spice, needs an airport, 5min build"><span class="costBadge">130</span></button>
-        <button id="recruitBomber" class="iconBtn" title="Cluster bomber — 220 spice, needs an airport, 5min build"><span class="costBadge">220</span></button>
+        <button id="recruitJet" class="iconBtn" title="Fighter jet — 130 spice, needs an airport, 5min build"><span class="costBadge">130</span><span class="prodHourglass" id="jetHourglass">⏳</span></button>
+        <button id="recruitBomber" class="iconBtn" title="Cluster bomber — 220 spice, needs an airport, 5min build"><span class="costBadge">220</span><span class="prodHourglass" id="bomberHourglass">⏳</span></button>
         <button id="recruitTank" class="iconBtn" title="Recruit tank — 100 spice"><span class="costBadge">100</span></button>
       </div>
     </div>
@@ -272,7 +313,15 @@
     </div>
     <div class="hint collapsed" id="hintBox">
       <div class="hint-bar" id="hintBar" title="Toggle help"><span>H</span><span id="hintArrow">▸</span></div>
-      <div class="hint-text">Click a vehicle to select it, or hold Shift and drag a box to select several at once — the cursor becomes a target reticle. Click a tile to move there, or click an enemy to attack it; the Attack button arms targeting mode for a group, Search &amp; Destroy sends units hunting for any nearby enemy on their own, Retreat pulls them back to the stronghold. Building buttons ask for a grass or desert tile to place on. Drag the map (without Shift) or use arrow keys to scroll, or click the minimap to jump there — fog clears as your units explore. Troopers drain 10 power points per shot, tanks drain 20 every 2 seconds (each wind turbine adds +5 to every shot) — reduce a stronghold's 10k power to 0 to eliminate that House. Harvesters unload at a silo or refinery — build one or their cargo is wasted; troopers and tanks can never enter one, only fight adjacent to it. A refinery holds as much as 4 silos and comes with a free harvester. Sandworms only have a 1-in-5 chance of swallowing a unit that shares their tile, and give up the chase after 5 seconds. A hit on your units, buildings, or stronghold auto-rallies nearby idle troops and tanks to Search &amp; Destroy.</div>
+      <div class="hint-text">
+        <div>Click a unit to select it, Shift+drag to box-select several. Click a tile to move, an enemy to attack.</div>
+        <div>Attack arms group targeting. Search &amp; Destroy auto-hunts nearby enemies. Retreat pulls units back to base.</div>
+        <div>Buildings need a clear grass or desert tile.</div>
+        <div>Drag the map, use arrow keys, or click the minimap to scroll. Fog clears as you explore.</div>
+        <div>Troopers drain 10 power/shot, tanks 20/2s (turbines add +5). Drain a stronghold's 10k power to eliminate it.</div>
+        <div>Harvesters unload at a silo or refinery — build one or spice is wasted. A refinery = 4 silos plus a free harvester.</div>
+        <div>Troopers and tanks fight refineries adjacent, never enter them. Sandworms have a 1-in-5 swallow chance and give up after 5s. A hit auto-rallies idle units to Search &amp; Destroy.</div>
+      </div>
     </div>
   </div>
 </div>
@@ -289,7 +338,7 @@
 <div id="onlineOverlay" class="overlay-base">
   <div class="card">
     <h2>Play Online</h2>
-    <p class="sub2" id="onlineIntro">Create a room and send the code to a friend, or join theirs. Both sides then pick a House and the duel begins — no fog of war in online matches yet.</p>
+    <p class="sub2" id="onlineIntro">Create a room and send the code to a friend, or join theirs. Both sides pick a House, then the duel begins.</p>
     <div id="onlineChoice">
       <button id="onlineCreate" style="justify-content:center;">Create Room ▶</button>
       <button id="onlineJoin" style="justify-content:center; margin-top:8px;">Join Room ▶</button>
@@ -381,13 +430,17 @@ const BASE_HP_MAX=10000; // stronghold "power points"
 const TROOP_SHOT_DMG=10; // one trooper shot drains 10 power points, from a base or a unit
 const TANK_SHOT_DMG=20; // one tank shot drains 20 power points
 const TANK_ATTACK_COOLDOWN_MS=2000; // tanks fire once every 2 seconds
-const JET_SHOT_DMG=14; const JET_ATTACK_COOLDOWN_MS=650; // fast, light strafing runs
-const BOMBER_SHOT_DMG=18; const BOMBER_ATTACK_COOLDOWN_MS=2600; // slow, heavy payload
+const JET_ATTACK_COOLDOWN_MS=650; // fast, light strafing runs
+const BOMBER_ATTACK_COOLDOWN_MS=2600; // slow, heavy payload
+const AIR_SHOT_DMG=100, AIR_SHOTS_PER_BURST=3, AIR_HIT_CHANCE=0.5;
 const BOMBER_AOE_RADIUS=2, BOMBER_AOE_DMG=15; // cluster bomb splash on every enemy in radius of the impact tile
 const TURBINE_DMG_BONUS=5; // each wind turbine adds +5 damage to every shot the house's units fire
 // Building hit points — much softer than the 10000hp stronghold, so a raid
 // that reaches the interior of a base can actually knock out its economy.
-const BUILDING_HP={ turbine:350, silo:450, refinery:450, airport:500 };
+const BUILDING_HP={ turbine:350, silo:450, refinery:450, airport:500, turret:400 };
+const TURRET_COST=90;
+const TURRET_DMG=150, TURRET_COOLDOWN_MS=2000;
+const TURRET_RANGE=5;
 // Jets and bombers are airborne — they never path around mountains or other
 // units/buildings, they fly straight there.
 const FLYER_TYPES={ jet:true, bomber:true };
@@ -486,8 +539,10 @@ function startMusic(){
   lfo.connect(lfoGain); lfoGain.connect(noiseFilter.frequency);
   lfo.start();
 
-  // War-drum pulse: a low sine thump + a short noise crack, on an irregular
-  // martial beat (not a steady metronome, so it doesn't feel like a loop).
+  // War-drum pulse: a low sine thump, on an irregular martial beat (not a
+  // steady metronome, so it doesn't feel like a loop). Used to also layer a
+  // short bright noise "crack" (a hi-hat-like tick) under the thump; removed
+  // per request to erase that hi-hat-ish sound from the music entirely.
   function warDrum(){
     if(!musicStarted || !audioCtx) return;
     const t0=audioCtx.currentTime;
@@ -499,14 +554,6 @@ function startMusic(){
     g.gain.exponentialRampToValueAtTime(0.001,t0+0.3);
     osc.connect(g); g.connect(musicGain);
     osc.start(t0); osc.stop(t0+0.32);
-
-    const crackBuf=audioCtx.createBuffer(1,Math.floor(audioCtx.sampleRate*0.08),audioCtx.sampleRate);
-    const cd=crackBuf.getChannelData(0);
-    for(let i=0;i<cd.length;i++) cd[i]=(Math.random()*2-1)*(1-i/cd.length);
-    const crack=audioCtx.createBufferSource(); crack.buffer=crackBuf;
-    const cg=audioCtx.createGain(); cg.gain.value=0.18;
-    crack.connect(cg); cg.connect(musicGain);
-    crack.start(t0);
 
     setTimeout(warDrum, 640+Math.random()*380);
   }
@@ -560,6 +607,9 @@ function toggleMusic(){
   if(btn) btn.textContent=musicOn?'🔊':'🔇';
 }
 document.getElementById('musicToggle').addEventListener('click', toggleMusic);
+document.getElementById('logHistoryBtn').addEventListener('click', ()=>{
+  document.getElementById('log').classList.toggle('expanded');
+});
 document.getElementById('hintBar').addEventListener('click', ()=>{
   const collapsed = document.getElementById('hintBox').classList.toggle('collapsed');
   document.getElementById('hintArrow').textContent = collapsed ? '▸' : '▾';
@@ -737,6 +787,124 @@ let p5Instance=new p5((p)=>{
 // flag gets set; a little lag on the reveal itself is imperceptible.
 let fogBuffer=null, fogMaskCanvas=null, fogDirty=true, lastFogBuild=0;
 const FOG_REBUILD_MS=200;
+// Fog-edge "autotile" pass: two precomputed TILE-sized torn-edge pieces
+// (lazy-built once, like fogMaskCanvas) drawn crisp on top of the blur below
+// so joins between explored ground and fog read as a hand-torn edge instead
+// of a uniform soft blob. See buildFogEdgePiece/drawFogEdgePiece below.
+let fogEdgePieces=null;
+// Curved corner pieces for the 2-adjacent-explored-neighbor case (N+E, E+S,
+// S+W, W+N) — see buildFogCornerPiece below. Without these, that case drew
+// the straight edge piece twice (once per set bit), which reads as two
+// straight torn edges meeting at an obviously artificial 90-degree kink
+// instead of a continuous curve.
+let fogCornerPieces=null;
+const FOG_EDGE_MIN_ALPHA=0.55; // alpha right at the torn line
+const FOG_EDGE_ACCENT_ALPHA=0.3; // alpha of the thin warm accent line
+// Deterministic (seeded, not Math.random()) per-control-point jitter for the
+// fog edge piece's torn boundary — same spirit as pixelHash/terrain wave
+// seeding, just a distinct seed space so the two pieces don't collide.
+function fogEdgeRand(seed,i){ return pixelHash(seed+i*131, seed*7+i*257); }
+// Builds one canonical-orientation (explored=north/top, fog=south/bottom)
+// TILE x TILE edge piece: a jagged 5-segment torn boundary, an alpha
+// gradient from FOG_EDGE_MIN_ALPHA right at the line to ~opaque at the
+// bottom, and a thin warm accent line traced along the boundary.
+function buildFogEdgePiece(seed){
+  const size=TILE;
+  const canvas=document.createElement('canvas');
+  canvas.width=size; canvas.height=size;
+  const pctx=canvas.getContext('2d');
+  const SEGMENTS=5;
+  const baseY=size*0.4, jitter=size*0.2;
+  const ctrl=[];
+  for(let i=0;i<=SEGMENTS;i++){
+    const r=fogEdgeRand(seed,i);
+    const y=Math.max(2, Math.min(size-4, baseY+(r-0.5)*2*jitter));
+    ctrl.push(y);
+  }
+  const boundaryY=new Array(size);
+  for(let x=0;x<size;x++){
+    const t=(x/size)*SEGMENTS;
+    const i=Math.min(SEGMENTS-1, Math.floor(t));
+    const frac=t-i;
+    boundaryY[x]=Math.round(ctrl[i]+(ctrl[i+1]-ctrl[i])*frac);
+  }
+  const accentRGB=darken(TERRAIN_BLEND_RGB.desert,0.65);
+  for(let x=0;x<size;x++){
+    const by=boundaryY[x];
+    const span=Math.max(1,size-by);
+    for(let y=by;y<size;y++){
+      const alpha=FOG_EDGE_MIN_ALPHA+(1-FOG_EDGE_MIN_ALPHA)*Math.min(1,(y-by)/span);
+      pctx.fillStyle=`rgba(0,0,0,${alpha.toFixed(3)})`;
+      pctx.fillRect(x,y,1,1);
+    }
+    pctx.fillStyle=`rgba(${accentRGB[0]},${accentRGB[1]},${accentRGB[2]},${FOG_EDGE_ACCENT_ALPHA})`;
+    pctx.fillRect(x,by,1,1);
+  }
+  return canvas;
+}
+// Builds one canonical-orientation (explored=north+east) TILE x TILE corner
+// piece: a genuinely curved torn boundary wrapping the tile's far corner
+// (bottom-left, i.e. deepest into fog — diagonally opposite both explored
+// sides), used for the 2-adjacent-explored-neighbor case so N+E (and its
+// rotations) read as one continuous curved edge instead of two straight
+// pieces meeting at a hard right angle.
+function buildFogCornerPiece(seed){
+  const size=TILE;
+  const canvas=document.createElement('canvas');
+  canvas.width=size; canvas.height=size;
+  const pctx=canvas.getContext('2d');
+  const SEGMENTS=5;
+  const rBase=size*0.8, jitter=size*0.18;
+  const ctrl=[];
+  for(let i=0;i<=SEGMENTS;i++){
+    const r=fogEdgeRand(seed,i);
+    ctrl.push(rBase+(r-0.5)*2*jitter);
+  }
+  function boundaryR(t){
+    const tt=t*SEGMENTS;
+    const i=Math.min(SEGMENTS-1,Math.floor(tt));
+    const frac=tt-i;
+    return ctrl[i]+(ctrl[i+1]-ctrl[i])*frac;
+  }
+  const cx0=0, cy0=size; // far corner: bottom-left, deepest into fog
+  for(let y=0;y<size;y++){
+    for(let x=0;x<size;x++){
+      const vx=x-cx0, vy=y-cy0;
+      const dist=Math.hypot(vx,vy);
+      const angle=Math.atan2(vy,vx); // ~-PI/2 (top edge) .. ~0 (right edge)
+      const t=Math.min(1,Math.max(0,(angle+Math.PI/2)/(Math.PI/2)));
+      const br=boundaryR(t);
+      if(dist<=br){
+        const alpha=FOG_EDGE_MIN_ALPHA+(1-FOG_EDGE_MIN_ALPHA)*Math.min(1,Math.max(0,(br-dist)/br));
+        pctx.fillStyle=`rgba(0,0,0,${alpha.toFixed(3)})`;
+        pctx.fillRect(x,y,1,1);
+      }
+    }
+  }
+  const accentRGB=darken(TERRAIN_BLEND_RGB.desert,0.65);
+  pctx.fillStyle=`rgba(${accentRGB[0]},${accentRGB[1]},${accentRGB[2]},${FOG_EDGE_ACCENT_ALPHA})`;
+  const STEPS=32;
+  for(let s=0;s<=STEPS;s++){
+    const t=s/STEPS;
+    const angle=-Math.PI/2+t*Math.PI/2;
+    const br=boundaryR(t);
+    const px=Math.round(cx0+br*Math.cos(angle));
+    const py=Math.round(cy0+br*Math.sin(angle));
+    if(px>=0 && px<size && py>=0 && py<size){
+      pctx.fillRect(px,py,1,1);
+    }
+  }
+  return canvas;
+}
+// Draws one edge piece centered on a tile, rotated so its canonical
+// explored=north edge faces the actual explored neighbor's direction.
+function drawFogEdgePiece(cx,piece,centerX,centerY,angle){
+  cx.save();
+  cx.translate(centerX,centerY);
+  cx.rotate(angle);
+  cx.drawImage(piece,-TILE/2,-TILE/2);
+  cx.restore();
+}
 function renderFogBuffer(){
   if(!explored) return;
   const bw=MAPW*TILE, bh=MAPH*TILE;
@@ -746,16 +914,72 @@ function renderFogBuffer(){
   mcx.fillStyle='#000000';
   for(let y=0;y<MAPH;y++){
     const erow=explored[y];
+    const up=y>0?explored[y-1]:null, down=y<MAPH-1?explored[y+1]:null;
     for(let x=0;x<MAPW;x++){
-      if(!erow[x]) mcx.fillRect(x*TILE,y*TILE,TILE,TILE);
+      if(erow[x]) continue;
+      // Rasterizing a circular reveal onto a square grid leaves stray
+      // single-tile fog gaps surrounded by explored ground — visual noise,
+      // not meaningful fog, that turns into ugly blotches once blurred.
+      // Drop any unexplored tile with 3+ explored orthogonal neighbors.
+      let exploredNeighbors=0;
+      if(erow[x-1]) exploredNeighbors++;
+      if(erow[x+1]) exploredNeighbors++;
+      if(up && up[x]) exploredNeighbors++;
+      if(down && down[x]) exploredNeighbors++;
+      if(exploredNeighbors>=3) continue;
+      mcx.fillRect(x*TILE,y*TILE,TILE,TILE);
     }
   }
   if(!fogBuffer) fogBuffer=p5FogInstance.createGraphics(bw,bh);
   const cx=fogBuffer.drawingContext;
   cx.clearRect(0,0,bw,bh);
-  cx.filter='blur(6px)';
+  cx.filter='blur(34px)'; // +80% over the prior 19px, per request — thicker fog edge still
   cx.drawImage(fogMaskCanvas,0,0);
   cx.filter='none';
+  // Crisp torn-edge autotile pass, drawn on top of the blur. Post-declutter
+  // (the >=3 explored-neighbor drop above), any tile still fogged here has
+  // 0, 1 or 2 explored orthogonal neighbors — never 3 or 4 — so this only
+  // ever draws nothing, a straight edge, or a two-piece corner.
+  if(!fogEdgePieces) fogEdgePieces=[buildFogEdgePiece(0x9e3779b1), buildFogEdgePiece(0x85ebca77)];
+  if(!fogCornerPieces) fogCornerPieces=[buildFogCornerPiece(0x9e3779b1), buildFogCornerPiece(0x85ebca77)];
+  for(let y=0;y<MAPH;y++){
+    const erow=explored[y];
+    const up=y>0?explored[y-1]:null, down=y<MAPH-1?explored[y+1]:null;
+    for(let x=0;x<MAPW;x++){
+      if(erow[x]) continue;
+      let mask=0;
+      if(up && up[x]) mask|=1;      // N
+      if(erow[x+1]) mask|=2;        // E
+      if(down && down[x]) mask|=4;  // S
+      if(erow[x-1]) mask|=8;        // W
+      if(mask===0) continue;
+      const bits=(mask&1)+((mask>>1)&1)+((mask>>2)&1)+((mask>>3)&1);
+      if(bits>=3) continue; // shouldn't happen post-declutter; skip defensively
+      const pieceIdx=(x*31+y*17)&1;
+      const px=x*TILE+TILE/2, py=y*TILE+TILE/2;
+      // 2 explored neighbors that are ADJACENT (share a corner, e.g. N+E)
+      // meet at that corner and need one curved corner piece, not two
+      // straight edge pieces meeting at a hard 90-degree kink. The 2-OPPOSITE
+      // case (N+S or E+W, a one-tile fog isthmus) has no shared corner, so
+      // the two straight pieces there don't produce a visible kink — leave
+      // that drawing both straight pieces as before.
+      if(bits===2 && (mask===3||mask===6||mask===12||mask===9)){
+        const corner=fogCornerPieces[pieceIdx];
+        let angle;
+        if(mask===3) angle=0;             // N+E
+        else if(mask===6) angle=Math.PI/2;   // E+S
+        else if(mask===12) angle=Math.PI;    // S+W
+        else angle=3*Math.PI/2;              // W+N
+        drawFogEdgePiece(cx,corner,px,py,angle);
+      }else{
+        const piece=fogEdgePieces[pieceIdx];
+        if(mask&1) drawFogEdgePiece(cx,piece,px,py,0);
+        if(mask&2) drawFogEdgePiece(cx,piece,px,py,Math.PI/2);
+        if(mask&4) drawFogEdgePiece(cx,piece,px,py,Math.PI);
+        if(mask&8) drawFogEdgePiece(cx,piece,px,py,3*Math.PI/2);
+      }
+    }
+  }
 }
 let p5FogInstance=new p5((p)=>{
   p.setup=function(){
@@ -968,6 +1192,38 @@ function windTurbineCanvas(cx,size){
   cx.fillStyle='#dedede'; cx.fillRect(hubX-1.8,hubY-0.6,4.0,1.7);
   cx.fillStyle='#ffffff'; cx.fillRect(hubX-1.8,hubY-0.6,4.0,0.55);
 }
+// A single-tile defense structure: a round sandbagged bunker base with a
+// fixed-bearing gun barrel on top — "a gun machine on a tower, one tile" —
+// distinct from the 2x2 rounded-rooftop language used by refinery/airport
+// so it doesn't get mistaken for an economy building at a glance. White/
+// light-grey tones like windTurbineCanvas above so the per-house tint still
+// recolors it.
+function turretCanvas(cx,size){
+  const bx=size/2, by=size/2+1;
+  const grd=cx.createLinearGradient(0,by-6,0,by+6);
+  grd.addColorStop(0,'#dedede'); grd.addColorStop(1,'#8a8a8a');
+  cx.beginPath(); cx.arc(bx,by,6,0,Math.PI*2);
+  cx.fillStyle=grd; cx.fill();
+  cx.strokeStyle='rgba(0,0,0,.55)'; cx.lineWidth=1; cx.stroke();
+  // sandbag ring around the bunker's rim
+  cx.fillStyle='rgba(0,0,0,.25)';
+  for(let i=0;i<8;i++){
+    const a=i*Math.PI/4;
+    cx.beginPath(); cx.arc(bx+Math.cos(a)*5.3, by+Math.sin(a)*5.3, 1.1, 0, Math.PI*2); cx.fill();
+  }
+  // turret housing on top of the bunker
+  cx.beginPath(); cx.arc(bx,by-1,3,0,Math.PI*2);
+  cx.fillStyle='#c7c7c7'; cx.fill();
+  cx.strokeStyle='rgba(0,0,0,.5)'; cx.lineWidth=0.8; cx.stroke();
+  // gun barrel, fixed bearing (turrets don't rotate to face targets here)
+  cx.save();
+  cx.translate(bx,by-1); cx.rotate(-40*Math.PI/180);
+  cx.fillStyle='#5f5f5f'; cx.fillRect(0,-0.8,7,1.6);
+  cx.fillStyle='#3a3a3a'; cx.fillRect(5.5,-0.9,1.5,1.8);
+  cx.restore();
+  cx.beginPath(); cx.arc(bx-1.2,by-2.2,1,0,Math.PI*2);
+  cx.fillStyle='rgba(255,255,255,.5)'; cx.fill();
+}
 // Hand-drawn image tiles (base64 PNG, neutral white/light-grey so the existing
 // per-house tint-at-render still works). Trooper/tank are single static
 // sprites rotated via sprite.rotation instead of pre-baked per-direction frames.
@@ -1074,6 +1330,7 @@ const TEX = {
   wormMouth: canvasTexture(TILE, wormMouthCanvas),
   spice: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#e0522a'; cx.beginPath(); cx.arc(size/2,size/2,6,0,Math.PI*2); cx.fill(); cx.fillStyle='rgba(255,180,120,.6)'; cx.beginPath(); cx.arc(size/2-1.5,size/2-1.5,2.2,0,Math.PI*2); cx.fill(); }),
   turbine: canvasTexture(TILE, windTurbineCanvas),
+  turret: canvasTexture(TILE, turretCanvas),
   silo: null,
   // A rounded, shaded rooftop viewed from directly above, rather than a flat
   // white square — reads as a smoother, more solid headquarters once tinted
@@ -1294,43 +1551,21 @@ const TERRAIN_BASE_DRAW={
   desert:(cx,size,even,tileX,tileY)=>speckleGround(cx,size,tileX,tileY,'desert'),
   mountain:(cx,size,even)=>{ even?mountainCanvasA(cx,size):mountainCanvasB(cx,size); }
 };
-const WAVE_AMP=9, WAVE_FREQ=(2*Math.PI)/40;
-// Fine 2px quantization reads as a jagged hand-drawn contour; the old 6px
-// step was as coarse as the amplitude itself, so it barely deviated from a
-// straight tile edge.
-const EDGE_STEP=2;
-// Rocky mountain edges get their own, bolder wave and extra speckle scatter
-// (below) so a rock/grass or rock/desert line reads unmistakably as broken
-// rock, not just a deeper dune ripple.
-const ROCK_WAVE_AMP=12;
 // Deterministic pseudo-random hash (no Math.random() dependency at render
-// time) used to speckle loose rock/sand pixels across the rocky blend band.
+// time) used to speckle loose rock/sand pixels in the base tile fill.
 function pixelHash(x,y){
   let h=(x*374761393+y*668265263)|0;
   h=(h^(h>>>13))*1274126177|0;
   h=h^(h>>>16);
   return ((h>>>0)%1000)/1000;
 }
-function terrainWaveSeed(a,b){
-  const order={grass:0,desert:1,mountain:2};
-  const lo=Math.min(order[a],order[b]), hi=Math.max(order[a],order[b]);
-  return (lo*3+hi)*1.9+0.7;
-}
-function terrainWave(coord,seed){ return WAVE_AMP*Math.sin(coord*WAVE_FREQ+seed); }
-// Sum of three mismatched-frequency sines instead of one — still a smooth
-// curve at any point, but the combined period never repeats on the map, so
-// the rock/grass line reads as an irregular natural contour, not a ripple.
-function terrainWaveRocky(coord,seed){
-  return ROCK_WAVE_AMP*0.5*Math.sin(coord*WAVE_FREQ*0.8+seed)
-       + ROCK_WAVE_AMP*0.3*Math.sin(coord*WAVE_FREQ*2.3+seed*1.9)
-       + ROCK_WAVE_AMP*0.35*Math.sin(coord*WAVE_FREQ*4.7+seed*3.3);
-}
+function darken(rgb,m){ return [Math.round(rgb[0]*m),Math.round(rgb[1]*m),Math.round(rgb[2]*m)]; }
 // Pre-renders the whole terrain grid into terrainBuffer (a p5.Graphics at
-// native TILE resolution) once per game start: a base-color pass per tile,
-// then a single whole-buffer wavy-boundary blend pass (cheaper than one
-// getImageData/putImageData round-trip per tile). The wave offset is
-// quantized to EDGE_STEP so the curve reads as a chunky, angular coastline
-// (retro-pixel corners) rather than a smooth anti-aliased one.
+// native TILE resolution) once per game start: a crisp, unmodified base-color
+// pass per tile (the original per-type fill), then a filter-blurred edge
+// blend pass (see below) so tiles whose type differs from a neighbor read as
+// a soft transition instead of a hard grid line — without touching the tiles
+// themselves.
 function renderTerrainBuffer(){
   const bw=MAPW*TILE, bh=MAPH*TILE;
   if(terrainBuffer) terrainBuffer.remove();
@@ -1347,18 +1582,13 @@ function renderTerrainBuffer(){
       cx.restore();
     }
   }
-  const img=cx.getImageData(0,0,bw,bh);
-  const data=img.data;
-  let dirty=false;
-  function paintPixel(gpx,gpy,r,g,b){
-    const idx=(gpy*bw+gpx)*4;
-    data[idx]=r; data[idx+1]=g; data[idx+2]=b; data[idx+3]=255;
-    dirty=true;
-  }
   // Faint reddish-orange "spice bloom" haze: soft, large-scale blotches of
   // richer sand scattered across the desert, matching the mottled patches
   // on the reference map. Low-frequency sum-of-sines (not the per-pixel
   // hash used for rock speckle) so blotches span many tiles, not one.
+  const img=cx.getImageData(0,0,bw,bh);
+  const data=img.data;
+  let dirty=false;
   const BLOOM_R=0xb8, BLOOM_G=0x50, BLOOM_B=0x1e;
   function bloomNoise(px,py){
     return Math.sin(px*0.017+py*0.011+1.7)*0.5
@@ -1383,75 +1613,55 @@ function renderTerrainBuffer(){
       }
     }
   }
+  if(dirty) cx.putImageData(img,0,0);
+  // ---- Filter-based edge blend ----
+  // Tiles above are drawn crisp and untouched (the original per-type fill).
+  // Where two different terrain types meet, each side's own flat color is
+  // painted a short band into the OTHER tile (same "sand encroaches on
+  // grass" idea the old per-pixel blend used) as a hard-edged rectangle on a
+  // separate transparent canvas. That canvas is then composited back onto
+  // the buffer through a canvas `filter: blur(...)` — the same technique
+  // renderFogBuffer already uses for its soft edge — so the seam between the
+  // two bands, and their fade back into the tile's own untouched texture,
+  // comes from the blur itself instead of a hand-computed wavy cutoff.
+  // Band covers ~20% of a tile's width on each side of the boundary (not
+  // half the tile), so only a thin strip of pixels near the seam blends —
+  // the blur radius is kept just as small so it doesn't spread the softened
+  // zone past that ~20% either.
+  const EDGE_BAND=Math.max(1,Math.round(TILE*0.2)), EDGE_BLUR=Math.max(1,Math.round(EDGE_BAND*0.6));
+  const edgeCanvas=document.createElement('canvas');
+  edgeCanvas.width=bw; edgeCanvas.height=bh;
+  const ecx=edgeCanvas.getContext('2d');
   for(let y=0;y<MAPH;y++){
     for(let x=0;x<MAPW;x++){
       const type=terrain[y][x];
-      const neighbors=[
-        ['up', y>0?terrain[y-1][x]:null],
-        ['down', y<MAPH-1?terrain[y+1][x]:null],
-        ['left', x>0?terrain[y][x-1]:null],
-        ['right', x<MAPW-1?terrain[y][x+1]:null]
-      ];
-      neighbors.forEach(([dir,nt])=>{
-        if(!nt || nt===type) return;
-        const seed=terrainWaveSeed(type,nt);
-        const flatColor=TERRAIN_BLEND_RGB[nt];
-        const isRocky=type==='mountain' || nt==='mountain';
-        const wave=isRocky?terrainWaveRocky:terrainWave;
-        const baseAmp=isRocky?ROCK_WAVE_AMP:WAVE_AMP;
-        for(let ly=0;ly<TILE;ly++){
-          for(let lx=0;lx<TILE;lx++){
-            const gpx=x*TILE+lx, gpy=y*TILE+ly;
-            const rawOffset=(dir==='up'||dir==='down') ? wave(gpx,seed) : wave(gpy,seed);
-            const offset=Math.round(rawOffset/EDGE_STEP)*EDGE_STEP;
-            const threshold=baseAmp+offset;
-            const depth=(dir==='up')?threshold-ly
-                       :(dir==='down')?threshold-(TILE-1-ly)
-                       :(dir==='left')?threshold-lx
-                       :threshold-(TILE-1-lx);
-            // A single clean contour line (no loose scatter past it) reads
-            // as a crisp joint; the old scatter band blurred sand/rock
-            // edges into a noisy, "mixed" stripe instead of a clear seam.
-            if(depth>0){
-              const [r,g,b]=GROUND_PALETTE[nt]?speckledColorAt(nt,gpx,gpy):flatColor;
-              paintPixel(gpx,gpy,r,g,b);
-            }
-          }
+      if(x<MAPW-1){
+        const nt=terrain[y][x+1];
+        if(nt!==type){
+          const [nr,ng,nb]=TERRAIN_BLEND_RGB[nt];
+          ecx.fillStyle=`rgb(${nr},${ng},${nb})`;
+          ecx.fillRect(x*TILE+TILE-EDGE_BAND, y*TILE, EDGE_BAND, TILE);
+          const [tr,tg,tb]=TERRAIN_BLEND_RGB[type];
+          ecx.fillStyle=`rgb(${tr},${tg},${tb})`;
+          ecx.fillRect((x+1)*TILE, y*TILE, EDGE_BAND, TILE);
         }
-      });
-      // Diagonal corners: where two orthogonally-different biomes meet at a
-      // shared corner, the two independent edge waves above can leave a hard
-      // square notch. Round it off with a small quarter-circle carve so all
-      // three-way junctions read as continuous, not tile-cornered.
-      const diag=[
-        ['up','left', y>0?terrain[y-1][x]:null, x>0?terrain[y][x-1]:null, y>0&&x>0?terrain[y-1][x-1]:null],
-        ['up','right', y>0?terrain[y-1][x]:null, x<MAPW-1?terrain[y][x+1]:null, y>0&&x<MAPW-1?terrain[y-1][x+1]:null],
-        ['down','left', y<MAPH-1?terrain[y+1][x]:null, x>0?terrain[y][x-1]:null, y<MAPH-1&&x>0?terrain[y+1][x-1]:null],
-        ['down','right', y<MAPH-1?terrain[y+1][x]:null, x<MAPW-1?terrain[y][x+1]:null, y<MAPH-1&&x<MAPW-1?terrain[y+1][x+1]:null]
-      ];
-      diag.forEach(([vDir,hDir,vt,ht,dt])=>{
-        if(!dt || dt===type || !vt || !ht) return;
-        if(vt===type || ht===type) return; // not a true diagonal-only junction
-        const r0=ROCK_WAVE_AMP*0.55;
-        const cornerLy = vDir==='up'?0:TILE-1;
-        const cornerLx = hDir==='left'?0:TILE-1;
-        const flatColor=TERRAIN_BLEND_RGB[dt];
-        for(let ly=0;ly<TILE*0.5;ly++){
-          for(let lx=0;lx<TILE*0.5;lx++){
-            const py=vDir==='up'?ly:TILE-1-ly;
-            const px=hDir==='left'?lx:TILE-1-lx;
-            const dist=Math.hypot(py-cornerLy, px-cornerLx);
-            if(dist<r0){
-              const gpx=x*TILE+px, gpy=y*TILE+py;
-              const [r,g,b]=GROUND_PALETTE[dt]?speckledColorAt(dt,gpx,gpy):flatColor;
-              paintPixel(gpx,gpy,r,g,b);
-            }
-          }
+      }
+      if(y<MAPH-1){
+        const nt=terrain[y+1][x];
+        if(nt!==type){
+          const [nr,ng,nb]=TERRAIN_BLEND_RGB[nt];
+          ecx.fillStyle=`rgb(${nr},${ng},${nb})`;
+          ecx.fillRect(x*TILE, y*TILE+TILE-EDGE_BAND, TILE, EDGE_BAND);
+          const [tr,tg,tb]=TERRAIN_BLEND_RGB[type];
+          ecx.fillStyle=`rgb(${tr},${tg},${tb})`;
+          ecx.fillRect(x*TILE, (y+1)*TILE, TILE, EDGE_BAND);
         }
-      });
+      }
     }
   }
-  if(dirty) cx.putImageData(img,0,0);
+  cx.filter=`blur(${EDGE_BLUR}px)`;
+  cx.drawImage(edgeCanvas,0,0);
+  cx.filter='none';
 }
 
 function generateTerrain(){
@@ -1554,7 +1764,7 @@ function redrawSpiceAndBuildings(){
   });
   buildingMap.forEach(b=>{
     if(b.primary===false) return; // footprint-only tile of a multi-tile building; drawn once at its origin
-    const tex = b.type==='turbine'?TEX.turbine : b.type==='silo'?TEX.silo : b.type==='airport'?TEX.airport : TEX.refineryBody;
+    const tex = b.type==='turbine'?TEX.turbine : b.type==='turret'?TEX.turret : b.type==='silo'?TEX.silo : b.type==='airport'?TEX.airport : TEX.refineryBody;
     const sp=new PIXI.Sprite(tex); sp.x=b.x*SZ; sp.y=b.y*SZ; sp.scale.set(ZOOM);
     const owner=houseById(b.owner);
     if(owner) sp.tint=owner.color;
@@ -1828,14 +2038,21 @@ function renderStats(){
   const rivalsEl=document.getElementById('rivalsContainer');
   rivalsEl.innerHTML='';
   state.houses.filter(h=>h!==ph).forEach(h=>{
+    // Scouting-gated: a rival's numbers only show once you've actually found
+    // their stronghold tile, same explored-tile check the minimap already
+    // uses for base visibility — not just knowing who you're up against.
+    const discovered=!!(explored[h.base.y] && explored[h.base.y][h.base.x]);
+    if(!discovered) return;
     const div=document.createElement('div');
-    div.className='rivalMini'+(h.alive?'':' eliminated');
+    // No house-name label — the card itself (plus its house-colored left
+    // border, still set below) is the only identity shown for the rival.
+    div.className='rivalCard'+(h.alive?'':' eliminated');
+    div.title=h.name+(h.alive?'':' — Eliminated');
     div.style.borderLeftColor=h.colorCss;
     div.innerHTML =
-      '<span class="rname" style="color:'+h.colorCss+'">'+h.name+(h.alive?'':' — Eliminated')+'</span>'+
-      '<span class="rstat">Spice <b>'+Math.floor(h.spice)+'</b></span>'+
-      '<span class="rstat">Army <b>'+h.units.filter(isCombatUnit).length+'</b></span>'+
-      '<span class="rstat">Stronghold <b>'+fmtK(Math.max(0,Math.ceil(h.baseHp)))+'/'+fmtK(h.baseHpMax)+'</b></span>';
+      '<div class="rrow"><span>Spice</span><b>'+Math.floor(h.spice)+'</b></div>'+
+      '<div class="rrow"><span>Army</span><b>'+h.units.filter(isCombatUnit).length+'</b></div>'+
+      '<div class="rrow"><span>Stronghold</span><b>'+fmtK(Math.max(0,Math.ceil(h.baseHp)))+'/'+fmtK(h.baseHpMax)+'</b></div>';
     rivalsEl.appendChild(div);
   });
 
@@ -1844,12 +2061,11 @@ function renderStats(){
   document.getElementById('buildSilo').disabled=ph.spice<SILO_COST || gameOver;
   document.getElementById('buildRefinery').disabled=ph.spice<REFINERY_COST || gameOver;
   document.getElementById('buildAirport').disabled=ph.spice<AIRPORT_COST || gameOver;
+  document.getElementById('buildTurret').disabled=ph.spice<TURRET_COST || gameOver;
   document.getElementById('recruitTroop').disabled=ph.spice<TROOP_COST || gameOver;
   const airportOwned=hasAirport(ph);
-  const jetProducing=!!(ph.airProd && ph.airProd.jet);
-  const bomberProducing=!!(ph.airProd && ph.airProd.bomber);
-  document.getElementById('recruitJet').disabled=!airportOwned || jetProducing || ph.spice<JET_COST || gameOver;
-  document.getElementById('recruitBomber').disabled=!airportOwned || bomberProducing || ph.spice<BOMBER_COST || gameOver;
+  document.getElementById('recruitJet').disabled=!airportOwned || ph.spice<JET_COST || gameOver;
+  document.getElementById('recruitBomber').disabled=!airportOwned || ph.spice<BOMBER_COST || gameOver;
   document.getElementById('recruitTank').disabled=ph.spice<TANK_COST || gameOver;
 }
 
@@ -1998,10 +2214,14 @@ function findFreeTileNear(cx,cy){
 }
 // Like findFreeTileNear but for a 2x2 footprint (airport/refinery) — scans
 // outward for a spot where the whole footprint is clear, not just one tile.
-function findFreeFootprintNear(cx,cy,placeType){
+// ignoreFog lets newGame()'s free-starting-airport grant use this before
+// any tile has been explored yet (placementValid's explored check is right
+// for interactive player placement, but would make every call here return
+// null during initial world setup, silently skipping the airport).
+function findFreeFootprintNear(cx,cy,placeType,ignoreFog){
   for(let r=1;r<10;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
     const x=cx+dx,y=cy+dy;
-    if(placementValid(placeType,x,y)) return {x,y};
+    if(placementValid(placeType,x,y,ignoreFog)) return {x,y};
   }
   return null;
 }
@@ -2033,25 +2253,35 @@ function findOwnedAirport(house){
 function hasAirport(house){ return !!findOwnedAirport(house); }
 // Airport production runs on wall-clock time (AIRPORT_PRODUCTION_MS), not
 // the sim tick — spice is spent up front, the unit appears once tickAirProduction
-// notices the deadline has passed. house.airProd holds at most one in-flight
-// deadline per unit type, keyed by type.
+// notices a deadline has passed. house.airProd[type] is a QUEUE (array) of
+// deadlines, one per aircraft on order — recruiting used to be blocked
+// outright while one was already building (a hard "only one plane" limit);
+// now each new order is appended and matures AIRPORT_PRODUCTION_MS after the
+// previous one in that type's queue (or after now, if the queue was empty),
+// so the airport keeps producing back-to-back instead of sitting idle
+// between orders.
 function startAirUnitProduction(house,unitType,cost){
   house.spice-=cost;
   house.airProd=house.airProd||{};
-  house.airProd[unitType]=performance.now()+AIRPORT_PRODUCTION_MS;
+  const queue=house.airProd[unitType]=house.airProd[unitType]||[];
+  const prevDeadline=queue.length?queue[queue.length-1]:performance.now();
+  queue.push(prevDeadline+AIRPORT_PRODUCTION_MS);
 }
 function tickAirProduction(house){
   if(!house.airProd) return;
   const now=performance.now();
   Object.keys(house.airProd).forEach(type=>{
-    if(now<house.airProd[type]) return;
-    delete house.airProd[type];
-    const airport=findOwnedAirport(house);
-    const origin=airport||house.base;
-    const spawn=findFreeSpawnTile(origin.x,origin.y);
-    const u=makeUnit(house.id,type,spawn.x,spawn.y);
-    house.units.push(u); ensureSprite(u);
-    addLog('House '+house.name+"'s "+(type==='jet'?'fighter jet':'cluster bomber')+' takes off from the airport.');
+    const queue=house.airProd[type];
+    while(queue.length && now>=queue[0]){
+      queue.shift();
+      const airport=findOwnedAirport(house);
+      const origin=airport||house.base;
+      const spawn=findFreeSpawnTile(origin.x,origin.y);
+      const u=makeUnit(house.id,type,spawn.x,spawn.y);
+      house.units.push(u); ensureSprite(u);
+      addLog('House '+house.name+"'s "+(type==='jet'?'fighter jet':'cluster bomber')+' takes off from the airport.');
+    }
+    if(queue.length===0) delete house.airProd[type];
   });
 }
 
@@ -2077,8 +2307,9 @@ function harvestAt(u){
 const COMBAT_STATS={
   trooper:{ dmg:TROOP_SHOT_DMG, cooldown:ATTACK_COOLDOWN_MS },
   tank:{ dmg:TANK_SHOT_DMG, cooldown:TANK_ATTACK_COOLDOWN_MS },
-  jet:{ dmg:JET_SHOT_DMG, cooldown:JET_ATTACK_COOLDOWN_MS },
-  bomber:{ dmg:BOMBER_SHOT_DMG, cooldown:BOMBER_ATTACK_COOLDOWN_MS },
+  jet:{ dmg:AIR_SHOT_DMG, cooldown:JET_ATTACK_COOLDOWN_MS },
+  bomber:{ dmg:AIR_SHOT_DMG, cooldown:BOMBER_ATTACK_COOLDOWN_MS },
+  turret:{ dmg:TURRET_DMG, cooldown:TURRET_COOLDOWN_MS },
 };
 function isCombatUnit(u){ return !!COMBAT_STATS[u.type]; }
 function removeUnitVisuals(u){
@@ -2092,7 +2323,7 @@ function removeUnitVisuals(u){
 // Fires the attacker's shot FX at the target's current screen position:
 // a laser+spark for troopers, a lobbed bomb burst for tanks.
 function spawnAttackFx(u,targetX,targetY){
-  if(u.type==='tank' || u.type==='bomber') spawnBombFx(targetX,targetY);
+  if(u.type==='tank' || u.type==='bomber' || u.type==='turret') spawnBombFx(targetX,targetY);
   else if(u.sprite) spawnLaserFx(u.sprite.x,u.sprite.y,targetX,targetY);
   playFireSound();
 }
@@ -2103,6 +2334,16 @@ function spawnAttackFx(u,targetX,targetY){
 function alertNearbyDefenders(house,x,y){
   house.units.forEach(u=>{
     if(!isCombatUnit(u)) return;
+    // Flyers never auto-scramble off this passive alert — they only fight
+    // when explicitly ordered (or already mid-engagement), and once a
+    // strafing run sends one home it stays parked. A base under sustained
+    // fire re-alerts on every single hit; a parked jet's move order clears
+    // to null the instant it lands, so without this exclusion the very next
+    // hit would read it as idle and sweep it right back into 'engage' —
+    // "parked" has to mean immune to auto-launch, not just protected
+    // mid-flight (which a one-tick order.kind check can't tell apart from
+    // a freshly-landed, genuinely-idle jet).
+    if(isFlyer(u.type)) return;
     if(u.order && u.order.kind==='attack') return; // already committed to a specific fight
     const d=Math.max(Math.abs(u.x-x),Math.abs(u.y-y));
     if(d<=DEFEND_ALERT_RADIUS) u.order={kind:'engage'};
@@ -2143,7 +2384,18 @@ function applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase){
   u._lastAttack=now; u._lastCombatAt=now;
   // house.power is the sum of that house's wind-turbine bonuses — every shot,
   // trooper or tank, hits harder by that flat amount.
-  const dmg=stats.dmg+(house.power||0);
+  const isAirBurst=(u.type==='jet' || u.type==='bomber');
+  let dmg=0, anyHit=false;
+  const shots=isAirBurst?AIR_SHOTS_PER_BURST:1;
+  for(let i=0;i<shots;i++){
+    if(isAirBurst && Math.random()>=AIR_HIT_CHANCE) continue;
+    anyHit=true;
+    dmg+=stats.dmg+(house.power||0);
+  }
+  if(!anyHit){
+    addLog('House '+house.name+"'s "+u.type+' fires a burst and misses.');
+    return false;
+  }
   if(targetIsBase){
     // Attacks only ever drain stronghold power — a house's banked spice is
     // never touched by combat, no matter what's under fire.
@@ -2197,7 +2449,18 @@ function applyBuildingAttack(house,u,targetHouse,buildingKey){
   const resolved=resolveBuildingTarget(buildingKey);
   if(!resolved) return true; // already destroyed by someone else
   u._lastAttack=now; u._lastCombatAt=now;
-  const dmg=stats.dmg+(house.power||0);
+  const isAirBurst=(u.type==='jet' || u.type==='bomber');
+  let dmg=0, anyHit=false;
+  const shots=isAirBurst?AIR_SHOTS_PER_BURST:1;
+  for(let i=0;i<shots;i++){
+    if(isAirBurst && Math.random()>=AIR_HIT_CHANCE) continue;
+    anyHit=true;
+    dmg+=stats.dmg+(house.power||0);
+  }
+  if(!anyHit){
+    addLog('House '+house.name+"'s "+u.type+' fires a burst and misses.');
+    return false;
+  }
   const b=resolved.b;
   b.hp-=dmg;
   const pos=buildingScreenPos(b);
@@ -2214,6 +2477,7 @@ function applyBuildingAttack(house,u,targetHouse,buildingKey){
     if(b.type==='turbine') targetHouse.power=Math.max(0,targetHouse.power-TURBINE_DMG_BONUS);
     else if(b.type==='silo') targetHouse.cap=Math.max(START_CAP,targetHouse.cap-SILO_CAP_BONUS);
     else if(b.type==='refinery') targetHouse.cap=Math.max(START_CAP,targetHouse.cap-REFINERY_CAP_BONUS);
+    else if(b.type==='turret'){}
     redrawSpiceAndBuildings();
     return true;
   }
@@ -2237,11 +2501,66 @@ function findEngageTarget(house,u){
   });
   return best;
 }
+// Nearest living enemy unit within range — unit-only (no buildings/base),
+// used by turret defense which only ever fires at units.
+function findNearestEnemyUnitInRange(house,x,y,range){
+  let best=null,bd=range;
+  enemyHousesOf(house).forEach(r=>r.units.forEach(t=>{
+    const d=Math.max(Math.abs(x-t.x),Math.abs(y-t.y));
+    if(d<=bd){ bd=d; best={targetHouse:r, targetUnit:t}; }
+  }));
+  return best;
+}
+function tickTurretDefense(house){
+  buildingMap.forEach(b=>{
+    if(b.owner!==house.id || b.type!=='turret') return;
+    const t=findNearestEnemyUnitInRange(house,b.x,b.y,TURRET_RANGE);
+    if(t) applyCombatUnitAttack(house,b,t.targetHouse,t.targetUnit,false);
+  });
+}
 function stepHouseUnits(house){
   house.units.forEach(u=>{
     if(!u.order || u.moving) return;
     if(u.order.kind==='engage'){
       if(!isCombatUnit(u)){ u.order=null; return; }
+      // A flyer whose specific Attack-order target died en route (or was
+      // never given one) can land here via alertNearbyDefenders sweeping up
+      // idle combat units during a raid — Search & Destroy is meant to be a
+      // standing stance, but for jets/bombers that would defeat the one-pass
+      // strafing-run behavior below just as much as leaving Attack orders
+      // unpatched would, so the same immediate-RTB rule applies here too.
+      if(isFlyer(u.type)){
+        const t=findEngageTarget(house,u);
+        if(t){
+          const dist=Math.max(Math.abs(u.x-t.x),Math.abs(u.y-t.y));
+          if(dist<=1){
+            const prevAttackAt=u._lastAttack;
+            if(t.kind==='building') applyBuildingAttack(house,u,t.targetHouse,t.buildingKey);
+            else applyCombatUnitAttack(house,u,t.targetHouse,t.targetUnit,t.kind==='base');
+            if(u._lastAttack!==prevAttackAt){
+              const home=findOwnedAirport(house)||house.base;
+              const spot=findFreeSpawnTile(home.x,home.y);
+              u.order={kind:'move', x:spot.x, y:spot.y};
+            }
+          } else if(t.kind==='unit') stepToward(u,t.x,t.y);
+          else { const ap=approachTile(u.x,u.y,t.x,t.y); stepToward(u,ap.x,ap.y); }
+        } else {
+          // Nothing in immediate range — overfly toward the nearest living
+          // rival's stronghold instead of sitting parked, same hunt fallback
+          // ground units already get below. It still only fires once it's
+          // actually adjacent to something (findEngageTarget catches units/
+          // buildings/the base itself along the way), then RTBs same as any
+          // other landed shot above — this is a patrol leg, not a one-way trip.
+          const rivals=enemyHousesOf(house);
+          if(rivals.length){
+            let nearest=rivals[0], bd=Infinity;
+            rivals.forEach(r=>{ const d=Math.max(Math.abs(u.x-r.base.x),Math.abs(u.y-r.base.y)); if(d<bd){ bd=d; nearest=r; } });
+            const ap=approachTile(u.x,u.y,nearest.base.x,nearest.base.y);
+            stepToward(u,ap.x,ap.y);
+          }
+        }
+        return;
+      }
       const t=findEngageTarget(house,u);
       if(t){
         const dist=Math.max(Math.abs(u.x-t.x),Math.abs(u.y-t.y));
@@ -2279,10 +2598,22 @@ function stepHouseUnits(house){
       const dist=Math.max(Math.abs(u.x-tx),Math.abs(u.y-ty));
       if(dist<=1){
         if(!isCombatUnit(u)){ u.order=null; return; }
+        const prevAttackAt=u._lastAttack;
         const killed = buildingKey
           ? applyBuildingAttack(house,u,targetHouse,buildingKey)
           : applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase);
-        if(killed) u.order=null;
+        // Jets/bombers make one strafing pass per Attack order, not a standing
+        // gunfight like troopers/tanks: once this call actually fires (not
+        // just cooldown-gated — compare _lastAttack, since a miss and "still
+        // on cooldown" both return false from apply*Attack), head home
+        // instead of looping the same attack. If the defender's turret fire
+        // catches it before it clears the area, it's simply gone from
+        // house.units by the time this runs again — no special-casing needed.
+        if(isFlyer(u.type) && u._lastAttack!==prevAttackAt){
+          const home=findOwnedAirport(house)||house.base;
+          const spot=findFreeSpawnTile(home.x,home.y);
+          u.order={kind:'move', x:spot.x, y:spot.y};
+        } else if(killed) u.order=null;
       } else if(targetUnit){
         stepToward(u,tx,ty);
       } else {
@@ -2437,6 +2768,11 @@ function aiTurnForHouse(house){
       const spot=findFreeTileNear(house.base.x,house.base.y);
       buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo});
       house.spice-=SILO_COST; house.cap+=SILO_CAP_BONUS; spentEcon+=SILO_COST; redrawSpiceAndBuildings();
+    } else if(budget>=TURRET_COST && Math.random()<0.4){
+      const spot=findFreeTileNear(house.base.x,house.base.y);
+      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turret',owner:house.id,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret});
+      house.spice-=TURRET_COST; spentEcon+=TURRET_COST; redrawSpiceAndBuildings();
+      addLog('House '+house.name+' builds a turret.');
     } else if(!hasAirport(house) && budget>=AIRPORT_COST && Math.random()<0.3){
       const spot=findFreeFootprintNear(house.base.x,house.base.y,'place-airport');
       if(spot){
@@ -2587,6 +2923,7 @@ function gameTick(){
     autoHarvestAndReturn(h);
     autoAssignHarvesters(h);
     tickAirProduction(h);
+    tickTurretDefense(h);
   });
 
   const ph=playerHouse();
@@ -2627,16 +2964,16 @@ function placementFootprint(placeType,x,y){
 }
 // Single source of truth for "can this building go here" — shared by the
 // hover preview and the actual click handler so the preview never lies.
-function placementValid(placeType,x,y){
+function placementValid(placeType,x,y,ignoreFog){
   return placementFootprint(placeType,x,y).every(([fx,fy])=>
-    inBounds(fx,fy) && terrain[fy][fx]!=='mountain' && explored[fy][fx] &&
+    inBounds(fx,fy) && terrain[fy][fx]!=='mountain' && (ignoreFog || explored[fy][fx]) &&
     !buildingMap.has(fx+','+fy) && !spiceMap.has(fx+','+fy) && !isBaseTile(fx,fy));
 }
 const placePreview=new PIXI.Graphics();
 placePreview.visible=false;
 layerFx.addChild(placePreview);
 function hidePlacementPreview(){ placePreview.visible=false; }
-function isPlaceMode(){ return !!(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo' || uiMode.type==='place-refinery' || uiMode.type==='place-airport')); }
+function isPlaceMode(){ return !!(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo' || uiMode.type==='place-turret' || uiMode.type==='place-refinery' || uiMode.type==='place-airport')); }
 function updatePlacementPreview(e){
   if(!isPlaceMode()){ hidePlacementPreview(); return; }
   const {x,y}=tileFromEvent(e);
@@ -2684,7 +3021,12 @@ function dropFromSelection(u){
 // menu step needed. The context menu also offers an explicit Attack mode
 // (for clarity commanding a group), the standing Search & Destroy stance,
 // and Retreat.
-function selectUnit(u){ selectUnits([u]); openUnitPreview(u); }
+// openUnitPreview used to fire automatically here on every single-unit
+// select, but its full-screen modal renders on top of the action menu
+// selectUnits() just opened — right when a player most wants to give a
+// command (Attack/Retreat/etc.), the menu is invisible behind the preview
+// until it's closed or times out. Selecting a unit now only opens the menu.
+function selectUnit(u){ selectUnits([u]); }
 function selectUnits(units){
   state.selectedUnits=units; uiMode=null; updateSelectionRing();
   boardHost.classList.add('targeting'); openCtxMenuFor();
@@ -2699,6 +3041,12 @@ function openCtxMenuFor(){
   const anyCombat=sel.some(isCombatUnit);
   document.getElementById('ctxAttack').style.display=anyCombat?'flex':'none';
   document.getElementById('ctxEngage').style.display=anyCombat?'flex':'none';
+  // #hudBar (title/stats row + the #log history bar) is a fixed, floating
+  // header with a higher z-index than ctxMenu's hardcoded top:8px, so the
+  // menu used to render right underneath it, hidden. hudBar's height isn't
+  // fixed (it can wrap), so read its real rendered bottom edge each time
+  // instead of hardcoding a taller offset that could still be wrong.
+  ctxMenu.style.top=(document.getElementById('hudBar').getBoundingClientRect().bottom+8)+'px';
   ctxMenu.style.display='flex'; modeHint.textContent='Click a tile to move, or an enemy to attack'; modeHint.style.display='block';
 }
 document.getElementById('ctxAttack').onclick=()=>{
@@ -2828,19 +3176,21 @@ function handleBoardClick(e){
   if(!inBounds(x,y)) return;
   const ph=playerHouse();
 
-  if(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo')){
+  if(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo' || uiMode.type==='place-turret')){
     const key=x+','+y;
     if(!placementValid(uiMode.type,x,y)){ addLog('Cannot build there — needs clear, explored ground.'); }
     else {
-      const cost = uiMode.type==='place-turbine' ? TURBINE_COST : SILO_COST;
+      const cost = uiMode.type==='place-turbine' ? TURBINE_COST : uiMode.type==='place-silo' ? SILO_COST : TURRET_COST;
       if(ph.spice>=cost){
         if(isMpClient()){
-          mpSend({type:'cmd', kind: uiMode.type==='place-turbine'?'buildTurbine':'buildSilo', x, y});
-          addLog((uiMode.type==='place-turbine'?'Wind turbine':'Silo')+' requested.');
+          const kind = uiMode.type==='place-turbine'?'buildTurbine':uiMode.type==='place-silo'?'buildSilo':'buildTurret';
+          mpSend({type:'cmd', kind, x, y});
+          addLog((uiMode.type==='place-turbine'?'Wind turbine':uiMode.type==='place-silo'?'Silo':'Turret')+' requested.');
         } else {
           ph.spice-=cost;
           if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); ph.power+=TURBINE_DMG_BONUS; addLog('Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'); }
-          else { buildingMap.set(key,{x,y,type:'silo',owner:ph.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
+          else if(uiMode.type==='place-silo'){ buildingMap.set(key,{x,y,type:'silo',owner:ph.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
+          else { buildingMap.set(key,{x,y,type:'turret',owner:ph.id,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret}); addLog('Turret constructed.'); }
           redrawSpiceAndBuildings();
         }
       }
@@ -2912,14 +3262,23 @@ function handleBoardClick(e){
 
   // Unit(s) selected: clicking the map commands them directly. A friendly
   // unit under the cursor re-selects it alone instead of stacking a move
-  // order onto it; combat units attack an enemy unit/building/stronghold
-  // under the cursor; anything else is a move order (non-combat units and
-  // any unit with no attack available just move). Selection persists after
-  // a command so follow-up orders can be issued right away — only Cancel,
-  // Escape, or selecting something else clears it.
+  // order onto it; clicking a unit already IN the selection just re-shows
+  // its menu instead of falling through to the move logic below, which used
+  // to quietly issue a move order to the unit's own tile (a no-op move that
+  // also hid the menu) — a wasted click that made the menu look like it kept
+  // popping open and shutting on every click on the unit itself. Combat
+  // units attack an enemy unit/building/stronghold under the cursor;
+  // anything else is a move order (non-combat units and any unit with no
+  // attack available just move). Selection persists after a command so
+  // follow-up orders can be issued right away — only Cancel, Escape, or
+  // selecting something else clears it.
   if(state.selectedUnits.length){
     const friendlyAtTile=ph.units.find(o=>o.x===x && o.y===y);
-    if(friendlyAtTile && !state.selectedUnits.includes(friendlyAtTile)){ selectUnit(friendlyAtTile); return; }
+    if(friendlyAtTile){
+      if(!state.selectedUnits.includes(friendlyAtTile)) selectUnit(friendlyAtTile);
+      else openCtxMenuFor();
+      return;
+    }
     const target=enemyTargetAt(ph,x,y);
     if(target){
       const attackers=state.selectedUnits.filter(isCombatUnit);
@@ -2977,6 +3336,11 @@ document.getElementById('buildAirport').onclick=()=>{
   if(!ph || ph.spice<AIRPORT_COST || gameOver) return;
   uiMode={type:'place-airport'}; modeHint.textContent='PLACE AIRPORT — choose the top-left of a clear 2x2 area'; modeHint.style.display='block';
 };
+document.getElementById('buildTurret').onclick=()=>{
+  const ph=playerHouse();
+  if(!ph || ph.spice<TURRET_COST || gameOver) return;
+  uiMode={type:'place-turret'}; modeHint.textContent='PLACE TURRET — choose a grass/desert tile'; modeHint.style.display='block';
+};
 document.getElementById('recruitTroop').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<TROOP_COST || gameOver) return;
@@ -2991,7 +3355,6 @@ document.getElementById('recruitJet').onclick=()=>{
   const ph=playerHouse();
   if(!ph || gameOver) return;
   if(!hasAirport(ph)){ addLog('Build an airport before recruiting fighter jets.'); return; }
-  if(ph.airProd && ph.airProd.jet) return;
   if(ph.spice<JET_COST) return;
   if(isMpClient()){ mpSend({type:'cmd', kind:'recruitJet'}); addLog('Fighter jet requested.'); return; }
   startAirUnitProduction(ph,'jet',JET_COST);
@@ -3001,7 +3364,6 @@ document.getElementById('recruitBomber').onclick=()=>{
   const ph=playerHouse();
   if(!ph || gameOver) return;
   if(!hasAirport(ph)){ addLog('Build an airport before recruiting cluster bombers.'); return; }
-  if(ph.airProd && ph.airProd.bomber) return;
   if(ph.spice<BOMBER_COST) return;
   if(isMpClient()){ mpSend({type:'cmd', kind:'recruitBomber'}); addLog('Cluster bomber requested.'); return; }
   startAirUnitProduction(ph,'bomber',BOMBER_COST);
@@ -3024,14 +3386,28 @@ function formatCountdown(msLeft){
   const s=Math.max(0,Math.ceil(msLeft/1000));
   return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
 }
+// Shows the soonest deadline in that type's queue, plus a "x N" suffix once
+// more than one of that type is queued up behind it.
+function airProdBadgeText(queue, fallback, now){
+  if(!queue || !queue.length) return fallback;
+  const suffix = queue.length>1 ? ' ×'+queue.length : '';
+  return formatCountdown(queue[0]-now)+suffix;
+}
 setInterval(()=>{
   if(!state) return;
   const ph=playerHouse(); if(!ph) return;
   const now=performance.now();
   const jetBadge=document.querySelector('#recruitJet .costBadge');
   const bomberBadge=document.querySelector('#recruitBomber .costBadge');
-  if(jetBadge) jetBadge.textContent=(ph.airProd&&ph.airProd.jet)?formatCountdown(ph.airProd.jet-now):JET_COST;
-  if(bomberBadge) bomberBadge.textContent=(ph.airProd&&ph.airProd.bomber)?formatCountdown(ph.airProd.bomber-now):BOMBER_COST;
+  if(jetBadge) jetBadge.textContent=airProdBadgeText(ph.airProd&&ph.airProd.jet, JET_COST, now);
+  if(bomberBadge) bomberBadge.textContent=airProdBadgeText(ph.airProd&&ph.airProd.bomber, BOMBER_COST, now);
+  // Pulsing hourglass above each recruit button, in the bottom action bar,
+  // for as long as that type has anything queued — a visible-on-the-button
+  // cue for the ~5min build, separate from the numeric countdown above.
+  const jetHourglass=document.getElementById('jetHourglass');
+  const bomberHourglass=document.getElementById('bomberHourglass');
+  if(jetHourglass) jetHourglass.classList.toggle('active', !!(ph.airProd && ph.airProd.jet && ph.airProd.jet.length));
+  if(bomberHourglass) bomberHourglass.classList.toggle('active', !!(ph.airProd && ph.airProd.bomber && ph.airProd.bomber.length));
 }, 500);
 document.getElementById('restartBtn').onclick=()=>{
   if(mp){ if(mp.peer) mp.peer.destroy(); mp=null; showModeSelect(); }
@@ -3107,7 +3483,7 @@ function applyMpInit(msg){
   terrain=msg.terrain;
   buildingMap=new Map(msg.buildingMap);
   spiceMap=new Map(msg.spiceMap.map(dep=>[dep.x+','+dep.y, dep]));
-  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(true)); // no fog online
+  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(false));
   state={
     startTime:performance.now(), log:[], selectedUnits:[],
     worms:msg.worms.map(w=>({x:w.x,y:w.y,rest:w.rest||0,dir:w.dir||0,frame:0,sprite:null})),
@@ -3119,6 +3495,8 @@ function applyMpInit(msg){
   selectionRings=[]; activeFx=[];
   syncAllSprites();
   const ph=playerHouse();
+  revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
+  ph.units.forEach(u=>revealAround(u.x,u.y,VISION_RADIUS));
   centerCameraOn(ph.base.x, ph.base.y);
   renderStats(); renderLog(); updateClock(); renderMinimap();
 }
@@ -3157,6 +3535,10 @@ function applyMpSnapshot(msg){
     if(w.sprite){ w.sprite.x=w.x*SZ+SZ/2; w.sprite.y=w.y*SZ+SZ/2; }
   });
   state.log=msg.log;
+  // The client never runs gameTick (only the host simulates), so its own
+  // vision has to be revealed here instead, once per snapshot, around its
+  // own units only — same rule as the host's gameTick reveal.
+  playerHouse().units.forEach(u=>revealAround(u.x,u.y,VISION_RADIUS));
   syncAllSprites();
   redrawSpiceAndBuildings();
   renderStats(); renderLog(); renderMinimap(); updateClock();
@@ -3225,15 +3607,16 @@ function applyRemoteCommand(msg){
       house.units.push(t); ensureSprite(t);
       addLog('House '+house.name+' recruits a tank.');
     }
-  } else if(msg.kind==='buildTurbine' || msg.kind==='buildSilo'){
+  } else if(msg.kind==='buildTurbine' || msg.kind==='buildSilo' || msg.kind==='buildTurret'){
     const key=msg.x+','+msg.y;
-    const cost=msg.kind==='buildTurbine'?TURBINE_COST:SILO_COST;
+    const cost=msg.kind==='buildTurbine'?TURBINE_COST:msg.kind==='buildSilo'?SILO_COST:TURRET_COST;
     const ok=house.spice>=cost && !buildingMap.has(key) && !spiceMap.has(key)
       && terrain[msg.y] && terrain[msg.y][msg.x]!=='mountain' && !isBaseTile(msg.x,msg.y);
     if(ok){
       house.spice-=cost;
       if(msg.kind==='buildTurbine'){ buildingMap.set(key,{x:msg.x,y:msg.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); house.power+=TURBINE_DMG_BONUS; addLog('House '+house.name+' raises a wind turbine.'); }
-      else { buildingMap.set(key,{x:msg.x,y:msg.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); house.cap+=SILO_CAP_BONUS; addLog('House '+house.name+' builds a silo.'); }
+      else if(msg.kind==='buildSilo'){ buildingMap.set(key,{x:msg.x,y:msg.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); house.cap+=SILO_CAP_BONUS; addLog('House '+house.name+' builds a silo.'); }
+      else { buildingMap.set(key,{x:msg.x,y:msg.y,type:'turret',owner:house.id,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret}); addLog('House '+house.name+' builds a turret.'); }
       redrawSpiceAndBuildings();
     }
   } else if(msg.kind==='buildRefinery'){
@@ -3271,12 +3654,12 @@ function applyRemoteCommand(msg){
       redrawSpiceAndBuildings();
     }
   } else if(msg.kind==='recruitJet'){
-    if(hasAirport(house) && !(house.airProd&&house.airProd.jet) && house.spice>=JET_COST){
+    if(hasAirport(house) && house.spice>=JET_COST){
       startAirUnitProduction(house,'jet',JET_COST);
       addLog('House '+house.name+' begins fighter jet production.');
     }
   } else if(msg.kind==='recruitBomber'){
-    if(hasAirport(house) && !(house.airProd&&house.airProd.bomber) && house.spice>=BOMBER_COST){
+    if(hasAirport(house) && house.spice>=BOMBER_COST){
       startAirUnitProduction(house,'bomber',BOMBER_COST);
       addLog('House '+house.name+' begins cluster bomber production.');
     }
@@ -3420,11 +3803,10 @@ function newGame(chosenId, rivalId){
   generateTerrain();
   activeDefs.forEach(hd=>{ const sp=HOUSE_SPAWNS[hd.id]; carveGrassArea(sp.x,sp.y,7); });
   buildingMap=new Map();
-  // Online matches have no fog of war yet (each side would need its own
-  // vision grid — a bigger change deferred for later) — both sides just see
-  // everything from the start.
-  const noFog=!!mp;
-  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(noFog));
+  // Fog of war on for everyone, single-player or online — each side reveals
+  // tiles around its own units only (see revealAround calls in gameTick and,
+  // for the online client, applyMpInit/applyMpSnapshot).
+  explored=[]; for(let y=0;y<MAPH;y++) explored.push(new Array(MAPW).fill(false));
   state={
     startTime:performance.now(), log:[], selectedUnits:[],
     worms:[],
@@ -3447,6 +3829,22 @@ function newGame(chosenId, rivalId){
     buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:h.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo});
     h.cap+=SILO_CAP_BONUS;
   });
+  // Every house also starts with an airport already built next to its
+  // stronghold (same footprint-search the AI itself uses to place one), so
+  // air power is available and visible from turn one instead of gated
+  // behind AIRPORT_COST plus AIRPORT_PRODUCTION_MS before a player ever
+  // sees a jet exist at all.
+  state.houses.forEach(h=>{
+    const spot=findFreeFootprintNear(h.base.x,h.base.y,'place-airport',true);
+    if(!spot) return;
+    const primaryKey=spot.x+','+spot.y;
+    placementFootprint('place-airport',spot.x,spot.y).forEach(([fx,fy],i)=>{
+      const entry=(i===0)
+        ? {x:fx,y:fy,type:'airport',owner:h.id,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
+        : {x:fx,y:fy,type:'airport',owner:h.id,primary:false,primaryKey};
+      buildingMap.set(fx+','+fy, entry);
+    });
+  });
   for(let i=0;i<WORM_COUNT;i++){
     let x,y,tries=0;
     do{ x=Math.floor(Math.random()*MAPW); y=Math.floor(Math.random()*MAPH); tries++; }
@@ -3466,6 +3864,15 @@ async function start(chosenId, rivalId){
   document.getElementById('houseGreetOverlay').style.display='none';
   newGame(chosenId, rivalId);
   state.houses.forEach(h=>{ h.units.push(makeUnit(h.id,'harvester', h.base.x, h.base.y)); });
+  // One jet starts already parked at the new airport, same spawn placement
+  // tickAirProduction uses for a freshly-completed one — pairs with the
+  // free starting airport above so aircraft are on the map from turn one.
+  state.houses.forEach(h=>{
+    const airport=findOwnedAirport(h);
+    if(!airport) return;
+    const spawn=findFreeSpawnTile(airport.x,airport.y);
+    h.units.push(makeUnit(h.id,'jet',spawn.x,spawn.y));
+  });
   learning=await loadLearning();
   const ph=playerHouse();
   if(mp){
