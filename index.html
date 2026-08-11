@@ -799,7 +799,7 @@ let fogEdgePieces=null;
 // straight torn edges meeting at an obviously artificial 90-degree kink
 // instead of a continuous curve.
 let fogCornerPieces=null;
-const FOG_EDGE_MIN_ALPHA=0.55; // alpha right at the torn line
+const FOG_EDGE_MIN_ALPHA=0.8; // alpha right at the torn line — 80% black, per request
 const FOG_EDGE_ACCENT_ALPHA=0.3; // alpha of the thin warm accent line
 // Deterministic (seeded, not Math.random()) per-control-point jitter for the
 // fog edge piece's torn boundary — same spirit as pixelHash/terrain wave
