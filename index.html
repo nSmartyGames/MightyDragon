@@ -505,8 +505,10 @@ function startMusic(){
   lfo.connect(lfoGain); lfoGain.connect(noiseFilter.frequency);
   lfo.start();
 
-  // War-drum pulse: a low sine thump + a short noise crack, on an irregular
-  // martial beat (not a steady metronome, so it doesn't feel like a loop).
+  // War-drum pulse: a low sine thump, on an irregular martial beat (not a
+  // steady metronome, so it doesn't feel like a loop). Used to also layer a
+  // short bright noise "crack" (a hi-hat-like tick) under the thump; removed
+  // per request to erase that hi-hat-ish sound from the music entirely.
   function warDrum(){
     if(!musicStarted || !audioCtx) return;
     const t0=audioCtx.currentTime;
@@ -518,14 +520,6 @@ function startMusic(){
     g.gain.exponentialRampToValueAtTime(0.001,t0+0.3);
     osc.connect(g); g.connect(musicGain);
     osc.start(t0); osc.stop(t0+0.32);
-
-    const crackBuf=audioCtx.createBuffer(1,Math.floor(audioCtx.sampleRate*0.08),audioCtx.sampleRate);
-    const cd=crackBuf.getChannelData(0);
-    for(let i=0;i<cd.length;i++) cd[i]=(Math.random()*2-1)*(1-i/cd.length);
-    const crack=audioCtx.createBufferSource(); crack.buffer=crackBuf;
-    const cg=audioCtx.createGain(); cg.gain.value=0.18;
-    crack.connect(cg); cg.connect(musicGain);
-    crack.start(t0);
 
     setTimeout(warDrum, 640+Math.random()*380);
   }
