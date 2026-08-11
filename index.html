@@ -38,7 +38,11 @@
      unit/fog-of-war canvases (z-index 1-3) but below the minimap/menus. */
   #edgeVignette{
     position:absolute; inset:0; z-index:4; pointer-events:none;
-    background:radial-gradient(ellipse at center, rgba(10,6,2,0) 55%, rgba(10,6,2,.6) 100%);
+    /* farthest-side (not the default farthest-corner) so the fade actually
+       reaches the flat top/bottom/left/right edges, not just the corners —
+       farthest-corner sizes the fade to the box's diagonal, which on a wide
+       viewport leaves the straight edges almost untouched. */
+    background:radial-gradient(ellipse farthest-side at center, rgba(10,6,2,0) 55%, rgba(10,6,2,.6) 100%);
   }
   #minimap{
     position:absolute; top:64px; right:8px; width:150px; height:150px; z-index:18;
