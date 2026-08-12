@@ -891,7 +891,13 @@ function renderFogBuffer(){
   if(!fogBuffer) fogBuffer=p5FogInstance.createGraphics(bw,bh);
   const cx=fogBuffer.drawingContext;
   cx.clearRect(0,0,bw,bh);
-  cx.filter='blur(34px)'; // +80% over the prior 19px, per request — thicker fog edge still
+  // Blur kept small and deliberately confined to the inside edge — this is
+  // just enough to soften the tile-grid boundary against the dust haze
+  // sitting on top of it. Fog more than a few px from any explored tile is
+  // untouched by the blur and stays flat, fully opaque black; the earlier
+  // 34px radius eroded opacity for 2+ tiles into the fog, so "unexplored"
+  // ground well past the frontier was visibly less than solid black.
+  cx.filter='blur(6px)';
   cx.drawImage(fogMaskCanvas,0,0);
   cx.filter='none';
 }
