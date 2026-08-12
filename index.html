@@ -893,6 +893,80 @@ function buildFogCornerPiece(seed){
   }
   return canvas;
 }
+// ---- dust haze along the frontier of the discovered map ----
+// On its own the fog edge reads as a black void; on Arrakis the rim of what
+// you've actually scouted should read as blown sand hanging in the air. The
+// haze is built one sample per tile from the same fog cells the mask above
+// uses: box-blurring the 0/1 fog field gives a value that runs 0 deep inside
+// explored ground to 1 deep inside fog, so 4b(1-b) peaks exactly on the
+// boundary and falls off on both sides — that's the band, and its width is
+// set by the blur radius rather than by any per-tile edge test. It's blurred
+// once per fog rebuild into a buffer, then blitted once per frame at a
+// slowly drifting offset so the frontier billows instead of sitting there as
+// a static rim.
+const DUST_HAZE_RADIUS=2;             // tiles; box-blur radius, i.e. how wide the band is
+const DUST_HAZE_RGB=[0xd9,0xa4,0x5e]; // blown-sand tone, lighter than the desert base
+const DUST_HAZE_ALPHA=0.45;           // peak opacity
+const DUST_HAZE_DRIFT=TILE*0.75;      // map px the haze wanders either side of rest
+// Buffer pixels per tile. The haze is a deliberately soft field, so it is
+// kept far below the map's own TILE resolution and upscaled on the way out —
+// the fog canvas already interpolates smoothly, and at 4px/tile the buffer
+// is a sixteenth of the pixels to blur on rebuild and to sample per frame.
+const DUST_HAZE_PPT=4;
+let dustHazeBuffer=null, dustHazeBand=null;
+function buildDustHaze(fogCells){
+  const n=MAPW*MAPH, R=DUST_HAZE_RADIUS, span=2*R+1;
+  const clampX=(v)=>v<0?0:(v>MAPW-1?MAPW-1:v);
+  const clampY=(v)=>v<0?0:(v>MAPH-1?MAPH-1:v);
+  // Separable box blur with a running sum (clamped at the map borders, so
+  // the world edge counts as more of whatever is already there rather than
+  // as explored ground — no phantom band around the outside of the map).
+  const rowBlur=new Float32Array(n), blurred=new Float32Array(n);
+  for(let y=0;y<MAPH;y++){
+    const row=y*MAPW;
+    let sum=0;
+    for(let i=-R;i<=R;i++) sum+=fogCells[row+clampX(i)];
+    for(let x=0;x<MAPW;x++){
+      rowBlur[row+x]=sum/span;
+      sum+=fogCells[row+clampX(x+R+1)]-fogCells[row+clampX(x-R)];
+    }
+  }
+  for(let x=0;x<MAPW;x++){
+    let sum=0;
+    for(let i=-R;i<=R;i++) sum+=rowBlur[clampY(i)*MAPW+x];
+    for(let y=0;y<MAPH;y++){
+      blurred[y*MAPW+x]=sum/span;
+      sum+=rowBlur[clampY(y+R+1)*MAPW+x]-rowBlur[clampY(y-R)*MAPW+x];
+    }
+  }
+  if(!dustHazeBand){ dustHazeBand=document.createElement('canvas'); dustHazeBand.width=MAPW; dustHazeBand.height=MAPH; }
+  const bctx=dustHazeBand.getContext('2d');
+  const img=bctx.createImageData(MAPW,MAPH);
+  const data=img.data;
+  for(let i=0;i<n;i++){
+    const b=blurred[i];
+    // 4b(1-b): 1 on the boundary, 0 wherever the field has settled to all
+    // fog or all explored. Raised to a power so the tails thin out fast and
+    // the haze stays a rim rather than a wash over everything scouted, and
+    // weighted by b so it leans into the fog — dust should hang over ground
+    // you haven't reached, not over the terrain you're trying to read.
+    const band=Math.pow(4*b*(1-b),1.8)*(0.3+0.7*b);
+    const o=i*4;
+    data[o]=DUST_HAZE_RGB[0]; data[o+1]=DUST_HAZE_RGB[1]; data[o+2]=DUST_HAZE_RGB[2];
+    data[o+3]=Math.round(255*Math.min(1,band));
+  }
+  bctx.putImageData(img,0,0);
+  const hw=MAPW*DUST_HAZE_PPT, hh=MAPH*DUST_HAZE_PPT;
+  if(!dustHazeBuffer){ dustHazeBuffer=document.createElement('canvas'); dustHazeBuffer.width=hw; dustHazeBuffer.height=hh; }
+  const hcx=dustHazeBuffer.getContext('2d');
+  hcx.clearRect(0,0,hw,hh);
+  hcx.imageSmoothingEnabled=true;
+  // Blur on the way up from tile resolution: bilinear alone leaves the
+  // upscale faceted, and the haze has to be soft to read as airborne dust.
+  hcx.filter='blur(3px)';
+  hcx.drawImage(dustHazeBand,0,0,MAPW,MAPH,0,0,hw,hh);
+  hcx.filter='none';
+}
 // Draws one edge piece centered on a tile, rotated so its canonical
 // explored=north edge faces the actual explored neighbor's direction.
 function drawFogEdgePiece(cx,piece,centerX,centerY,angle){
@@ -909,6 +983,9 @@ function renderFogBuffer(){
   const mcx=fogMaskCanvas.getContext('2d');
   mcx.clearRect(0,0,bw,bh);
   mcx.fillStyle='#000000';
+  // 1 per tile that actually ends up fogged (post-declutter), reused below to
+  // place the dust haze on exactly the boundary the fog itself draws.
+  const fogCells=new Uint8Array(MAPW*MAPH);
   for(let y=0;y<MAPH;y++){
     const erow=explored[y];
     const up=y>0?explored[y-1]:null, down=y<MAPH-1?explored[y+1]:null;
@@ -924,9 +1001,11 @@ function renderFogBuffer(){
       if(up && up[x]) exploredNeighbors++;
       if(down && down[x]) exploredNeighbors++;
       if(exploredNeighbors>=3) continue;
+      fogCells[y*MAPW+x]=1;
       mcx.fillRect(x*TILE,y*TILE,TILE,TILE);
     }
   }
+  buildDustHaze(fogCells);
   if(!fogBuffer) fogBuffer=p5FogInstance.createGraphics(bw,bh);
   const cx=fogBuffer.drawingContext;
   cx.clearRect(0,0,bw,bh);
@@ -998,6 +1077,22 @@ let p5FogInstance=new p5((p)=>{
     p.translate(-cam.x,-cam.y);
     p.scale(ZOOM);
     p.image(fogBuffer,0,0);
+    // Dust haze over the fog, in map space: one blit of the band, offset on
+    // two unrelated slow periods and breathing in opacity on a third, so the
+    // frontier looks like sand still moving rather than a fixed outline.
+    // Deliberately a single blit — this covers the whole map rect every
+    // frame, and a second drifting copy layered on it looked better but cost
+    // about as much again in fill. Drawn through drawingContext (not p.tint)
+    // because tinting a full-map image rebuilds the tinted copy every frame.
+    if(dustHazeBuffer){
+      const t=p.millis()/1000, dcx=p.drawingContext;
+      const prevAlpha=dcx.globalAlpha;
+      dcx.globalAlpha=DUST_HAZE_ALPHA*(0.85+0.15*Math.sin(t*0.29));
+      dcx.drawImage(dustHazeBuffer,
+        Math.sin(t*0.21)*DUST_HAZE_DRIFT, Math.cos(t*0.17)*DUST_HAZE_DRIFT*0.6,
+        MAPW*TILE, MAPH*TILE);
+      dcx.globalAlpha=prevAlpha;
+    }
     p.pop();
   };
 }, boardHost);
