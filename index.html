@@ -782,7 +782,7 @@ let p5Instance=new p5((p)=>{
 // buffer (10k fillRects + a blur pass) that often is wasteful, so it's also
 // throttled to at most once per FOG_REBUILD_MS regardless of how often the
 // flag gets set; a little lag on the reveal itself is imperceptible.
-let fogBuffer=null, fogMaskCanvas=null, fogDirty=true, lastFogBuild=0;
+let fogBuffer=null, fogDirty=true, lastFogBuild=0;
 const FOG_REBUILD_MS=200;
 // ---- dust haze along the frontier of the discovered map ----
 // On its own the fog edge reads as a black void; on Arrakis the rim of what
@@ -805,13 +805,19 @@ const DUST_HAZE_DRIFT=TILE*0.75;      // map px the haze wanders either side of 
 // is a sixteenth of the pixels to blur on rebuild and to sample per frame.
 const DUST_HAZE_PPT=4;
 let dustHazeBuffer=null, dustHazeBand=null;
-function buildDustHaze(fogCells){
-  const n=MAPW*MAPH, R=DUST_HAZE_RADIUS, span=2*R+1;
+// Separable box blur of the 0/1 fog field, with a running sum (clamped at
+// the map borders, so the world edge counts as more of whatever is already
+// there rather than as explored ground — no phantom band around the
+// outside of the map). Shared by the dust haze and the fog's own opacity
+// ramp below: a box blur of a hard step produces an exactly *linear* ramp
+// across the kernel's width, which is what gives both effects their
+// straight-line falloff instead of a curved or blocky one, and it
+// naturally anti-aliases diagonal/curved boundaries — a tile straddling the
+// frontier gets a fractional value instead of an all-or-nothing square.
+function boxBlurFogField(fogCells,R){
+  const n=MAPW*MAPH, span=2*R+1;
   const clampX=(v)=>v<0?0:(v>MAPW-1?MAPW-1:v);
   const clampY=(v)=>v<0?0:(v>MAPH-1?MAPH-1:v);
-  // Separable box blur with a running sum (clamped at the map borders, so
-  // the world edge counts as more of whatever is already there rather than
-  // as explored ground — no phantom band around the outside of the map).
   const rowBlur=new Float32Array(n), blurred=new Float32Array(n);
   for(let y=0;y<MAPH;y++){
     const row=y*MAPW;
@@ -830,6 +836,11 @@ function buildDustHaze(fogCells){
       sum+=rowBlur[clampY(y+R+1)*MAPW+x]-rowBlur[clampY(y-R)*MAPW+x];
     }
   }
+  return blurred;
+}
+function buildDustHaze(fogCells){
+  const n=MAPW*MAPH;
+  const blurred=boxBlurFogField(fogCells,DUST_HAZE_RADIUS);
   if(!dustHazeBand){ dustHazeBand=document.createElement('canvas'); dustHazeBand.width=MAPW; dustHazeBand.height=MAPH; }
   const bctx=dustHazeBand.getContext('2d');
   const img=bctx.createImageData(MAPW,MAPH);
@@ -858,15 +869,50 @@ function buildDustHaze(fogCells){
   hcx.drawImage(dustHazeBand,0,0,MAPW,MAPH,0,0,hw,hh);
   hcx.filter='none';
 }
+// Width, in tiles, of the black fog's own opacity ramp — same span the dust
+// haze uses, so the two effects line up on the same physical band.
+const FOG_ALPHA_RADIUS=2;
+let fogAlphaBand=null;
+// Grades the fog's own alpha channel with the same box-blurred field the
+// haze uses, instead of filling hard tile squares and blurring the result:
+// alpha=0 (fully transparent) right at the boundary, ramping *linearly* up
+// to alpha=1 (flat opaque black) by FOG_ALPHA_RADIUS tiles into the fog, and
+// staying opaque for the rest of the unexplored map. Because the underlying
+// field already varies smoothly across a tile straddling the frontier
+// (that's what the box blur is for), a diagonal or curved reveal edge comes
+// out anti-aliased instead of the square-tile staircase the old fill+blur
+// approach left behind.
+function buildFogAlphaBuffer(fogCells){
+  const blurred=boxBlurFogField(fogCells,FOG_ALPHA_RADIUS);
+  if(!fogAlphaBand){ fogAlphaBand=document.createElement('canvas'); fogAlphaBand.width=MAPW; fogAlphaBand.height=MAPH; }
+  const bctx=fogAlphaBand.getContext('2d');
+  const img=bctx.createImageData(MAPW,MAPH);
+  const data=img.data;
+  for(let i=0;i<MAPW*MAPH;i++){
+    const b=blurred[i];
+    const alpha=Math.max(0,Math.min(1,(b-0.5)*2));
+    const o=i*4;
+    data[o]=0; data[o+1]=0; data[o+2]=0;
+    data[o+3]=Math.round(255*alpha);
+  }
+  bctx.putImageData(img,0,0);
+  const bw=MAPW*TILE, bh=MAPH*TILE;
+  if(!fogBuffer) fogBuffer=p5FogInstance.createGraphics(bw,bh);
+  const cx=fogBuffer.drawingContext;
+  cx.clearRect(0,0,bw,bh);
+  cx.imageSmoothingEnabled=true;
+  // Small smoothing blur only to interpolate between the per-tile samples —
+  // the ramp's actual width already comes from FOG_ALPHA_RADIUS above, not
+  // from this.
+  cx.filter='blur(3px)';
+  cx.drawImage(fogAlphaBand,0,0,MAPW,MAPH,0,0,bw,bh);
+  cx.filter='none';
+}
 function renderFogBuffer(){
   if(!explored) return;
-  const bw=MAPW*TILE, bh=MAPH*TILE;
-  if(!fogMaskCanvas){ fogMaskCanvas=document.createElement('canvas'); fogMaskCanvas.width=bw; fogMaskCanvas.height=bh; }
-  const mcx=fogMaskCanvas.getContext('2d');
-  mcx.clearRect(0,0,bw,bh);
-  mcx.fillStyle='#000000';
-  // 1 per tile that actually ends up fogged (post-declutter), reused below to
-  // place the dust haze on exactly the boundary the fog itself draws.
+  // 1 per tile that actually ends up fogged (post-declutter), reused below
+  // to place the dust haze and grade the fog's own opacity, both keyed off
+  // the exact same frontier.
   const fogCells=new Uint8Array(MAPW*MAPH);
   for(let y=0;y<MAPH;y++){
     const erow=explored[y];
@@ -884,22 +930,10 @@ function renderFogBuffer(){
       if(down && down[x]) exploredNeighbors++;
       if(exploredNeighbors>=3) continue;
       fogCells[y*MAPW+x]=1;
-      mcx.fillRect(x*TILE,y*TILE,TILE,TILE);
     }
   }
   buildDustHaze(fogCells);
-  if(!fogBuffer) fogBuffer=p5FogInstance.createGraphics(bw,bh);
-  const cx=fogBuffer.drawingContext;
-  cx.clearRect(0,0,bw,bh);
-  // Blur kept small and deliberately confined to the inside edge — this is
-  // just enough to soften the tile-grid boundary against the dust haze
-  // sitting on top of it. Fog more than a few px from any explored tile is
-  // untouched by the blur and stays flat, fully opaque black; the earlier
-  // 34px radius eroded opacity for 2+ tiles into the fog, so "unexplored"
-  // ground well past the frontier was visibly less than solid black.
-  cx.filter='blur(6px)';
-  cx.drawImage(fogMaskCanvas,0,0);
-  cx.filter='none';
+  buildFogAlphaBuffer(fogCells);
 }
 let p5FogInstance=new p5((p)=>{
   p.setup=function(){
