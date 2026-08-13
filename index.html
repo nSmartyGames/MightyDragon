@@ -290,6 +290,7 @@
         <button id="ctxAttack">Attack</button>
         <button id="ctxEngage">Search &amp; Destroy</button>
         <button id="ctxRetreat">Retreat</button>
+        <button id="ctxHarvest">Harvest</button>
         <button id="ctxCancel">Cancel</button>
       </div>
       <div id="actionBar">
@@ -3052,11 +3053,15 @@ function maybeSpawnSpice(){
 }
 
 // ================= AI =================
+function nearestSpiceDeposit(h){
+  let best=null,bd=99999;
+  spiceMap.forEach(dep=>{ const d=Math.abs(dep.x-h.x)+Math.abs(dep.y-h.y); if(d<bd){bd=d;best={x:dep.x,y:dep.y};} });
+  return best;
+}
 function autoAssignHarvesters(house){
   house.units.filter(u=>u.type==='harvester').forEach(h=>{
     if(!h.order && h.carrying<HARVESTER_CAP){
-      let best=null,bd=99999;
-      spiceMap.forEach(dep=>{ const d=Math.abs(dep.x-h.x)+Math.abs(dep.y-h.y); if(d<bd){bd=d;best={x:dep.x,y:dep.y};} });
+      const best=nearestSpiceDeposit(h);
       if(best) h.order={kind:'move', x:best.x, y:best.y};
     }
   });
@@ -3356,8 +3361,11 @@ function openCtxMenuFor(){
     : sel.length+' units selected';
   document.getElementById('ctxTitle').textContent=title;
   const anyCombat=sel.some(isCombatUnit);
+  const allHarvester=sel.length>0 && sel.every(u=>u.type==='harvester');
   document.getElementById('ctxAttack').style.display=anyCombat?'flex':'none';
   document.getElementById('ctxEngage').style.display=anyCombat?'flex':'none';
+  document.getElementById('ctxHarvest').style.display=allHarvester?'flex':'none';
+  document.getElementById('ctxCancel').style.display=allHarvester?'none':'flex';
   // #hudBar (title/stats row + the #log history bar) is a fixed, floating
   // header with a higher z-index than ctxMenu's hardcoded top:8px, so the
   // menu used to render right underneath it, hidden. hudBar's height isn't
@@ -3393,6 +3401,19 @@ document.getElementById('ctxRetreat').onclick=()=>{
   });
   deselect();
   if(units.length){ followUnit=units[0]; if(isMpClient()) mpSend({type:'cmd', kind:'retreat', unitIds:units.map(u=>u.id)}); }
+};
+document.getElementById('ctxHarvest').onclick=()=>{
+  const units=state.selectedUnits.filter(u=>u.type==='harvester');
+  units.forEach(h=>{
+    const owner=houseById(h.owner);
+    const best=nearestSpiceDeposit(h);
+    if(best){
+      h.order={kind:'move', x:best.x, y:best.y};
+      addLog("House "+owner.name+"'s harvester heads out to harvest spice.");
+    }
+  });
+  deselect();
+  if(units.length){ followUnit=units[0]; if(isMpClient()) mpSend({type:'cmd', kind:'harvest', unitIds:units.map(u=>u.id)}); }
 };
 document.getElementById('ctxCancel').onclick=()=>{ deselect(); };
 
@@ -3924,6 +3945,11 @@ function applyRemoteCommand(msg){
     findUnits(msg.unitIds).forEach(u=>{
       const spot=findFreeSpawnTile(house.base.x, house.base.y);
       u.order={kind:'move', x:spot.x, y:spot.y};
+    });
+  } else if(msg.kind==='harvest'){
+    findUnits(msg.unitIds).filter(u=>u.type==='harvester').forEach(h=>{
+      const best=nearestSpiceDeposit(h);
+      if(best) h.order={kind:'move', x:best.x, y:best.y};
     });
   } else if(msg.kind==='attack'){
     const units=findUnits(msg.unitIds).filter(isCombatUnit);
