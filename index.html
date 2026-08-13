@@ -126,7 +126,9 @@
   #recruitTank{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAuklEQVR4nLVSsRHDIBATvixC60EYItlBeBRgB2cCKgZxySqkIvfEJsa5ixo49NKLB6CDGGMhWXp8xXRWcGpAsox2q5CaCQBSSpc7V80EAMaYywZV0yTIOZecc/cqkv+aQM6D5OF8DhNoraG1bgqXZXnvJd9NYK1tumzbtkvVTQAA3nsAwDzPzRpCUNLg9BWcc0gpwTm346TmJt2UUg9ZRHINIdSze+VJrkP/QIjHEgB49gQfWH/5vf/BC4rhapNJ6ehdAAAAAElFTkSuQmCC'); }
   #buildAirport{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="2" y="6.5" width="12" height="3" fill="%23ffffff"/><rect x="4" y="7.6" width="1.8" height="0.8" fill="%23888"/><rect x="7.5" y="7.6" width="1.8" height="0.8" fill="%23888"/><rect x="11" y="7.6" width="1.8" height="0.8" fill="%23888"/></svg>'); }
   #recruitJet{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1 L10 8 L14 12 L8 10 L2 12 L6 8 Z" fill="%23ffffff"/></svg>'); }
-  #recruitBomber{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="7" y="1" width="2" height="12" fill="%23e0e0e0"/><path d="M8 4 L15 10 L8 8.5 L1 10 Z" fill="%23e0e0e0"/><circle cx="8" cy="12" r="1.3" fill="%23555555"/></svg>'); }
+  /* Helicopter gunship: fuselage + tail boom under a four-blade rotor —
+     matches the in-game TEX.bomberFrames art. */
+  #recruitBomber{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="7.3" y="7" width="1.4" height="6.5" fill="%23c8c8c8"/><rect x="6" y="12.6" width="4" height="1.2" fill="%23c8c8c8"/><ellipse cx="8" cy="6.4" rx="2.6" ry="3.4" fill="%23e0e0e0"/><ellipse cx="8" cy="4.6" rx="1.4" ry="1.5" fill="%23557a9a"/><rect x="2.6" y="6" width="2.6" height="1.2" fill="%23999"/><rect x="10.8" y="6" width="2.6" height="1.2" fill="%23999"/><rect x="1" y="5.8" width="14" height="0.9" fill="%23bdbdbd"/><rect x="7.55" y="0.6" width="0.9" height="11" fill="%23bdbdbd"/><circle cx="8" cy="6.4" r="1" fill="%23555"/></svg>'); }
   #buildTurret{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="9" r="5" fill="%23ffffff"/><rect x="7" y="2" width="2" height="6" fill="%23e0e0e0"/><circle cx="8" cy="9" r="1.8" fill="%23888"/></svg>'); }
   .iconSpice{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAnElEQVR4nM2Suw0EIQxEhyuHVkwtiFIoBlohNKV4IxACe4/ggptwxBv/AP5epRS58UyYmWUFSikiItNzbzARofcOAGitAQCIaL6ptdrwEDNLjHF2snfwsSrvyjnDez8rhxDcEWDBWsjQDPgG7yHHCCEEZy5lUUoJrTV9BOBlswpsjqCFaPDUerZxouEx8/GZVO33Hd4VvAI33k/1AAM6uACEHTo3AAAAAElFTkSuQmCC'); }
   .iconCapacity{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAi0lEQVR4nN2SsRXDIAxEv/O8CMswDjAKj1moNAgtoziV/QgI7BRpchXijtMhgAVyzseKB9gAnHOD0Fp7rUVEPZxS2vazCCEMglIKIqJyMUYAXqt4s84tBoPTWYPG7f1GG7ePrl1lMDDGTBMA1Fo/6uUMnuAfDbz3U7HGqc/YT7rlbhN8iyvB6gf+FG8TqylG5bxpTQAAAABJRU5ErkJggg=='); }
@@ -137,10 +139,11 @@
     position:absolute; right:2px; bottom:1px; font-size:9px; color:var(--sand-2);
     background:rgba(10,6,2,.75); padding:1px 3px; border-radius:3px; line-height:1.2;
   }
-  /* Hourglass shown above the jet/bomber recruit button, in the bottom
-     action bar, for the ~5 minutes it takes to build — a visible cue on the
-     button itself (not just the countdown text in .costBadge) that
-     production is under way. Hidden unless .active is toggled on. */
+  /* Hourglass shown above the fighter/gunship recruit button, in the bottom
+     action bar, for the 3 (fighter) or 5 (gunship) minutes it takes to build
+     — a visible cue on the button itself (not just the countdown text in
+     .costBadge) that production is under way, mirroring the clepsydra that
+     hovers over the airport out on the map. Hidden unless .active is on. */
   .prodHourglass{
     position:absolute; left:50%; top:-15px; transform:translateX(-50%);
     font-size:13px; line-height:1; display:none; pointer-events:none;
@@ -294,11 +297,11 @@
         <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice"><span class="costBadge">50</span></button>
         <button id="buildSilo" class="iconBtn" title="Silo — 70 spice"><span class="costBadge">70</span></button>
         <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice"><span class="costBadge">110</span></button>
-        <button id="buildAirport" class="iconBtn" title="Airport — 190 spice"><span class="costBadge">190</span></button>
+        <button id="buildAirport" class="iconBtn" title="Airport runway — 190 spice, builds sky fighters and cluster gunships"><span class="costBadge">190</span></button>
         <button id="buildTurret" class="iconBtn" title="Turret — 90 spice"><span class="costBadge">90</span></button>
         <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice"><span class="costBadge">25</span></button>
-        <button id="recruitJet" class="iconBtn" title="Fighter jet — 130 spice, needs an airport, 5min build"><span class="costBadge">130</span><span class="prodHourglass" id="jetHourglass">⏳</span></button>
-        <button id="recruitBomber" class="iconBtn" title="Cluster bomber — 220 spice, needs an airport, 5min build"><span class="costBadge">220</span><span class="prodHourglass" id="bomberHourglass">⏳</span></button>
+        <button id="recruitJet" class="iconBtn" title="Sky fighter — 130 spice, needs an airport, 3min build (press again to queue another)"><span class="costBadge">130</span><span class="prodHourglass" id="jetHourglass">⏳</span></button>
+        <button id="recruitBomber" class="iconBtn" title="Cluster gunship — 220 spice, needs an airport, 5min build, bombs a 3x3 block (press again to queue another)"><span class="costBadge">220</span><span class="prodHourglass" id="bomberHourglass">⏳</span></button>
         <button id="recruitTank" class="iconBtn" title="Recruit tank — 100 spice"><span class="costBadge">100</span></button>
       </div>
     </div>
@@ -318,6 +321,7 @@
         <div>Troopers drain 10 power/shot, tanks 20/2s (turbines add +5). Drain a stronghold's 10k power to eliminate it.</div>
         <div>Harvesters unload at a silo or refinery — build one or spice is wasted. A refinery = 4 silos plus a free harvester.</div>
         <div>Troopers and tanks fight refineries adjacent, never enter them. Sandworms have a 1-in-5 swallow chance and give up after 5s. A hit auto-rallies idle units to Search &amp; Destroy.</div>
+        <div>An airport runway builds sky fighters in 3 min and cluster gunships in 5. The clepsydra hovering over the runway counts the build down; press a recruit button again to queue another and a count badge appears mid-runway. Gunships bomb the whole 3x3 block around their target.</div>
       </div>
     </div>
   </div>
@@ -421,7 +425,15 @@ const MOVE_MS=380;
 const TROOP_HP=100, TANK_HP=300, HARVESTER_HP=500;
 const AIRPORT_COST=190, JET_COST=130, BOMBER_COST=220;
 const JET_HP=90, BOMBER_HP=150;
-const AIRPORT_PRODUCTION_MS=300000; // 5 minutes from recruit click to jet/bomber takeoff
+// Per-type wall-clock build time from recruit click to takeoff. The light
+// sky fighter rolls out in 3 minutes; the heavy cluster gunship still takes
+// the full 5. Both are visualised by the clepsydra hovering over the airport
+// (see updateAirProdClocks).
+const JET_PRODUCTION_MS=180000;    // 3 minutes
+const BOMBER_PRODUCTION_MS=300000; // 5 minutes
+const AIR_PRODUCTION_MS={ jet:JET_PRODUCTION_MS, bomber:BOMBER_PRODUCTION_MS };
+function airProductionMs(type){ return AIR_PRODUCTION_MS[type]||JET_PRODUCTION_MS; }
+function airProductionMinutes(type){ return Math.round(airProductionMs(type)/60000); }
 const VISION_RADIUS=5;
 const BASE_HP_MAX=10000; // stronghold "power points"
 const TROOP_SHOT_DMG=10; // one trooper shot drains 10 power points, from a base or a unit
@@ -430,7 +442,11 @@ const TANK_ATTACK_COOLDOWN_MS=2000; // tanks fire once every 2 seconds
 const JET_ATTACK_COOLDOWN_MS=650; // fast, light strafing runs
 const BOMBER_ATTACK_COOLDOWN_MS=2600; // slow, heavy payload
 const AIR_SHOT_DMG=100, AIR_SHOTS_PER_BURST=3, AIR_HIT_CHANCE=0.5;
-const BOMBER_AOE_RADIUS=2, BOMBER_AOE_DMG=15; // cluster bomb splash on every enemy in radius of the impact tile
+// The gunship empties its pods over the 3x3 block of tiles centered on its
+// attack destination — radius 1 in Chebyshev distance is exactly those 9
+// tiles. Everything enemy standing in the block (units AND buildings) eats
+// the splash; the damage is up from the old wider-but-weaker 5x5 spread.
+const BOMBER_AOE_RADIUS=1, BOMBER_AOE_DMG=25;
 const TURBINE_DMG_BONUS=5; // each wind turbine adds +5 damage to every shot the house's units fire
 // Building hit points — much softer than the 10000hp stronghold, so a raid
 // that reaches the interior of a base can actually knock out its economy.
@@ -1202,7 +1218,6 @@ const TILE_PNG = {
   outpost: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAADFklEQVR4nD2SzUoqDQBAz+jojJJddayUpNEoAknDoCAkWrftFXqr9i1bRJsWEVREuQmKohKL/CsqI51xHMf5+xYf9543OJwj7O3t+blcjnK5jGEYnJ+fs7+/z8vLCwsLC7RaLdbW1tjd3eXu7o5KpcLKygr39/ccHR0R6Ha72LaNLMu8vr7SbrfRNI16vU61WiUUCiFJEgCpVIp8Pk+j0aBarXJyckJAkiQsy6LdbqPrOoPBgEgkAoCqqqyvr6OqKp1Oh5mZGQKBALVajWazyefnJ6JpmszNzfH09MT9/T2+7zMcDikWi2xubiJJEolEAl3XcV2XXC5Ht9vFsixkWUaMxWL0+30cx2E4HGKaJqqqoigKnucRDof/KczNzfHw8MD7+zue5zEajQgYhsHV1RWCIJBOp+n1eqRSKRzHIR6PUyqVmJqaYnFxEUEQ6HQ6tFotxuMx2WwW8a/X4+MjvV4PWZbJ5/NUKhUKhQKCINBoNHBdl5+fH7LZLF9fX7RaLZaXlxF1XUdVVTzPI5PJ4Ps+Ozs7JJNJTk9POT4+5vDwkNXVVba3t2k0GpimyezsLJZlIYqiiCzLpNNput0uW1tbJBIJzs7OODg44OLigvn5eW5ublheXqZQKCBJEr+/v7iui6hpGoPBAEmSmJqaYnJyksfHR25vb7m+vsY0Tf6i6zrj8Rjf91laWmIwGBCQZZlkMommaUSjUQRBoFar8fX1hWVZ1Ot1zs/PURQFSZJwHIdkMsnn5+f/HwyHQwzDwPM8ms0mmUzmX/NQKEQ4HGZjY4NCoUA8HsdxHEajEZZl4TgOgVgshmEYABSLRS4vL3l+fsa2bcbjMRsbG5RKJaLRKJFIBFVV0XWdYDDIxMQEYjAYJBqNEggE+Pj4IJFI4DgOrutSLpeZnp4GQFEU8vk8mqbx+/vL0tIS4/EY0bIs+v0+nU6Hn58fSqUSoVCIt7c3EokEmqaRyWQIh8PYto1pmvT7fb6/v7FtGzEejwMwPT2Noijouk4+nyebzRIMBvF9HwDTNBkOhwSDQf78+YPneciyzH98/YpyT/1s3wAAAABJRU5ErkJggg==',
   tankUnit: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACx0lEQVR4nD2Su0ozURSFv5k5Zy7JjIREYhC8IOhfWVqlsBALbXwFn8AH0MoXsRFLq4hgZydYGhBLRRPwksQhM+Pczpy/EFPvzV5rr/UZvV5Pa60xDAPDMMjzHCEE39/fANi2DYDjONi2jZSSPM/RWlOWJaZlWcRxTBiGVFXFeDxmOBzS6XRQStFsNrFte7ZjWRaWZSGEQEqJKMsS13VRShFFEZ7n0W63MU0T3/cBaDQaRFFEu90mjmOyLMPzPIQQCN/3MU2TMAxxHIeiKJhOp9RqNSzLYjQaobWm1WqRpilJkmAYBgBzc3O/DmzbZjQa0e/32dvbY3NzE9u2MU2TJEno9/t0u13SNEUIQVVVSCk5PDxEZFnG4+MjDw8PdLtd1tfX6XQ6ZFmGlBLDMJBS4vs+QggAtNY4jsPBwQFCCIFlWdi2Tb1eRylFVVVYloVpmkgpeXt74/z8HMuy0FpjmiZlWXJ2doaoqoqbmxtWVlaYTCa8vLzMFP4Ora2tcXl5SZqmAIRhyL9//zg5OUFMp1MMw0ApxdPTE0opBoMBeZ5jmuZs5vs+lmVRVRWDwYCNjQ0AhOd5vL+/02q10Frz+vqKaZoAs7SLoiAMQwCUUnx+flJV1W+VtVqN/f197u7uWFhYQGtNlmUYhsEfoX+/l2XJeDxme3ub+fl5lFIIKSXLy8tcX19TFAV5ns9o+1PUWv/aFYIwDNnd3cV1XaIoQvz8/HB7e8vOzg7Pz8+zhB3HIY5jfN8niiLq9TpZlrG1tcX9/T1LS0s0Gg3MyWRCr9djNBoRBAG+7+P7PkEQEAQBc3NzBEFArVYjCAKSJOHi4oKvry+yLEM0m02Ojo44PT1lcXGRLMsAZrQVRYGUEqUUjuMwHA45Pj5mdXWVNE0xrq6utG3bfHx8IKWkqipc1yWOYxzHwXVdkiShLEs8z0MpRb1enzHyH8DFZAUne4LhAAAAAElFTkSuQmCC',
   refineryBldg: 'data:image/png;base64,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',
-  airportBldg: 'data:image/png;base64,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',
   strongholdBldg: 'data:image/png;base64,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'
 };
 // House-head portraits: a 10-frame talking-head cycle per House
@@ -1418,20 +1433,37 @@ const TEX = {
       cx.fillStyle='rgba(255,255,255,.5)'; cx.fill();
     });
   }),
-  // Airport: same rounded hangar body as the refinery, but a runway stripe
-  // (dashed centerline) across it instead of the refinery's vent ports, so
-  // the two 2x2 buildings read as visually distinct at a glance.
+  // Airport: no longer a hangar box — the 2x2 footprint IS the runway, seen
+  // from above. Asphalt apron, a darker strip running top-to-bottom with
+  // threshold "piano key" bars at both ends, a dashed centerline and amber
+  // edge lights. Drawn in neutral asphalt greys and left UNTINTED by
+  // redrawSpiceAndBuildings (a house-colored flag marks the owner instead),
+  // so tarmac reads as tarmac rather than as a slab of house color.
   airport: canvasTexture(TILE*2,(cx,size)=>{
-    const pad=2.5, r=5;
-    const grd=cx.createLinearGradient(0,0,0,size);
-    grd.addColorStop(0,'#ffffff'); grd.addColorStop(1,'#c7c7c7');
-    roundedRectPath(cx,pad,pad,size-pad*2,size-pad*2,r);
-    cx.fillStyle=grd; cx.fill();
-    cx.strokeStyle='rgba(0,0,0,.65)'; cx.lineWidth=1.2; cx.stroke();
-    cx.fillStyle='rgba(0,0,0,.22)';
-    cx.fillRect(pad+3,size*0.46,size-(pad+3)*2,size*0.08);
-    cx.fillStyle='rgba(255,255,255,.7)';
-    for(let dx=pad+5;dx<size-pad-5;dx+=6) cx.fillRect(dx,size*0.485,3,size*0.03);
+    // apron
+    roundedRectPath(cx,1,1,size-2,size-2,2.5);
+    cx.fillStyle='#7a7a72'; cx.fill();
+    cx.strokeStyle='rgba(0,0,0,.7)'; cx.lineWidth=1; cx.stroke();
+    // runway strip
+    const rw=size*0.44, rx=(size-rw)/2;
+    cx.fillStyle='#3c3c3a'; cx.fillRect(rx,2,rw,size-4);
+    cx.fillStyle='rgba(255,255,255,.10)'; cx.fillRect(rx,2,1,size-4);
+    // threshold bars at both ends of the strip
+    cx.fillStyle='#ececec';
+    for(let i=0;i<4;i++){
+      const bx=rx+2+i*3.2;
+      cx.fillRect(bx,3.5,1.6,4);
+      cx.fillRect(bx,size-7.5,1.6,4);
+    }
+    // dashed centerline
+    cx.fillStyle='rgba(255,255,255,.85)';
+    for(let y=10;y<size-12;y+=6) cx.fillRect(size/2-0.8,y,1.6,3.4);
+    // amber edge lights down both shoulders
+    cx.fillStyle='#ffc44a';
+    for(let y=5;y<size-4;y+=6){ cx.fillRect(rx-2,y,1.4,1.4); cx.fillRect(rx+rw+0.6,y,1.4,1.4); }
+    // apron scuffing so the tarmac isn't a flat block of grey
+    cx.fillStyle='rgba(0,0,0,.13)';
+    cx.fillRect(2.5,size*0.18,rx-4.5,2); cx.fillRect(rx+rw+2,size*0.68,rx-4.5,2);
   }),
   jet: canvasTexture(TILE,(cx,size)=>{
     cx.fillStyle='#e8e8e8';
@@ -1442,16 +1474,60 @@ const TEX = {
     cx.strokeStyle='rgba(0,0,0,.5)'; cx.lineWidth=0.6; cx.stroke();
     cx.fillStyle='rgba(0,0,0,.3)'; cx.fillRect(size*0.46,size*0.3,size*0.08,size*0.3);
   }),
-  bomber: canvasTexture(TILE,(cx,size)=>{
-    cx.fillStyle='#d8d8d8';
-    roundedRectPath(cx,size*0.42,1,size*0.16,size*0.85,1.5);
-    cx.fill();
-    cx.beginPath();
-    cx.moveTo(size*0.5,size*0.2); cx.lineTo(size*0.95,size*0.68); cx.lineTo(size*0.5,size*0.55);
-    cx.lineTo(size*0.05,size*0.68); cx.closePath(); cx.fill();
-    cx.strokeStyle='rgba(0,0,0,.5)'; cx.lineWidth=0.6; cx.stroke();
-    cx.fillStyle='rgba(60,40,20,.8)'; cx.beginPath(); cx.arc(size*0.5,size*0.75,2.2,0,Math.PI*2); cx.fill();
-  }),
+  // The cluster unit is a HELICOPTER gunship now, not a fixed-wing bomber:
+  // teardrop fuselage with cockpit glass at the nose, stub pylons carrying
+  // the cluster pods it empties over its 3x3 target block, a tail boom with
+  // its own rotor, and a four-blade main rotor overhead. The spinning rotor
+  // is what sells it as a helicopter at 16px, so it's baked as four frames
+  // (a quarter turn's worth — four blades repeat every 90°) that textureFor()
+  // cycles through while the unit is on the map. Nose points up, same
+  // convention as every other unit texture, so dirAngle() rotation works.
+  bomberFrames: (()=>{
+    const drawGunship=(cx,size,rotor)=>{
+      const c=size*0.5, by=size*0.42; // rotor mast / fuselage center
+      // rotor downwash disc
+      cx.fillStyle='rgba(255,255,255,0.12)';
+      cx.beginPath(); cx.arc(c,by,size*0.46,0,Math.PI*2); cx.fill();
+      // tail boom, with a stabiliser and the tail rotor at its end
+      cx.fillStyle='#dcdcdc';
+      cx.fillRect(c-1,by+2,2,size-3.2-(by+2));
+      cx.fillStyle='#2e2e2e';
+      cx.fillRect(c-2.4,size-3.6,4.8,1.2);
+      cx.fillRect(c+1.2,size-5,1.2,3.4);
+      // fuselage: a teardrop with the nose up, same heading convention as
+      // every other unit texture
+      cx.fillStyle='#e8e8e8';
+      cx.beginPath();
+      cx.moveTo(c,by-size*0.32);
+      cx.quadraticCurveTo(c+size*0.23,by-size*0.16,c+size*0.20,by+size*0.12);
+      cx.quadraticCurveTo(c+size*0.12,by+size*0.26,c,by+size*0.26);
+      cx.quadraticCurveTo(c-size*0.12,by+size*0.26,c-size*0.20,by+size*0.12);
+      cx.quadraticCurveTo(c-size*0.23,by-size*0.16,c,by-size*0.32);
+      cx.fill();
+      cx.strokeStyle='rgba(0,0,0,.55)'; cx.lineWidth=0.7; cx.stroke();
+      // cockpit glass
+      cx.fillStyle='#31506b';
+      cx.beginPath(); cx.ellipse(c,by-size*0.16,size*0.10,size*0.11,0,0,Math.PI*2); cx.fill();
+      // cluster pods hugging the flanks
+      cx.fillStyle='#2e2e2e';
+      cx.fillRect(c-size*0.31,by-0.4,size*0.11,2.4);
+      cx.fillRect(c+size*0.20,by-0.4,size*0.11,2.4);
+      // four-blade main rotor, drawn as two crossed bars
+      cx.save(); cx.translate(c,by); cx.rotate(rotor);
+      cx.fillStyle='rgba(20,20,20,0.72)';
+      for(let i=0;i<2;i++){
+        cx.save(); cx.rotate(i*Math.PI/2);
+        cx.fillRect(-size*0.47,-0.7,size*0.94,1.4);
+        cx.restore();
+      }
+      cx.restore();
+      cx.fillStyle='#3a3a3a';
+      cx.beginPath(); cx.arc(c,by,1.2,0,Math.PI*2); cx.fill();
+    };
+    const frames=[];
+    for(let i=0;i<4;i++) frames.push(canvasTexture(TILE,(cx,size)=>drawGunship(cx,size,i*Math.PI/8)));
+    return frames;
+  })(),
   // White flag with a small spice-colored dot, anchored at the pole's base
   // (bottom-left) so it can be scaled from that edge to flutter.
   flag: canvasTexture(TILE,(cx,size)=>{
@@ -1469,6 +1545,10 @@ const TEX = {
   // Ground (grass/desert/mountain) and fog-of-war are no longer drawn as
   // PIXI tile sprites — see the p5.js terrain and fog-of-war layers above.
 };
+// Static fallback for anything that reaches for a single bomber texture
+// (sprite construction, the minimap); the live per-frame rotor animation
+// comes from TEX.bomberFrames via textureFor().
+TEX.bomber=TEX.bomberFrames[0];
 
 // ================= terrain generation =================
 let terrain, spiceMap, buildingMap, explored;
@@ -1737,7 +1817,10 @@ function redrawSpiceAndBuildings(){
     const tex = b.type==='turbine'?TEX.turbine : b.type==='turret'?TEX.turret : b.type==='silo'?TEX.silo : b.type==='airport'?TEX.airport : TEX.refineryBody;
     const sp=new PIXI.Sprite(tex); sp.x=b.x*SZ; sp.y=b.y*SZ; sp.scale.set(ZOOM);
     const owner=houseById(b.owner);
-    if(owner) sp.tint=owner.color;
+    // The airport is the one building left untinted — it's a runway now, and
+    // tinting tarmac by house color turns it back into an unreadable slab.
+    // Its owner is shown by the house flag planted at its corner below.
+    if(owner && b.type!=='airport') sp.tint=owner.color;
     layerBuildings.addChild(sp);
     const w=(b.type==='refinery'||b.type==='airport')?2:1; // both are 2x2 tiles wide
     drawStaticHpBar(layerBuildings, b.x*SZ+w*SZ/2, b.y*SZ-4, SZ*w*0.7, b.hp, b.hpMax);
@@ -1750,6 +1833,19 @@ function redrawSpiceAndBuildings(){
       flag.x=b.x*SZ+SZ*0.15; flag.y=b.y*SZ+SZ*0.85;
       flag._flagWave=true; flag._flagPhase=(b.x*7+b.y*13)%(Math.PI*2);
       layerBuildings.addChild(flag);
+    }
+    if(b.type==='airport' && owner){
+      // The runway carries no house tint, so its owner's blazon flies at the
+      // near corner instead — same waving-flag treatment as the refinery and
+      // the stronghold, using the pre-colored per-house flag texture.
+      const flagTex=TEX.houseFlags[owner.id];
+      if(flagTex){
+        const flag=new PIXI.Sprite(flagTex);
+        flag.anchor.set(0,1); flag.scale.set(ZOOM);
+        flag.x=b.x*SZ+SZ*0.1; flag.y=b.y*SZ+SZ*1.9;
+        flag._flagWave=true; flag._flagPhase=(b.x*5+b.y*11)%(Math.PI*2);
+        layerBuildings.addChild(flag);
+      }
     }
   });
   state.houses.forEach(h=>{
@@ -1811,7 +1907,17 @@ function playerHouse(){
 function allUnits(){ return state.houses.flatMap(h=>h.units); }
 function enemyHousesOf(house){ return state.houses.filter(h=>h!==house && h.alive); }
 
-function textureFor(u){ return TEX[u.type]; }
+// Per-frame texture pick. Everything but the gunship is a single static
+// texture; the gunship cycles TEX.bomberFrames so its rotor keeps turning
+// (the main ticker reassigns sprite.texture every frame anyway).
+const ROTOR_FRAME_MS=60;
+function textureFor(u){
+  if(u.type==='bomber'){
+    const f=TEX.bomberFrames;
+    return f[Math.floor(performance.now()/ROTOR_FRAME_MS)%f.length];
+  }
+  return TEX[u.type];
+}
 function ensureSprite(u){
   if(!u.sprite){
     u.sprite=new PIXI.Sprite(textureFor(u)); u.sprite.anchor.set(0.5); u.sprite.scale.set(ZOOM);
@@ -1861,13 +1967,17 @@ function updateSelectionRing(){
 
 // ================= combat FX (lasers, bombs, sparks, health bars, death) ==
 let activeFx=[];
+// props.delay (ms) holds an effect back before it starts playing — used to
+// walk the gunship's stick of bombs across its 3x3 block instead of flashing
+// all nine tiles at once.
 function spawnFx(kind, props, life){
   const g=new PIXI.Graphics();
   Object.assign(g, props.gfxProps||{});
   if(props.x!==undefined) g.x=props.x;
   if(props.y!==undefined) g.y=props.y;
+  if(props.delay) g.visible=false;
   layerFx.addChild(g);
-  activeFx.push(Object.assign({ g, kind, born:performance.now(), life }, props));
+  activeFx.push(Object.assign({ g, kind, born:performance.now()+(props.delay||0), life }, props));
 }
 // Trooper shot: a quick laser line attacker->target with a spark burst on impact.
 function spawnLaserFx(fromX,fromY,toX,toY){
@@ -1875,16 +1985,18 @@ function spawnLaserFx(fromX,fromY,toX,toY){
   spawnFx('spark', { x:toX, y:toY }, 260);
 }
 // Tank shot: a shell lobbed in from above that bursts on the target.
-function spawnBombFx(toX,toY){
-  spawnFx('bomb', { x:toX, y:toY-46, targetX:toX, targetY:toY }, 480);
+function spawnBombFx(toX,toY,delay){
+  spawnFx('bomb', { x:toX, y:toY-46, targetX:toX, targetY:toY, delay:delay||0 }, 480);
 }
 function spawnExplosionFx(x,y){ spawnFx('explosion', { x, y }, 550); }
 function spawnDeadFx(x,y){ spawnFx('dead', { x, y }, 1000); }
 function updateActiveFx(now){
   activeFx=activeFx.filter(fx=>{
     const t=(now-fx.born)/fx.life;
+    if(t<0) return true; // staggered start not reached yet
     if(t>=1){ layerFx.removeChild(fx.g); fx.g.destroy(); return false; }
     const g=fx.g;
+    g.visible=true;
     if(fx.kind==='laser'){
       g.clear(); g.lineStyle(2,0xff3b30,1-t);
       g.moveTo(fx.fromX,fx.fromY); g.lineTo(fx.toX,fx.toY);
@@ -1933,6 +2045,185 @@ function updateHealthBar(u,now){
   bar.x=u.sprite.x; bar.y=u.sprite.y-SZ*0.68;
 }
 
+// ============ clepsydra: the airport's production water clock ============
+// A water clock that hovers over the airport building and unfolds the build
+// currently running there: the upper bowl drains while the lower one fills,
+// a drop falls through the neck, and an mm:ss readout counts down under the
+// frame. One clock per aircraft type in production — sky fighter (3 min) on
+// the left, cluster gunship (5 min) on the right — so an airport working on
+// both shows both clocks side by side.
+//
+// Press a recruit button a second time and that type stacks up behind the
+// one being built; the extra orders show as a count badge planted in the
+// dead center of the runway, under the clocks.
+//
+// Clocks are drawn into layerFx in world coordinates (same space as the
+// buildings), so they pan and zoom with the map instead of floating loose
+// over the HUD.
+const airClocks=new Map(); // houseId -> {root, widgets, badges}
+const AIR_TYPES=['jet','bomber'];
+const CLEPSYDRA_W=17, CLEPSYDRA_H=22;
+// The backing plate is wider than the glass so the mm:ss readout and the
+// type pictogram both sit on it without spilling onto the terrain.
+const CLEPSYDRA_PLATE_W=32;
+const CLEPSYDRA_STYLE={
+  jet:    { frame:0xbcd8ff, sand:0xe0522a },
+  bomber: { frame:0xffc44a, sand:0xe0522a }
+};
+function makeAirClockWidget(){
+  const wrap=new PIXI.Container();
+  const glass=new PIXI.Graphics();
+  const label=new PIXI.Text('',{fontFamily:'monospace',fontSize:9,fill:0xf3e3c0});
+  // sits in the readout row under the frame, to the right of the type
+  // pictogram drawClepsydra() paints at the row's left edge
+  label.anchor.set(0,0); label.x=-CLEPSYDRA_PLATE_W*0.5+9; label.y=CLEPSYDRA_H*0.5+3;
+  wrap.addChild(glass,label);
+  return {wrap,glass,label};
+}
+function makeAirBadgeWidget(){
+  const wrap=new PIXI.Container();
+  const g=new PIXI.Graphics();
+  const label=new PIXI.Text('',{fontFamily:'monospace',fontSize:10,fontWeight:'bold',fill:0xffffff});
+  label.anchor.set(0.5);
+  wrap.addChild(g,label);
+  return {wrap,g,label};
+}
+function ensureAirClock(houseId){
+  let c=airClocks.get(houseId);
+  if(c) return c;
+  const root=new PIXI.Container();
+  const widgets={}, badges={};
+  AIR_TYPES.forEach(t=>{
+    widgets[t]=makeAirClockWidget(); root.addChild(widgets[t].wrap);
+    badges[t]=makeAirBadgeWidget(); root.addChild(badges[t].wrap);
+  });
+  layerFx.addChild(root);
+  c={root,widgets,badges};
+  airClocks.set(houseId,c);
+  return c;
+}
+// layerFx is wiped wholesale on a new game / multiplayer re-init, which
+// detaches these containers without destroying them — drop the cached
+// references (and their GPU buffers) so the next game builds fresh ones.
+function resetAirClocks(){
+  airClocks.forEach(c=>{ layerFx.removeChild(c.root); c.root.destroy({children:true}); });
+  airClocks.clear();
+}
+// One clepsydra frame. progress is 0..1 through the current build; the
+// upper bowl holds (1-progress) of the sand, the lower bowl the rest.
+function drawClepsydra(g,type,progress,now){
+  const st=CLEPSYDRA_STYLE[type]||CLEPSYDRA_STYLE.jet;
+  const hw=CLEPSYDRA_W/2, hh=CLEPSYDRA_H/2, neck=1.5;
+  const rem=1-progress;
+  g.clear();
+  // backing plate, sized to cover the frame plus the readout beneath it
+  g.beginFill(0x140c05,0.66);
+  g.drawRoundedRect(-CLEPSYDRA_PLATE_W*0.5,-hh-5,CLEPSYDRA_PLATE_W,CLEPSYDRA_H+21,3);
+  g.endFill();
+  // glass body
+  const body=[-hw,-hh, hw,-hh, neck,0, hw,hh, -hw,hh, -neck,0];
+  g.beginFill(0x6f8ea8,0.18); g.drawPolygon(body); g.endFill();
+  // sand still to fall — pooled against the neck in the upper bowl, its
+  // surface sinking toward the waist as the build runs down
+  if(rem>0.004){
+    g.beginFill(st.sand,0.95);
+    g.drawPolygon([0,-0.4, -hw*rem,-hh*rem-0.4, hw*rem,-hh*rem-0.4]);
+    g.endFill();
+  }
+  // sand already fallen — a heap filling the lower bowl from the base up
+  if(progress>0.004){
+    const s=1-progress;
+    g.beginFill(st.sand,0.95);
+    g.drawPolygon([-hw,hh, hw,hh, hw*s,hh*s, -hw*s,hh*s]);
+    g.endFill();
+  }
+  // the falling drop, on its own fast loop while there's sand left to fall
+  if(rem>0.004){
+    const dt=(now%520)/520;
+    const dy=dt*(hh*(1-progress)-1);
+    g.beginFill(st.sand,0.9); g.drawCircle(0,dy,0.9); g.endFill();
+  }
+  // frame: outline plus the brass caps top and bottom
+  g.lineStyle(1,st.frame,0.95);
+  g.drawPolygon(body);
+  g.lineStyle(0);
+  g.beginFill(st.frame,0.9);
+  g.drawRect(-hw-1.5,-hh-2,CLEPSYDRA_W+3,2);
+  g.drawRect(-hw-1.5,hh,CLEPSYDRA_W+3,2);
+  g.endFill();
+  // type pictogram beside the mm:ss readout: a nose-up delta for the sky
+  // fighter, a rotor disc with four blades for the cluster gunship
+  const gx=-CLEPSYDRA_PLATE_W*0.5+4, gy=hh+7.5;
+  if(type==='jet'){
+    g.beginFill(st.frame,0.95);
+    g.drawPolygon([gx,gy-3, gx+2.6,gy+2.4, gx-2.6,gy+2.4]);
+    g.endFill();
+  } else {
+    g.lineStyle(0.9,st.frame,0.95);
+    g.drawCircle(gx,gy,2.8);
+    g.moveTo(gx-2.8,gy); g.lineTo(gx+2.8,gy);
+    g.moveTo(gx,gy-2.8); g.lineTo(gx,gy+2.8);
+    g.lineStyle(0);
+  }
+}
+// The queue badge in the middle of the runway: how many of that type are
+// stacked up (only drawn from two upward — i.e. once the button was pressed
+// a second time).
+function drawAirBadge(g,type,color){
+  g.clear();
+  g.beginFill(0x140c05,0.85); g.drawCircle(0,0,8.5); g.endFill();
+  g.beginFill(type==='jet'?color:0x241608,0.95);
+  g.lineStyle(1.4,type==='jet'?0xf3e3c0:color,0.95);
+  g.drawCircle(0,0,7);
+  g.lineStyle(0);
+  g.endFill();
+}
+function updateAirProdClocks(now){
+  const ph=playerHouse();
+  state.houses.forEach(h=>{
+    const prod=h.airProd||{};
+    const active=AIR_TYPES.filter(t=>prod[t] && prod[t].length);
+    const airport=(h.alive && active.length) ? findOwnedAirport(h) : null;
+    // An enemy's build clock is only readable once its airport has actually
+    // been scouted — same fog rule the units and buildings themselves obey.
+    const visible=!!airport && (h===ph || !!(explored[airport.y] && explored[airport.y][airport.x]));
+    if(!visible){
+      const cached=airClocks.get(h.id);
+      if(cached) cached.root.visible=false;
+      return;
+    }
+    const c=ensureAirClock(h.id);
+    c.root.visible=true;
+    const cx=(airport.x+1)*SZ, top=airport.y*SZ;
+    // slow bob, so the clock reads as hovering over the runway
+    const bob=Math.sin(now/620+airport.x)*1.6;
+    active.forEach((type,i)=>{
+      const w=c.widgets[type];
+      const off=active.length>1 ? (i===0?-(CLEPSYDRA_PLATE_W*0.5+1):(CLEPSYDRA_PLATE_W*0.5+1)) : 0;
+      w.wrap.visible=true;
+      // lifted clear of the building's own hp bar (drawn at top-4) so the
+      // readout row never sits on top of it
+      w.wrap.x=cx+off; w.wrap.y=top-CLEPSYDRA_H*0.5-22+bob;
+      const deadline=prod[type][0];
+      drawClepsydra(w.glass,type,airProdProgress(type,deadline,now),now);
+      w.label.text=formatCountdown(deadline-now);
+    });
+    AIR_TYPES.forEach(type=>{ if(active.indexOf(type)<0) c.widgets[type].wrap.visible=false; });
+    // Badges: centered on the runway, side by side if both types are stacked.
+    const stacked=AIR_TYPES.filter(t=>prod[t] && prod[t].length>1);
+    AIR_TYPES.forEach(type=>{
+      const b=c.badges[type];
+      const idx=stacked.indexOf(type);
+      if(idx<0){ b.wrap.visible=false; return; }
+      b.wrap.visible=true;
+      b.wrap.x=cx+(stacked.length>1?(idx===0?-10:10):0);
+      b.wrap.y=(airport.y+1)*SZ;
+      drawAirBadge(b.g,type,h.color);
+      b.label.text=String(prod[type].length);
+    });
+  });
+}
+
 app.ticker.add((delta)=>{
   if(!state) return;
   const now=performance.now();
@@ -1954,6 +2245,7 @@ app.ticker.add((delta)=>{
     });
   });
   updateActiveFx(now);
+  updateAirProdClocks(now);
   state.worms.forEach(w=>{
     if(!w.sprite) return;
     const surfacing=!!(w.surfaceUntil && now<w.surfaceUntil);
@@ -2221,21 +2513,31 @@ function findOwnedAirport(house){
   return found;
 }
 function hasAirport(house){ return !!findOwnedAirport(house); }
-// Airport production runs on wall-clock time (AIRPORT_PRODUCTION_MS), not
-// the sim tick — spice is spent up front, the unit appears once tickAirProduction
-// notices a deadline has passed. house.airProd[type] is a QUEUE (array) of
-// deadlines, one per aircraft on order — recruiting used to be blocked
-// outright while one was already building (a hard "only one plane" limit);
-// now each new order is appended and matures AIRPORT_PRODUCTION_MS after the
-// previous one in that type's queue (or after now, if the queue was empty),
-// so the airport keeps producing back-to-back instead of sitting idle
-// between orders.
+// Airport production runs on wall-clock time (airProductionMs(type) — 3min
+// for a sky fighter, 5min for a cluster gunship), not the sim tick — spice is
+// spent up front, the unit appears once tickAirProduction notices a deadline
+// has passed. house.airProd[type] is a QUEUE (array) of deadlines, one per
+// aircraft on order — recruiting used to be blocked outright while one was
+// already building (a hard "only one plane" limit); now each new order is
+// appended and matures one full build time after the previous one in that
+// type's queue (or after now, if the queue was empty), so the airport keeps
+// producing back-to-back instead of sitting idle between orders. Pressing a
+// recruit button twice therefore stacks two aircraft, which is what the queue
+// badge in the middle of the runway counts.
 function startAirUnitProduction(house,unitType,cost){
   house.spice-=cost;
   house.airProd=house.airProd||{};
   const queue=house.airProd[unitType]=house.airProd[unitType]||[];
   const prevDeadline=queue.length?queue[queue.length-1]:performance.now();
-  queue.push(prevDeadline+AIRPORT_PRODUCTION_MS);
+  queue.push(prevDeadline+airProductionMs(unitType));
+}
+// How far through its build the aircraft at the head of a type's queue is,
+// 0..1. Every entry matures exactly one build-time after the one in front of
+// it, so an entry's own start is simply its deadline minus that build time —
+// no separate start timestamp to keep in sync (or to ship over the wire).
+function airProdProgress(type,deadline,now){
+  const dur=airProductionMs(type);
+  return Math.max(0,Math.min(1,1-(deadline-now)/dur));
 }
 function tickAirProduction(house){
   if(!house.airProd) return;
@@ -2249,7 +2551,7 @@ function tickAirProduction(house){
       const spawn=findFreeSpawnTile(origin.x,origin.y);
       const u=makeUnit(house.id,type,spawn.x,spawn.y);
       house.units.push(u); ensureSprite(u);
-      addLog('House '+house.name+"'s "+(type==='jet'?'fighter jet':'cluster bomber')+' takes off from the airport.');
+      addLog('House '+house.name+"'s "+(type==='jet'?'sky fighter':'cluster gunship')+' lifts off the runway.');
     }
     if(queue.length===0) delete house.airProd[type];
   });
@@ -2319,12 +2621,32 @@ function alertNearbyDefenders(house,x,y){
     if(d<=DEFEND_ALERT_RADIUS) u.order={kind:'engage'};
   });
 }
-// Cluster bomber splash: every enemy unit/building within BOMBER_AOE_RADIUS
-// of the impact tile takes flat splash damage on top of whatever the bomber's
-// primary hit (targetUnit/base/building, passed as excludeUnit to skip a
-// double-hit) already did.
-function applyClusterSplash(house,u,cx,cy,excludeUnit){
+// The 3x3 block of in-bounds tiles the gunship's payload covers, centered on
+// its attack destination (BOMBER_AOE_RADIUS is 1, so exactly nine tiles).
+function clusterBlockTiles(cx,cy){
+  const tiles=[];
+  for(let dy=-BOMBER_AOE_RADIUS;dy<=BOMBER_AOE_RADIUS;dy++){
+    for(let dx=-BOMBER_AOE_RADIUS;dx<=BOMBER_AOE_RADIUS;dx++){
+      const x=cx+dx, y=cy+dy;
+      if(inBounds(x,y)) tiles.push({x,y});
+    }
+  }
+  return tiles;
+}
+// Cluster gunship payload: it spits a bomb onto every tile of the 3x3 block
+// around its attack destination, and every enemy unit AND building standing
+// in that block takes flat splash damage on top of whatever the primary hit
+// (targetUnit/base/building — passed as excludeUnit/excludeBuildingKey so it
+// isn't struck twice for the same pass) already did.
+function applyClusterSplash(house,u,cx,cy,excludeUnit,excludeBuildingKey){
   if(u.type!=='bomber') return;
+  const block=clusterBlockTiles(cx,cy);
+  // one bomb per tile, walked outward from the center so the pass reads as a
+  // stick of bombs rather than a single flash
+  block.forEach(t=>{
+    const delay=(Math.abs(t.x-cx)+Math.abs(t.y-cy))*90;
+    spawnBombFx(t.x*SZ+SZ/2, t.y*SZ+SZ/2, delay);
+  });
   enemyHousesOf(house).forEach(targetHouse=>{
     targetHouse.units.slice().forEach(t=>{
       if(t===excludeUnit) return;
@@ -2341,6 +2663,20 @@ function applyClusterSplash(house,u,cx,cy,excludeUnit){
         dropFromSelection(t);
       }
     });
+  });
+  // Buildings caught in the block. A 2x2 building resolves to its primary
+  // tile, so hitKeys keeps a footprint straddling several bombed tiles from
+  // taking the splash more than once.
+  const hitKeys=new Set();
+  if(excludeBuildingKey) hitKeys.add(excludeBuildingKey);
+  block.forEach(t=>{
+    const resolved=resolveBuildingTarget(t.x+','+t.y);
+    if(!resolved || hitKeys.has(resolved.key)) return;
+    const owner=houseById(resolved.b.owner);
+    if(!owner || owner.id===house.id) return;
+    hitKeys.add(resolved.key);
+    damageResolvedBuilding(owner,resolved,BOMBER_AOE_DMG,
+      "House "+owner.name+"'s "+resolved.b.type+' is levelled by the cluster blast.');
   });
 }
 // Applies one cooldown-gated attack against a unit or a base, using the
@@ -2408,6 +2744,29 @@ function buildingScreenPos(b){
   const w=(b.type==='refinery'||b.type==='airport')?2:1; // both occupy a 2x2 footprint from their primary tile
   return { x:(b.x+w/2)*SZ, y:(b.y+w/2)*SZ };
 }
+// Applies raw damage to an already-resolved building and handles the shared
+// destruction bookkeeping — footprint cleanup, the owner's power/capacity
+// loss, the explosion, the redraw. Used both by a unit's aimed attack and by
+// the gunship's 3x3 cluster splash, so a building can only ever be torn down
+// (and logged, and refunded off the owner's stats) through this one path.
+// Returns true if the building was destroyed.
+function damageResolvedBuilding(targetHouse,resolved,dmg,destroyedMsg){
+  const b=resolved.b;
+  b.hp-=dmg;
+  alertNearbyDefenders(targetHouse, b.x, b.y);
+  if(b.hp>0) return false;
+  const pos=buildingScreenPos(b);
+  addLog(destroyedMsg || ("House "+targetHouse.name+"'s "+b.type+' is destroyed.'));
+  spawnExplosionFx(pos.x,pos.y); playDestructionSound();
+  const toDelete=[resolved.key];
+  buildingMap.forEach((bb,k)=>{ if(bb.primary===false && bb.primaryKey===resolved.key) toDelete.push(k); });
+  toDelete.forEach(k=>buildingMap.delete(k));
+  if(b.type==='turbine') targetHouse.power=Math.max(0,targetHouse.power-TURBINE_DMG_BONUS);
+  else if(b.type==='silo') targetHouse.cap=Math.max(START_CAP,targetHouse.cap-SILO_CAP_BONUS);
+  else if(b.type==='refinery') targetHouse.cap=Math.max(START_CAP,targetHouse.cap-REFINERY_CAP_BONUS);
+  redrawSpiceAndBuildings();
+  return true;
+}
 // Same cooldown-gated attack as applyCombatUnitAttack, but against a building
 // (turbine/silo/refinery) instead of a unit or the stronghold. Returns true
 // if the attacker's order should be cleared (building destroyed or gone).
@@ -2432,26 +2791,14 @@ function applyBuildingAttack(house,u,targetHouse,buildingKey){
     return false;
   }
   const b=resolved.b;
-  b.hp-=dmg;
   const pos=buildingScreenPos(b);
   spawnAttackFx(u, pos.x, pos.y);
   addLog('House '+house.name+"'s "+u.type+" hits House "+targetHouse.name+"'s "+b.type+' for '+dmg+'.');
-  alertNearbyDefenders(targetHouse, b.x, b.y);
-  applyClusterSplash(house,u,b.x,b.y,null);
-  if(b.hp<=0){
-    addLog("House "+targetHouse.name+"'s "+b.type+' is destroyed.');
-    spawnExplosionFx(pos.x,pos.y); playDestructionSound();
-    const toDelete=[resolved.key];
-    buildingMap.forEach((bb,k)=>{ if(bb.primary===false && bb.primaryKey===resolved.key) toDelete.push(k); });
-    toDelete.forEach(k=>buildingMap.delete(k));
-    if(b.type==='turbine') targetHouse.power=Math.max(0,targetHouse.power-TURBINE_DMG_BONUS);
-    else if(b.type==='silo') targetHouse.cap=Math.max(START_CAP,targetHouse.cap-SILO_CAP_BONUS);
-    else if(b.type==='refinery') targetHouse.cap=Math.max(START_CAP,targetHouse.cap-REFINERY_CAP_BONUS);
-    else if(b.type==='turret'){}
-    redrawSpiceAndBuildings();
-    return true;
-  }
-  return false;
+  // Splash first, with this building excluded — it already ate the aimed hit
+  // below, and letting the 3x3 pass strike it a second time would run the
+  // destruction bookkeeping twice.
+  applyClusterSplash(house,u,b.x,b.y,null,resolved.key);
+  return damageResolvedBuilding(targetHouse,resolved,dmg);
 }
 // Nearest living enemy unit, building, or base within range, for the "Search & Engage" stance.
 function findEngageTarget(house,u){
@@ -2764,8 +3111,8 @@ function aiTurnForHouse(house){
     addLog('House '+house.name+' deploys a tank.');
   } else if(hasAirport(house) && !(house.airProd&&(house.airProd.jet||house.airProd.bomber)) && budget>=BOMBER_COST && Math.random()<0.3){
     const useBomber=Math.random()<0.5;
-    if(useBomber){ startAirUnitProduction(house,'bomber',BOMBER_COST); spentMil+=BOMBER_COST; addLog('House '+house.name+' begins cluster bomber production.'); }
-    else { startAirUnitProduction(house,'jet',JET_COST); spentMil+=JET_COST; addLog('House '+house.name+' begins fighter jet production.'); }
+    if(useBomber){ startAirUnitProduction(house,'bomber',BOMBER_COST); spentMil+=BOMBER_COST; addLog('House '+house.name+' begins cluster gunship production.'); }
+    else { startAirUnitProduction(house,'jet',JET_COST); spentMil+=JET_COST; addLog('House '+house.name+' begins sky fighter production.'); }
   } else if(budget>=TROOP_COST){
     const n=Math.min(3, Math.floor(budget/TROOP_COST));
     for(let i=0;i<n;i++){ const spawn=findFreeSpawnTile(house.base.x,house.base.y); const t=makeUnit(house.id,'trooper',spawn.x,spawn.y); house.units.push(t); ensureSprite(t); }
@@ -3001,7 +3348,7 @@ function selectUnits(units){
   state.selectedUnits=units; uiMode=null; updateSelectionRing();
   boardHost.classList.add('targeting'); openCtxMenuFor();
 }
-const UNIT_LABEL={ harvester:'Harvester', trooper:'Trooper', tank:'Tank', jet:'Fighter jet', bomber:'Cluster bomber' };
+const UNIT_LABEL={ harvester:'Harvester', trooper:'Trooper', tank:'Tank', jet:'Sky fighter', bomber:'Cluster gunship' };
 function openCtxMenuFor(){
   const sel=state.selectedUnits;
   const title = sel.length===1
@@ -3211,7 +3558,7 @@ function handleBoardClick(e){
             : {x:fx,y:fy,type:'airport',owner:ph.id,primary:false,primaryKey};
           buildingMap.set(fx+','+fy, entry);
         });
-        addLog('Airport constructed — fighter jets and cluster bombers can now be recruited.');
+        addLog('Runway laid — sky fighters (3min) and cluster gunships (5min) can now be built here.');
         redrawSpiceAndBuildings();
       }
     }
@@ -3324,20 +3671,24 @@ document.getElementById('recruitTroop').onclick=()=>{
 document.getElementById('recruitJet').onclick=()=>{
   const ph=playerHouse();
   if(!ph || gameOver) return;
-  if(!hasAirport(ph)){ addLog('Build an airport before recruiting fighter jets.'); return; }
+  if(!hasAirport(ph)){ addLog('Build an airport before recruiting sky fighters.'); return; }
   if(ph.spice<JET_COST) return;
-  if(isMpClient()){ mpSend({type:'cmd', kind:'recruitJet'}); addLog('Fighter jet requested.'); return; }
+  if(isMpClient()){ mpSend({type:'cmd', kind:'recruitJet'}); addLog('Sky fighter requested.'); return; }
   startAirUnitProduction(ph,'jet',JET_COST);
-  addLog('Fighter jet production started — ready in 5 minutes.'); renderStats();
+  const jetQueued=ph.airProd.jet.length;
+  addLog('Sky fighter on the slipway — ready in '+airProductionMinutes('jet')+' minutes.'
+    +(jetQueued>1?' '+jetQueued+' now stacked up on the runway.':'')); renderStats();
 };
 document.getElementById('recruitBomber').onclick=()=>{
   const ph=playerHouse();
   if(!ph || gameOver) return;
-  if(!hasAirport(ph)){ addLog('Build an airport before recruiting cluster bombers.'); return; }
+  if(!hasAirport(ph)){ addLog('Build an airport before recruiting cluster gunships.'); return; }
   if(ph.spice<BOMBER_COST) return;
-  if(isMpClient()){ mpSend({type:'cmd', kind:'recruitBomber'}); addLog('Cluster bomber requested.'); return; }
+  if(isMpClient()){ mpSend({type:'cmd', kind:'recruitBomber'}); addLog('Cluster gunship requested.'); return; }
   startAirUnitProduction(ph,'bomber',BOMBER_COST);
-  addLog('Cluster bomber production started — ready in 5 minutes.'); renderStats();
+  const gunshipQueued=ph.airProd.bomber.length;
+  addLog('Cluster gunship on the slipway — ready in '+airProductionMinutes('bomber')+' minutes.'
+    +(gunshipQueued>1?' '+gunshipQueued+' now stacked up on the runway.':'')); renderStats();
 };
 document.getElementById('recruitTank').onclick=()=>{
   const ph=playerHouse();
@@ -3373,7 +3724,7 @@ setInterval(()=>{
   if(bomberBadge) bomberBadge.textContent=airProdBadgeText(ph.airProd&&ph.airProd.bomber, BOMBER_COST, now);
   // Pulsing hourglass above each recruit button, in the bottom action bar,
   // for as long as that type has anything queued — a visible-on-the-button
-  // cue for the ~5min build, separate from the numeric countdown above.
+  // cue for the 3min/5min build, separate from the numeric countdown above.
   const jetHourglass=document.getElementById('jetHourglass');
   const bomberHourglass=document.getElementById('bomberHourglass');
   if(jetHourglass) jetHourglass.classList.toggle('active', !!(ph.airProd && ph.airProd.jet && ph.airProd.jet.length));
@@ -3405,10 +3756,36 @@ function showMpWait(text){ document.getElementById('mpWaitText').textContent=tex
 function hideMpWait(){ document.getElementById('mpWaitOverlay').style.display='none'; }
 
 function serializeUnit(u){ return {id:u.id, owner:u.owner, type:u.type, x:u.x, y:u.y, hp:u.hp, carrying:u.carrying}; }
+// Air production queues travel as REMAINING milliseconds, not as absolute
+// deadlines — performance.now() is measured from each machine's own page
+// load, so a host timestamp means nothing on the client. The client rebases
+// them onto its own clock in deserializeAirProd, which is what keeps its
+// airport clepsydra and recruit-button countdown honest.
+function serializeAirProd(h){
+  if(!h.airProd) return null;
+  const now=performance.now();
+  const out={};
+  Object.keys(h.airProd).forEach(type=>{
+    const q=h.airProd[type];
+    if(q && q.length) out[type]=q.map(d=>Math.max(0,d-now));
+  });
+  return Object.keys(out).length?out:null;
+}
+function deserializeAirProd(sent){
+  if(!sent) return null;
+  const now=performance.now();
+  const out={};
+  Object.keys(sent).forEach(type=>{
+    const q=sent[type];
+    if(q && q.length) out[type]=q.map(left=>now+left);
+  });
+  return Object.keys(out).length?out:null;
+}
 function serializeHouse(h){
   return { id:h.id, name:h.name, color:h.color, colorCss:h.colorCss, alive:h.alive,
     baseHp:h.baseHp, baseHpMax:h.baseHpMax, base:h.base,
-    spice:h.spice, cap:h.cap, power:h.power, units:h.units.map(serializeUnit) };
+    spice:h.spice, cap:h.cap, power:h.power, airProd:serializeAirProd(h),
+    units:h.units.map(serializeUnit) };
 }
 function buildInitMessage(){
   return {
@@ -3433,7 +3810,7 @@ function buildSnapshot(){
 function deserializeHouse(hd){
   return { id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss, alive:hd.alive,
     ai:false, baseHp:hd.baseHp, baseHpMax:hd.baseHpMax, base:hd.base,
-    spice:hd.spice, cap:hd.cap, power:hd.power,
+    spice:hd.spice, cap:hd.cap, power:hd.power, airProd:deserializeAirProd(hd.airProd),
     units:hd.units.map(u=>({...u, order:null, dir:0, frame:0, moving:false, sprite:null, moveFrom:null, moveTo:null, moveStart:0})),
     spentEconomy:0, spentMilitary:0, lastAttacker:null };
 }
@@ -3462,6 +3839,7 @@ function applyMpInit(msg){
   addLog('Connected — House '+houseById(mp.myHouseId).name+' vs House '+houseById(mp.remoteHouseId).name+'.');
   buildWorldVisuals();
   layerUnits.removeChildren(); layerFx.removeChildren();
+  resetAirClocks();
   selectionRings=[]; activeFx=[];
   syncAllSprites();
   const ph=playerHouse();
@@ -3479,6 +3857,10 @@ function applyMpSnapshot(msg){
   msg.houses.forEach(hd=>{
     const h=houseById(hd.id); if(!h) return;
     h.alive=hd.alive; h.baseHp=hd.baseHp; h.spice=hd.spice; h.cap=hd.cap; h.power=hd.power;
+    // Mirrored, not simulated: the client never runs tickAirProduction, it
+    // just re-bases whatever the host says is still on the slipway.
+    const air=deserializeAirProd(hd.airProd);
+    if(air) h.airProd=air; else delete h.airProd;
     const seen=new Set();
     hd.units.forEach(ud=>{
       seen.add(ud.id);
@@ -3626,12 +4008,12 @@ function applyRemoteCommand(msg){
   } else if(msg.kind==='recruitJet'){
     if(hasAirport(house) && house.spice>=JET_COST){
       startAirUnitProduction(house,'jet',JET_COST);
-      addLog('House '+house.name+' begins fighter jet production.');
+      addLog('House '+house.name+' begins sky fighter production.');
     }
   } else if(msg.kind==='recruitBomber'){
     if(hasAirport(house) && house.spice>=BOMBER_COST){
       startAirUnitProduction(house,'bomber',BOMBER_COST);
-      addLog('House '+house.name+' begins cluster bomber production.');
+      addLog('House '+house.name+' begins cluster gunship production.');
     }
   }
 }
@@ -3802,7 +4184,7 @@ function newGame(chosenId, rivalId){
   // Every house also starts with an airport already built next to its
   // stronghold (same footprint-search the AI itself uses to place one), so
   // air power is available and visible from turn one instead of gated
-  // behind AIRPORT_COST plus AIRPORT_PRODUCTION_MS before a player ever
+  // behind AIRPORT_COST plus a full aircraft build time before a player ever
   // sees a jet exist at all.
   state.houses.forEach(h=>{
     const spot=findFreeFootprintNear(h.base.x,h.base.y,'place-airport',true);
@@ -3857,6 +4239,7 @@ async function start(chosenId, rivalId){
   buildWorldVisuals();
   layerUnits.removeChildren();
   layerFx.removeChildren();
+  resetAirClocks();
   selectionRings=[]; activeFx=[];
   syncAllSprites();
   revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
@@ -4071,13 +4454,19 @@ function upmActorBoxes(type,color){
       {x:-0.2,y:0.2,z:0.05, w:0.5,d:0.8,h:0.12, color},
       {x:-0.9,y:-0.1,z:0.05, w:0.25,d:0.2,h:0.5, color:upmShade(color,0.7)}
     ];
+    // Cluster gunship: a helicopter, matching its map sprite — fuselage and
+    // nose glass, tail boom with a fin, crossed main-rotor blades on a mast,
+    // and the two cluster pods slung under the stub pylons.
     case 'bomber': return [
-      {x:-1.0,y:-0.35,z:0, w:2.0,d:0.7,h:0.4, color},
-      {x:-0.1,y:-1.1,z:0.05, w:0.6,d:0.9,h:0.15, color},
-      {x:-0.1,y:0.2,z:0.05, w:0.6,d:0.9,h:0.15, color},
-      {x:-1.0,y:-0.12,z:0.05, w:0.3,d:0.24,h:0.55, color:upmShade(color,0.7)},
-      {x:-0.3,y:-0.15,z:-0.35, w:0.3,d:0.3,h:0.3, color:UPM_DARK},
-      {x:0.2,y:-0.15,z:-0.35, w:0.3,d:0.3,h:0.3, color:UPM_DARK}
+      {x:-0.55,y:-0.4,z:0, w:1.35,d:0.8,h:0.5, color},
+      {x:0.6,y:-0.22,z:0.06, w:0.35,d:0.44,h:0.34, color:upmShade(color,0.7)},
+      {x:-1.5,y:-0.12,z:0.14, w:1.0,d:0.24,h:0.22, color},
+      {x:-1.56,y:-0.09,z:0.3, w:0.18,d:0.18,h:0.5, color:upmShade(color,0.7)},
+      {x:-0.14,y:-0.14,z:0.5, w:0.28,d:0.28,h:0.14, color:UPM_DARK},
+      {x:-1.0,y:-0.09,z:0.62, w:2.0,d:0.18,h:0.08, color:UPM_DARK},
+      {x:-0.09,y:-1.0,z:0.62, w:0.18,d:2.0,h:0.08, color:UPM_DARK},
+      {x:-0.35,y:-0.62,z:-0.18, w:0.34,d:0.24,h:0.24, color:UPM_DARK},
+      {x:-0.35,y:0.38,z:-0.18, w:0.34,d:0.24,h:0.24, color:UPM_DARK}
     ];
     case 'harvester': return [
       {x:-0.9,y:-0.6,z:0, w:1.8,d:1.2,h:0.7, color},
@@ -4138,11 +4527,15 @@ function upmStep(scn,now,dt){
       scn.lastShot=now;
       const dropX=scn.actor.gx, dropY=scn.actor.gy;
       const cluster=scn.type==='bomber';
-      const n=cluster?5:1;
-      for(let i=0;i<n;i++){
-        scn.effects.push({kind:'bomb', gx:dropX+(cluster?(Math.random()-0.5)*1.4:0), gy:dropY+(cluster?(Math.random()-0.5)*1.4:0),
-          gz0:scn.actor.gz, born:now+i*70, life:550});
-      }
+      // The gunship empties its pods over a 3x3 block of tiles, same as it
+      // does on the map; the fighter drops a single bomb.
+      const offsets=cluster
+        ? [[-1,-1],[0,-1],[1,-1],[-1,0],[0,0],[1,0],[-1,1],[0,1],[1,1]]
+        : [[0,0]];
+      offsets.forEach(([ox,oy])=>{
+        scn.effects.push({kind:'bomb', gx:dropX+ox, gy:dropY+oy,
+          gz0:scn.actor.gz, born:now+(Math.abs(ox)+Math.abs(oy))*70, life:550});
+      });
       e.flash=600;
     }
   } else { // trooper
@@ -4254,7 +4647,9 @@ Promise.all([
   // set in TEX above) — the baked turbineBldg photo tile was an ambiguous
   // grey blob that read as the same building as the refinery on the map.
   loadImageTexture(TILE_PNG.refineryBldg).then(t=>{ TEX.refineryBody=t; }),
-  loadImageTexture(TILE_PNG.airportBldg).then(t=>{ TEX.airport=t; }),
+  // The airport keeps the procedural runway art set in TEX above — the baked
+  // airportBldg photo tile is a hangar block, which is exactly the "another
+  // grey building" read the runway replaces.
   loadImageTexture(TILE_PNG.strongholdBldg).then(t=>{ TEX.base=t; })
 ]).then(showModeSelect);
 })();
