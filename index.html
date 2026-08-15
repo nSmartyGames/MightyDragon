@@ -313,11 +313,11 @@
         <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice"><span class="costBadge">50</span></button>
         <button id="buildSilo" class="iconBtn" title="Silo — 70 spice"><span class="costBadge">70</span></button>
         <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice"><span class="costBadge">110</span></button>
-        <button id="buildAirport" class="iconBtn" title="Airport runway — 190 spice, builds sky fighters and cluster gunships"><span class="costBadge">190</span></button>
+        <button id="buildAirport" class="iconBtn" title="Airport runway — 190 spice, builds sky fighters (upgrade it to a gunship pad for cluster gunships)"><span class="costBadge">190</span></button>
         <button id="buildTurret" class="iconBtn" title="Turret — 90 spice"><span class="costBadge">90</span></button>
         <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice"><span class="costBadge">25</span></button>
         <button id="recruitJet" class="iconBtn" title="Sky fighter — 130 spice, needs an airport, 3min build (press again to queue another)"><span class="costBadge">130</span><span class="prodHourglass" id="jetHourglass">⏳</span></button>
-        <button id="recruitBomber" class="iconBtn" title="Cluster gunship — 220 spice, needs an airport, 5min build, bombs a 3x3 block (press again to queue another)"><span class="costBadge">220</span><span class="prodHourglass" id="bomberHourglass">⏳</span></button>
+        <button id="recruitBomber" class="iconBtn" title="Cluster gunship — 220 spice, needs an airport upgraded to a gunship pad, 5min build, bombs a 3x3 block (press again to queue another)"><span class="costBadge">220</span><span class="prodHourglass" id="bomberHourglass">⏳</span></button>
         <button id="recruitTank" class="iconBtn" title="Recruit tank — 100 spice"><span class="costBadge">100</span></button>
       </div>
     </div>
@@ -333,12 +333,12 @@
         <div>Click a unit to select it, Shift+drag to box-select several. Click a tile to move, an enemy to attack.</div>
         <div>Attack arms group targeting. Search &amp; Destroy auto-hunts nearby enemies. Retreat pulls units back to base.</div>
         <div>Buildings need a clear grass or desert tile.</div>
-        <div>Click your own turret or stronghold (with nothing selected) to open its upgrade menu — turrets buy damage, range and hull; the stronghold buys power and a house-wide damage bonus.</div>
+        <div>Click your own turret, airport or stronghold (with nothing selected) to open its upgrade menu — turrets buy damage, range and hull; the stronghold buys power and a house-wide damage bonus; the airport buys the gunship pad and faster builds.</div>
         <div>Drag the map, use arrow keys, or click the minimap to scroll. Fog clears as you explore.</div>
         <div>Troopers drain 10 power/shot, tanks 20/2s (turbines add +5). Drain a stronghold's 10k power to eliminate it.</div>
         <div>Harvesters unload at a silo or refinery — build one or spice is wasted. A refinery = 4 silos plus a free harvester.</div>
         <div>Troopers and tanks fight refineries adjacent, never enter them. Sandworms have a 1-in-5 swallow chance and give up after 5s. A hit auto-rallies idle units to Search &amp; Destroy.</div>
-        <div>An airport runway builds sky fighters in 3 min and cluster gunships in 5. The clepsydra hovering over the runway counts the build down; press a recruit button again to queue another and a count badge appears mid-runway. Gunships bomb the whole 3x3 block around their target.</div>
+        <div>An airport runway builds sky fighters in 3 min. Cluster gunships stay locked (and their button hidden) until the airport is upgraded to a gunship pad for 500 spice; they then take 5 min, and a third airport level cuts every build time by 30%. The clepsydra hovering over the runway counts the build down; press a recruit button again to queue another and a count badge appears mid-runway. Gunships bomb the whole 3x3 block around their target.</div>
       </div>
     </div>
   </div>
@@ -449,8 +449,17 @@ const JET_HP=90, BOMBER_HP=150;
 const JET_PRODUCTION_MS=180000;    // 3 minutes
 const BOMBER_PRODUCTION_MS=300000; // 5 minutes
 const AIR_PRODUCTION_MS={ jet:JET_PRODUCTION_MS, bomber:BOMBER_PRODUCTION_MS };
-function airProductionMs(type){ return AIR_PRODUCTION_MS[type]||JET_PRODUCTION_MS; }
-function airProductionMinutes(type){ return Math.round(airProductionMs(type)/60000); }
+// Build time is scaled by the house's best airport (see AIRPORT_LEVELS) — the
+// top level runs its slipways faster. Passing no house falls back to the flat
+// figure, which is what the static help text and tooltips want.
+function airProductionMs(type,house){
+  const base=AIR_PRODUCTION_MS[type]||JET_PRODUCTION_MS;
+  return Math.round(base*airportSpeedOf(house));
+}
+function airProductionMinutes(type,house){
+  const m=airProductionMs(type,house)/60000;
+  return Number.isInteger(m) ? String(m) : m.toFixed(1);
+}
 const VISION_RADIUS=5;
 const BASE_HP_MAX=10000; // stronghold "power points"
 const TROOP_SHOT_DMG=10; // one trooper shot drains 10 power points, from a base or a unit
@@ -490,9 +499,20 @@ const BASE_LEVELS=[
   { name:'Citadel',        hpMax:BASE_HP_MAX+5000,  power:15, cost:220 },
   { name:'Bastion palace', hpMax:BASE_HP_MAX+12000, power:35, cost:450 },
 ];
+// Airports climb their own ladder, and it is what gates the cluster gunship:
+// a fresh runway (level 1) only rolls out sky fighters, and the gunship is not
+// offered at all — no button, no AI order — until 500 spice buys the level 2
+// gunship pad. Level 3 keeps the pad and speeds every build up instead.
+const AIRPORT_LEVELS=[
+  { name:'Airstrip',    hpMax:BUILDING_HP.airport, gunships:false, speed:1,    cost:0 },
+  { name:'Gunship pad', hpMax:700,                 gunships:true,  speed:1,    cost:500 },
+  { name:'Air command', hpMax:950,                 gunships:true,  speed:0.7,  cost:700 },
+];
 function turretLevel(b){ return Math.min(Math.max(1, b.lvl||1), TURRET_LEVELS.length); }
 function turretStats(b){ return TURRET_LEVELS[turretLevel(b)-1]; }
 function baseLevel(h){ return Math.min(Math.max(1, h.baseLvl||1), BASE_LEVELS.length); }
+function airportLevel(b){ return Math.min(Math.max(1, b.lvl||1), AIRPORT_LEVELS.length); }
+function airportStats(b){ return AIRPORT_LEVELS[airportLevel(b)-1]; }
 // Damage one shot from this attacker deals before the house-wide power bonus.
 // Only turrets vary by level; every unit type reads its flat COMBAT_STATS row.
 function shotDamageOf(u){
@@ -1200,19 +1220,13 @@ function trooperCanvas(cx,size){
 // so PIXI's per-house tint still recolors it convincingly. Prototyped at
 // native TILE resolution first (turbine_proto2.py) to check legibility
 // before porting the exact geometry here.
+// The rotor is NOT baked into this texture any more — the blades ride on their
+// own sprite, centered on the hub, that the main ticker spins (see
+// TURBINE_HUB / _rotorSpin in redrawSpiceAndBuildings), so a built turbine
+// visibly turns instead of standing frozen.
+const TURBINE_HUB={ x:8.3, y:6.0 }; // hub position inside the 16px tile
 function windTurbineCanvas(cx,size){
-  const hubX=8.3, hubY=6.0;
-  function blade(angleDeg,length,width){
-    const a=angleDeg*Math.PI/180;
-    const tipX=hubX+Math.cos(a)*length, tipY=hubY+Math.sin(a)*length;
-    const perp=a+Math.PI/2;
-    const r1x=hubX+Math.cos(perp)*width, r1y=hubY+Math.sin(perp)*width;
-    const r2x=hubX-Math.cos(perp)*width, r2y=hubY-Math.sin(perp)*width;
-    cx.beginPath(); cx.moveTo(r1x,r1y); cx.lineTo(tipX,tipY); cx.lineTo(r2x,r2y); cx.closePath();
-    cx.fillStyle='#ffffff'; cx.fill();
-  }
-  [-90,25,155].forEach(a=>blade(a,6.3,0.55));
-  cx.fillStyle='#5f5f5f'; cx.beginPath(); cx.arc(hubX,hubY,0.9,0,Math.PI*2); cx.fill();
+  const hubX=TURBINE_HUB.x, hubY=TURBINE_HUB.y;
   const towerX=hubX-0.3;
   cx.fillStyle='#dedede'; cx.fillRect(towerX-0.6,hubY+1.0,1.2,4);
   cx.fillStyle='#969696'; cx.fillRect(towerX-0.2,hubY+1.0,0.8,4);
@@ -1221,6 +1235,65 @@ function windTurbineCanvas(cx,size){
   cx.fillStyle='#5f5f5f'; cx.fillRect(towerX-1.8,15,3.6,0.9);
   cx.fillStyle='#dedede'; cx.fillRect(hubX-1.8,hubY-0.6,4.0,1.7);
   cx.fillStyle='#ffffff'; cx.fillRect(hubX-1.8,hubY-0.6,4.0,0.55);
+}
+// The three blades on their own tile, drawn around the CANVAS center so the
+// sprite can simply be rotated about its anchor. Same blade geometry the
+// static texture used to bake in, so a turning turbine looks like the old
+// still one, just rolling.
+//
+// Baked at ROTOR_SUPERSAMPLE× the tile and drawn back down (with smoothing, in
+// TEX below) because a blade is barely a pixel wide at 16px: rotating a texture
+// that coarse with nearest-neighbour sampling shatters each blade into a dashed
+// line. The oversized bake keeps them solid at every angle.
+const ROTOR_SUPERSAMPLE=4;
+function windTurbineRotorCanvas(cx,size){
+  const k=size/16; // geometry below is written in 16px-tile units
+  const hubX=size/2, hubY=size/2;
+  function blade(angleDeg,length,width){
+    const a=angleDeg*Math.PI/180;
+    const tipX=hubX+Math.cos(a)*length*k, tipY=hubY+Math.sin(a)*length*k;
+    const perp=a+Math.PI/2;
+    const r1x=hubX+Math.cos(perp)*width*k, r1y=hubY+Math.sin(perp)*width*k;
+    const r2x=hubX-Math.cos(perp)*width*k, r2y=hubY-Math.sin(perp)*width*k;
+    cx.beginPath(); cx.moveTo(r1x,r1y); cx.lineTo(tipX,tipY); cx.lineTo(r2x,r2y); cx.closePath();
+    cx.fillStyle='#ffffff'; cx.fill();
+    cx.strokeStyle='rgba(0,0,0,.35)'; cx.lineWidth=0.35*k; cx.stroke();
+  }
+  [-90,30,150].forEach(a=>blade(a,6.3,0.62));
+  cx.fillStyle='#5f5f5f'; cx.beginPath(); cx.arc(hubX,hubY,0.9*k,0,Math.PI*2); cx.fill();
+}
+// Spice silo: an upright storage cylinder with a domed cap, hoop bands and a
+// loading chute — the shape a silo is supposed to have. It used to borrow the
+// baked `outpost` photo tile, which read as a squat power-plant block and was
+// indistinguishable from the other economy buildings at a glance. White/
+// light-grey like the turbine so the per-house tint still recolors it.
+function siloCanvas(cx,size){
+  const cxm=size/2, bodyTop=5.2, bodyBot=14.2, halfW=3.6;
+  // domed cap
+  cx.beginPath(); cx.ellipse(cxm,bodyTop,halfW,2.6,0,Math.PI,0);
+  cx.fillStyle='#f2f2f2'; cx.fill();
+  cx.strokeStyle='rgba(0,0,0,.5)'; cx.lineWidth=0.7; cx.stroke();
+  // cylinder body, lit from the left so it reads as round rather than flat
+  const grd=cx.createLinearGradient(cxm-halfW,0,cxm+halfW,0);
+  grd.addColorStop(0,'#c9c9c9'); grd.addColorStop(0.35,'#f4f4f4'); grd.addColorStop(1,'#9d9d9d');
+  cx.fillStyle=grd; cx.fillRect(cxm-halfW,bodyTop,halfW*2,bodyBot-bodyTop);
+  cx.strokeStyle='rgba(0,0,0,.5)'; cx.lineWidth=0.7;
+  cx.strokeRect(cxm-halfW,bodyTop,halfW*2,bodyBot-bodyTop);
+  // corrugation hoops around the barrel
+  cx.strokeStyle='rgba(0,0,0,.22)'; cx.lineWidth=0.6;
+  for(let y=bodyTop+2.2;y<bodyBot-0.6;y+=2.2){
+    cx.beginPath(); cx.moveTo(cxm-halfW,y); cx.lineTo(cxm+halfW,y); cx.stroke();
+  }
+  // roof vent and the loading chute running down the shaded flank
+  cx.fillStyle='#5f5f5f';
+  cx.fillRect(cxm-0.7,bodyTop-3.6,1.4,1.6);
+  cx.fillRect(cxm+halfW-0.4,bodyTop+1.4,1.3,bodyBot-bodyTop-2.6);
+  // discharge hopper + skirt at the foot
+  cx.beginPath();
+  cx.moveTo(cxm-halfW,bodyBot); cx.lineTo(cxm+halfW,bodyBot);
+  cx.lineTo(cxm+1.5,size-1.2); cx.lineTo(cxm-1.5,size-1.2); cx.closePath();
+  cx.fillStyle='#b4b4b4'; cx.fill();
+  cx.strokeStyle='rgba(0,0,0,.5)'; cx.lineWidth=0.7; cx.stroke();
 }
 // A single-tile defense structure: a round sandbagged bunker base with a
 // fixed-bearing gun barrel on top — "a gun machine on a tower, one tile" —
@@ -1259,7 +1332,6 @@ function turretCanvas(cx,size){
 // sprites rotated via sprite.rotation instead of pre-baked per-direction frames.
 const TILE_PNG = {
   tank: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVR4nN1SyxHFIAiETBqxrvSglKL0kLZohXd4ISPxM87klj0hLLCrIgwQY1SLmRlHvG1UWMXrATvAutwe1ykgIhARFRGt85YTESUiN7BrIec8PTcWDCEEp6YeUNdqOL+qqiml7gAAgFLKvwnx7mssGGk137zCc2sPxmdmdHeAiMeDeDLzcZFd3uLpR7LmGZyCa+PyR/oIfs7ATUgSh/exAAAAAElFTkSuQmCC',
-  outpost: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAADFklEQVR4nD2SzUoqDQBAz+jojJJddayUpNEoAknDoCAkWrftFXqr9i1bRJsWEVREuQmKohKL/CsqI51xHMf5+xYf9543OJwj7O3t+blcjnK5jGEYnJ+fs7+/z8vLCwsLC7RaLdbW1tjd3eXu7o5KpcLKygr39/ccHR0R6Ha72LaNLMu8vr7SbrfRNI16vU61WiUUCiFJEgCpVIp8Pk+j0aBarXJyckJAkiQsy6LdbqPrOoPBgEgkAoCqqqyvr6OqKp1Oh5mZGQKBALVajWazyefnJ6JpmszNzfH09MT9/T2+7zMcDikWi2xubiJJEolEAl3XcV2XXC5Ht9vFsixkWUaMxWL0+30cx2E4HGKaJqqqoigKnucRDof/KczNzfHw8MD7+zue5zEajQgYhsHV1RWCIJBOp+n1eqRSKRzHIR6PUyqVmJqaYnFxEUEQ6HQ6tFotxuMx2WwW8a/X4+MjvV4PWZbJ5/NUKhUKhQKCINBoNHBdl5+fH7LZLF9fX7RaLZaXlxF1XUdVVTzPI5PJ4Ps+Ozs7JJNJTk9POT4+5vDwkNXVVba3t2k0GpimyezsLJZlIYqiiCzLpNNput0uW1tbJBIJzs7OODg44OLigvn5eW5ublheXqZQKCBJEr+/v7iui6hpGoPBAEmSmJqaYnJyksfHR25vb7m+vsY0Tf6i6zrj8Rjf91laWmIwGBCQZZlkMommaUSjUQRBoFar8fX1hWVZ1Ot1zs/PURQFSZJwHIdkMsnn5+f/HwyHQwzDwPM8ms0mmUzmX/NQKEQ4HGZjY4NCoUA8HsdxHEajEZZl4TgOgVgshmEYABSLRS4vL3l+fsa2bcbjMRsbG5RKJaLRKJFIBFVV0XWdYDDIxMQEYjAYJBqNEggE+Pj4IJFI4DgOrutSLpeZnp4GQFEU8vk8mqbx+/vL0tIS4/EY0bIs+v0+nU6Hn58fSqUSoVCIt7c3EokEmqaRyWQIh8PYto1pmvT7fb6/v7FtGzEejwMwPT2Noijouk4+nyebzRIMBvF9HwDTNBkOhwSDQf78+YPneciyzH98/YpyT/1s3wAAAABJRU5ErkJggg==',
   tankUnit: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACx0lEQVR4nD2Su0ozURSFv5k5Zy7JjIREYhC8IOhfWVqlsBALbXwFn8AH0MoXsRFLq4hgZydYGhBLRRPwksQhM+Pczpy/EFPvzV5rr/UZvV5Pa60xDAPDMMjzHCEE39/fANi2DYDjONi2jZSSPM/RWlOWJaZlWcRxTBiGVFXFeDxmOBzS6XRQStFsNrFte7ZjWRaWZSGEQEqJKMsS13VRShFFEZ7n0W63MU0T3/cBaDQaRFFEu90mjmOyLMPzPIQQCN/3MU2TMAxxHIeiKJhOp9RqNSzLYjQaobWm1WqRpilJkmAYBgBzc3O/DmzbZjQa0e/32dvbY3NzE9u2MU2TJEno9/t0u13SNEUIQVVVSCk5PDxEZFnG4+MjDw8PdLtd1tfX6XQ6ZFmGlBLDMJBS4vs+QggAtNY4jsPBwQFCCIFlWdi2Tb1eRylFVVVYloVpmkgpeXt74/z8HMuy0FpjmiZlWXJ2doaoqoqbmxtWVlaYTCa8vLzMFP4Ora2tcXl5SZqmAIRhyL9//zg5OUFMp1MMw0ApxdPTE0opBoMBeZ5jmuZs5vs+lmVRVRWDwYCNjQ0AhOd5vL+/02q10Frz+vqKaZoAs7SLoiAMQwCUUnx+flJV1W+VtVqN/f197u7uWFhYQGtNlmUYhsEfoX+/l2XJeDxme3ub+fl5lFIIKSXLy8tcX19TFAV5ns9o+1PUWv/aFYIwDNnd3cV1XaIoQvz8/HB7e8vOzg7Pz8+zhB3HIY5jfN8niiLq9TpZlrG1tcX9/T1LS0s0Gg3MyWRCr9djNBoRBAG+7+P7PkEQEAQBc3NzBEFArVYjCAKSJOHi4oKvry+yLEM0m02Ojo44PT1lcXGRLMsAZrQVRYGUEqUUjuMwHA45Pj5mdXWVNE0xrq6utG3bfHx8IKWkqipc1yWOYxzHwXVdkiShLEs8z0MpRb1enzHyH8DFZAUne4LhAAAAAElFTkSuQmCC',
   refineryBldg: 'data:image/png;base64,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',
   strongholdBldg: 'data:image/png;base64,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'
@@ -1359,8 +1431,15 @@ const TEX = {
   wormMouth: canvasTexture(TILE, wormMouthCanvas),
   spice: canvasTexture(TILE,(cx,size)=>{ cx.fillStyle='#e0522a'; cx.beginPath(); cx.arc(size/2,size/2,6,0,Math.PI*2); cx.fill(); cx.fillStyle='rgba(255,180,120,.6)'; cx.beginPath(); cx.arc(size/2-1.5,size/2-1.5,2.2,0,Math.PI*2); cx.fill(); }),
   turbine: canvasTexture(TILE, windTurbineCanvas),
+  // Smoothed on the way down from the oversized bake — NEAREST here would put
+  // the stair-stepping straight back onto the turning blades.
+  turbineRotor: (()=>{
+    const t=canvasTexture(TILE*ROTOR_SUPERSAMPLE, windTurbineRotorCanvas);
+    t.baseTexture.scaleMode=PIXI.SCALE_MODES.LINEAR;
+    return t;
+  })(),
   turret: canvasTexture(TILE, turretCanvas),
-  silo: null,
+  silo: canvasTexture(TILE, siloCanvas),
   // A rounded, shaded rooftop viewed from directly above, rather than a flat
   // white square — reads as a smoother, more solid headquarters once tinted
   // per-house at render time (base sprites are tinted, so this stays greyscale).
@@ -1866,6 +1945,22 @@ function redrawSpiceAndBuildings(){
     // Its owner is shown by the house flag planted at its corner below.
     if(owner && b.type!=='airport') sp.tint=owner.color;
     layerBuildings.addChild(sp);
+    if(b.type==='turbine'){
+      // Blades on their own sprite, pinned to the hub of the tower below and
+      // spun by the main ticker. Speed is derived from the tile so a field of
+      // turbines rolls out of step instead of turning as one rigid block, and
+      // the angle is read off the wall clock (not accumulated) — every worm
+      // tick rebuilds this layer from scratch, and an accumulated angle would
+      // snap back to zero each time.
+      const rotor=new PIXI.Sprite(TEX.turbineRotor);
+      rotor.anchor.set(0.5);
+      rotor.x=b.x*SZ+TURBINE_HUB.x*ZOOM; rotor.y=b.y*SZ+TURBINE_HUB.y*ZOOM;
+      rotor.scale.set(ZOOM/ROTOR_SUPERSAMPLE); // the rotor texture is baked oversized
+      if(owner) rotor.tint=owner.color;
+      rotor._rotorSpin=0.0016+((b.x*7+b.y*13)%5)*0.00022; // radians per ms
+      rotor._rotorPhase=((b.x*5+b.y*11)%6)*(Math.PI/3);
+      layerBuildings.addChild(rotor);
+    }
     const w=(b.type==='refinery'||b.type==='airport')?2:1; // both are 2x2 tiles wide
     drawStaticHpBar(layerBuildings, b.x*SZ+w*SZ/2, b.y*SZ-4, SZ*w*0.7, b.hp, b.hpMax);
     if(b.type==='refinery'){
@@ -2249,7 +2344,7 @@ function updateAirProdClocks(now){
       // readout row never sits on top of it
       w.wrap.x=cx+off; w.wrap.y=top-CLEPSYDRA_H*0.5-22+bob;
       const deadline=prod[type][0];
-      drawClepsydra(w.glass,type,airProdProgress(type,deadline,now),now);
+      drawClepsydra(w.glass,type,airProdProgress(type,deadline,now,h),now);
       w.label.text=formatCountdown(deadline-now);
     });
     AIR_TYPES.forEach(type=>{ if(active.indexOf(type)<0) c.widgets[type].wrap.visible=false; });
@@ -2312,6 +2407,7 @@ app.ticker.add((delta)=>{
     if(c._pulse!==undefined){ c._pulse+=0.04*delta; c.alpha=0.85+0.15*Math.sin(c._pulse); }
     else if(c._isBaseLight){ c.tint = Math.floor(now/1000)%2===0 ? 0x33ff66 : 0x3388ff; }
     else if(c._flagWave){ c.skew.y=Math.sin(now/220+c._flagPhase)*0.22; }
+    else if(c._rotorSpin){ c.rotation=c._rotorPhase+now*c._rotorSpin; }
   });
   if(selectionRings.length){
     const on=Math.floor(now/300)%2===0; // blink, all in sync
@@ -2373,7 +2469,13 @@ function renderStats(){
   document.getElementById('recruitTroop').disabled=ph.spice<TROOP_COST || gameOver;
   const airportOwned=hasAirport(ph);
   document.getElementById('recruitJet').disabled=!airportOwned || ph.spice<JET_COST || gameOver;
-  document.getElementById('recruitBomber').disabled=!airportOwned || ph.spice<BOMBER_COST || gameOver;
+  // The cluster gunship isn't merely greyed out before the airport reaches the
+  // gunship pad — the button is not shown at all, so the helicopter only turns
+  // up in the action bar once that upgrade is bought.
+  const bomberBtn=document.getElementById('recruitBomber');
+  const gunshipsUnlocked=canBuildGunships(ph);
+  bomberBtn.style.display=gunshipsUnlocked?'':'none';
+  bomberBtn.disabled=!gunshipsUnlocked || ph.spice<BOMBER_COST || gameOver;
   document.getElementById('recruitTank').disabled=ph.spice<TANK_COST || gameOver;
   // An open upgrade menu is priced against live spice and shows live hull HP,
   // so it re-renders on the same tick as the rest of the HUD — that also
@@ -2555,15 +2657,32 @@ function findFreeSpawnTile(cx,cy){
   }
   return {x:cx,y:cy};
 }
-// First completed airport a house owns, or null — used both to gate the
-// jet/bomber recruit buttons and as the takeoff spawn point.
+// The best airport a house owns, or null — used to gate the jet/bomber recruit
+// buttons, to price build times, and as the takeoff spawn point. "Best" is the
+// highest-level one (first built breaks a tie), so a house that upgraded its
+// second runway flies gunships off that one and shows its clock there.
 function findOwnedAirport(house){
+  if(!house) return null;
   let found=null;
-  buildingMap.forEach(b=>{ if(!found && b.owner===house.id && b.type==='airport' && b.primary!==false) found=b; });
+  buildingMap.forEach(b=>{
+    if(b.owner!==house.id || b.type!=='airport' || b.primary===false) return;
+    if(!found || airportLevel(b)>airportLevel(found)) found=b;
+  });
   return found;
 }
 function hasAirport(house){ return !!findOwnedAirport(house); }
-// Airport production runs on wall-clock time (airProductionMs(type) — 3min
+// Build-time multiplier from the house's best airport (1 = the flat figure).
+function airportSpeedOf(house){
+  const a=findOwnedAirport(house);
+  return a ? airportStats(a).speed : 1;
+}
+// Cluster gunships stay hidden — button, recruit path and AI order alike —
+// until the house owns an airport upgraded to at least the gunship pad.
+function canBuildGunships(house){
+  const a=findOwnedAirport(house);
+  return !!a && airportStats(a).gunships;
+}
+// Airport production runs on wall-clock time (airProductionMs(type,house) — 3min
 // for a sky fighter, 5min for a cluster gunship), not the sim tick — spice is
 // spent up front, the unit appears once tickAirProduction notices a deadline
 // has passed. house.airProd[type] is a QUEUE (array) of deadlines, one per
@@ -2579,14 +2698,17 @@ function startAirUnitProduction(house,unitType,cost){
   house.airProd=house.airProd||{};
   const queue=house.airProd[unitType]=house.airProd[unitType]||[];
   const prevDeadline=queue.length?queue[queue.length-1]:performance.now();
-  queue.push(prevDeadline+airProductionMs(unitType));
+  queue.push(prevDeadline+airProductionMs(unitType,house));
 }
 // How far through its build the aircraft at the head of a type's queue is,
 // 0..1. Every entry matures exactly one build-time after the one in front of
 // it, so an entry's own start is simply its deadline minus that build time —
 // no separate start timestamp to keep in sync (or to ship over the wire).
-function airProdProgress(type,deadline,now){
-  const dur=airProductionMs(type);
+// The duration is re-read from the house's airport every frame, so an upgrade
+// that lands mid-build nudges the bar once — the deadline itself, already
+// banked when the order was placed, is what actually decides takeoff.
+function airProdProgress(type,deadline,now,house){
+  const dur=airProductionMs(type,house);
   return Math.max(0,Math.min(1,1-(deadline-now)/dur));
 }
 function tickAirProduction(house){
@@ -3131,6 +3253,16 @@ function aiTurnForHouse(house){
       const spawn=findFreeSpawnTile(house.base.x,house.base.y);
       const h=makeUnit(house.id,'harvester',spawn.x,spawn.y); h.order={kind:'move',x:spot.x,y:spot.y};
       house.units.push(h); ensureSprite(h); addLog('House '+house.name+' deploys a new harvester.');
+    } else if(hasAirport(house) && !canBuildGunships(house) && budget>=AIRPORT_LEVELS[1].cost && Math.random()<0.35){
+      // The same 500-spice gunship pad the player buys — without it an AI house
+      // could never field a cluster gunship again. It sits above the cheap
+      // turbine/silo rungs on purpose: this chain is walked cheapest-first and
+      // the turbine branch matches unconditionally, so a step further down
+      // would never be reached. applyAirportUpgrade charges the spice and books
+      // the spending itself, so nothing is added to spentEcon here (that would
+      // count the purchase twice).
+      const pad=findOwnedAirport(house);
+      applyAirportUpgrade(house, pad.x+','+pad.y);
     } else if(budget>=TURBINE_COST){
       const spot=findFreeTileNear(house.base.x,house.base.y);
       buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine});
@@ -3150,7 +3282,7 @@ function aiTurnForHouse(house){
         const primaryKey=spot.x+','+spot.y;
         placementFootprint('place-airport',spot.x,spot.y).forEach(([fx,fy],i)=>{
           const entry=(i===0)
-            ? {x:fx,y:fy,type:'airport',owner:house.id,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
+            ? {x:fx,y:fy,type:'airport',owner:house.id,lvl:1,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
             : {x:fx,y:fy,type:'airport',owner:house.id,primary:false,primaryKey};
           buildingMap.set(fx+','+fy, entry);
         });
@@ -3164,7 +3296,9 @@ function aiTurnForHouse(house){
     const t=makeUnit(house.id,'tank',spawn.x,spawn.y); house.units.push(t); ensureSprite(t);
     addLog('House '+house.name+' deploys a tank.');
   } else if(hasAirport(house) && !(house.airProd&&(house.airProd.jet||house.airProd.bomber)) && budget>=BOMBER_COST && Math.random()<0.3){
-    const useBomber=Math.random()<0.5;
+    // Gunships only from a house whose airport has the pad; everyone else
+    // keeps rolling out sky fighters.
+    const useBomber=canBuildGunships(house) && Math.random()<0.5;
     if(useBomber){ startAirUnitProduction(house,'bomber',BOMBER_COST); spentMil+=BOMBER_COST; addLog('House '+house.name+' begins cluster gunship production.'); }
     else { startAirUnitProduction(house,'jet',JET_COST); spentMil+=JET_COST; addLog('House '+house.name+' begins sky fighter production.'); }
   } else if(budget>=TROOP_COST){
@@ -3377,22 +3511,25 @@ function deselect(){
 function hideCtxMenu(){
   ctxMenu.style.display='none'; modeHint.style.display='none';
 }
-// ---- structure upgrades (turret / stronghold) ----
-// Clicking one of your own turrets, or your own stronghold, with nothing
-// selected opens this menu: current stats on the left, what the next level
-// buys on the right, and one button that charges the spice. upgTarget is
-// {kind:'turret', key} or {kind:'base'} — kept as a key rather than the
-// building object so a snapshot that rebuilds buildingMap (multiplayer
-// client) can't leave the menu editing a stale, detached entry.
+// ---- structure upgrades (turret / stronghold / airport) ----
+// Clicking one of your own turrets, your own airport, or your own stronghold,
+// with nothing selected opens this menu: current stats on the left, what the
+// next level buys on the right, and one button that charges the spice.
+// upgTarget is {kind:'turret'|'airport', key} or {kind:'base'} — kept as a key
+// rather than the building object so a snapshot that rebuilds buildingMap
+// (multiplayer client) can't leave the menu editing a stale, detached entry.
 const upgMenu=document.getElementById('upgMenu');
 let upgTarget=null;
-// Your own turret or stronghold at this tile, or null. The stronghold is a
-// 2x2 anchored at h.base, so any of its four tiles opens it.
+// Your own turret, airport or stronghold at this tile, or null. The stronghold
+// is a 2x2 anchored at h.base, so any of its four tiles opens it; the airport
+// is a 2x2 too, but resolveBuildingTarget already maps its footprint tiles
+// back to the primary entry.
+const UPGRADABLE_BUILDINGS={ turret:true, airport:true };
 function ownUpgradableAt(ph,x,y){
   if(!ph || !ph.alive) return null;
   if(x>=ph.base.x && x<=ph.base.x+1 && y>=ph.base.y && y<=ph.base.y+1) return {kind:'base'};
   const hit=resolveBuildingTarget(x+','+y);
-  if(hit && hit.b.owner===ph.id && hit.b.type==='turret') return {kind:'turret', key:hit.key};
+  if(hit && hit.b.owner===ph.id && UPGRADABLE_BUILDINGS[hit.b.type]) return {kind:hit.b.type, key:hit.key};
   return null;
 }
 function closeUpgradeMenu(){ upgTarget=null; upgMenu.style.display='none'; }
@@ -3418,14 +3555,29 @@ function renderUpgradeMenu(){
   } else {
     const hit=resolveBuildingTarget(upgTarget.key);
     // Destroyed while the menu was open — nothing left to upgrade.
-    if(!hit || hit.b.owner!==ph.id || hit.b.type!=='turret'){ closeUpgradeMenu(); return; }
+    if(!hit || hit.b.owner!==ph.id || hit.b.type!==upgTarget.kind){ closeUpgradeMenu(); return; }
     const b=hit.b;
-    ladder=TURRET_LEVELS; lvl=turretLevel(b);
-    cur=ladder[lvl-1]; next=ladder[lvl]||null;
-    title=cur.name+' — Lv'+lvl;
-    rows.push(['Damage', String(cur.dmg), next?String(next.dmg):null]);
-    rows.push(['Range', cur.range+' tiles', next?(next.range+' tiles'):null]);
-    rows.push(['Hull', Math.max(0,Math.ceil(b.hp))+'/'+cur.hpMax, next?String(next.hpMax):null]);
+    if(upgTarget.kind==='airport'){
+      ladder=AIRPORT_LEVELS; lvl=airportLevel(b);
+      cur=ladder[lvl-1]; next=ladder[lvl]||null;
+      title=cur.name+' — Lv'+lvl;
+      const fleet=s=>s.gunships?'Fighters + gunships':'Fighters only';
+      const times=s=>{
+        const jet=JET_PRODUCTION_MS*s.speed/60000, bomb=BOMBER_PRODUCTION_MS*s.speed/60000;
+        const fmt=m=>Number.isInteger(m)?String(m):m.toFixed(1);
+        return fmt(jet)+'/'+fmt(bomb)+' min';
+      };
+      rows.push(['Aircraft', fleet(cur), next&&next.gunships!==cur.gunships?fleet(next):null]);
+      rows.push(['Build time', times(cur), next&&next.speed!==cur.speed?times(next):null]);
+      rows.push(['Hull', Math.max(0,Math.ceil(b.hp))+'/'+cur.hpMax, next?String(next.hpMax):null]);
+    } else {
+      ladder=TURRET_LEVELS; lvl=turretLevel(b);
+      cur=ladder[lvl-1]; next=ladder[lvl]||null;
+      title=cur.name+' — Lv'+lvl;
+      rows.push(['Damage', String(cur.dmg), next?String(next.dmg):null]);
+      rows.push(['Range', cur.range+' tiles', next?(next.range+' tiles'):null]);
+      rows.push(['Hull', Math.max(0,Math.ceil(b.hp))+'/'+cur.hpMax, next?String(next.hpMax):null]);
+    }
   }
   document.getElementById('upgTitle').textContent=title;
   let html=rows.map(([label,now,up])=>
@@ -3460,6 +3612,24 @@ function applyTurretUpgrade(house,key){
   redrawSpiceAndBuildings(); renderStats();
   return true;
 }
+// Same deal for an airport: the spice is charged, the hull ceiling rises by
+// the step's difference (damage already taken carries over), and the level is
+// what unlocks the cluster gunship for this house.
+function applyAirportUpgrade(house,key){
+  const hit=resolveBuildingTarget(key);
+  if(!hit || hit.b.owner!==house.id || hit.b.type!=='airport') return false;
+  const b=hit.b, lvl=airportLevel(b);
+  const next=AIRPORT_LEVELS[lvl];
+  if(!next || house.spice<next.cost) return false;
+  house.spice-=next.cost; house.spentEconomy+=next.cost;
+  b.hp+=next.hpMax-b.hpMax;
+  b.hpMax=next.hpMax;
+  b.lvl=lvl+1;
+  addLog('House '+house.name+"'s airport is rebuilt as a "+next.name.toLowerCase()+
+    (next.gunships&&!AIRPORT_LEVELS[lvl-1].gunships ? ' — cluster gunships can now be built here.' : '.'));
+  redrawSpiceAndBuildings(); renderStats();
+  return true;
+}
 function applyBaseUpgrade(house){
   const lvl=baseLevel(house);
   const next=BASE_LEVELS[lvl];
@@ -3485,12 +3655,15 @@ document.getElementById('upgBuy').onclick=()=>{
     // The client owns no simulation — ask the host to charge and apply it,
     // then wait for the next snapshot to show the new level.
     if(upgTarget.kind==='base') mpSend({type:'cmd', kind:'upgradeBase'});
+    else if(upgTarget.kind==='airport') mpSend({type:'cmd', kind:'upgradeAirport', key:upgTarget.key});
     else mpSend({type:'cmd', kind:'upgradeTurret', key:upgTarget.key});
     addLog('Upgrade requested.');
     closeUpgradeMenu();
     return;
   }
-  const ok = upgTarget.kind==='base' ? applyBaseUpgrade(ph) : applyTurretUpgrade(ph, upgTarget.key);
+  const ok = upgTarget.kind==='base' ? applyBaseUpgrade(ph)
+    : upgTarget.kind==='airport' ? applyAirportUpgrade(ph, upgTarget.key)
+    : applyTurretUpgrade(ph, upgTarget.key);
   if(ok) renderUpgradeMenu(); else addLog('Not enough spice for that upgrade.');
 };
 document.getElementById('upgClose').onclick=closeUpgradeMenu;
@@ -3744,7 +3917,7 @@ function handleBoardClick(e){
         const primaryKey=x+','+y;
         placementFootprint('place-airport',x,y).forEach(([fx,fy],i)=>{
           const entry=(i===0)
-            ? {x:fx,y:fy,type:'airport',owner:ph.id,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
+            ? {x:fx,y:fy,type:'airport',owner:ph.id,lvl:1,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
             : {x:fx,y:fy,type:'airport',owner:ph.id,primary:false,primaryKey};
           buildingMap.set(fx+','+fy, entry);
         });
@@ -3872,18 +4045,19 @@ document.getElementById('recruitJet').onclick=()=>{
   if(isMpClient()){ mpSend({type:'cmd', kind:'recruitJet'}); addLog('Sky fighter requested.'); return; }
   startAirUnitProduction(ph,'jet',JET_COST);
   const jetQueued=ph.airProd.jet.length;
-  addLog('Sky fighter on the slipway — ready in '+airProductionMinutes('jet')+' minutes.'
+  addLog('Sky fighter on the slipway — ready in '+airProductionMinutes('jet',ph)+' minutes.'
     +(jetQueued>1?' '+jetQueued+' now stacked up on the runway.':'')); renderStats();
 };
 document.getElementById('recruitBomber').onclick=()=>{
   const ph=playerHouse();
   if(!ph || gameOver) return;
   if(!hasAirport(ph)){ addLog('Build an airport before recruiting cluster gunships.'); return; }
+  if(!canBuildGunships(ph)){ addLog('Upgrade your airport to a gunship pad ('+AIRPORT_LEVELS[1].cost+' spice) before recruiting cluster gunships.'); return; }
   if(ph.spice<BOMBER_COST) return;
   if(isMpClient()){ mpSend({type:'cmd', kind:'recruitBomber'}); addLog('Cluster gunship requested.'); return; }
   startAirUnitProduction(ph,'bomber',BOMBER_COST);
   const gunshipQueued=ph.airProd.bomber.length;
-  addLog('Cluster gunship on the slipway — ready in '+airProductionMinutes('bomber')+' minutes.'
+  addLog('Cluster gunship on the slipway — ready in '+airProductionMinutes('bomber',ph)+' minutes.'
     +(gunshipQueued>1?' '+gunshipQueued+' now stacked up on the runway.':'')); renderStats();
 };
 document.getElementById('recruitTank').onclick=()=>{
@@ -4168,6 +4342,8 @@ function applyRemoteCommand(msg){
     }
   } else if(msg.kind==='upgradeTurret'){
     applyTurretUpgrade(house, msg.key);
+  } else if(msg.kind==='upgradeAirport'){
+    applyAirportUpgrade(house, msg.key);
   } else if(msg.kind==='upgradeBase'){
     applyBaseUpgrade(house);
   } else if(msg.kind==='buildTurbine' || msg.kind==='buildSilo' || msg.kind==='buildTurret'){
@@ -4209,7 +4385,7 @@ function applyRemoteCommand(msg){
       const primaryKey=msg.x+','+msg.y;
       footprint.forEach(([fx,fy],i)=>{
         const entry=(i===0)
-          ? {x:fx,y:fy,type:'airport',owner:house.id,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
+          ? {x:fx,y:fy,type:'airport',owner:house.id,lvl:1,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
           : {x:fx,y:fy,type:'airport',owner:house.id,primary:false,primaryKey};
         buildingMap.set(fx+','+fy, entry);
       });
@@ -4222,7 +4398,7 @@ function applyRemoteCommand(msg){
       addLog('House '+house.name+' begins sky fighter production.');
     }
   } else if(msg.kind==='recruitBomber'){
-    if(hasAirport(house) && house.spice>=BOMBER_COST){
+    if(canBuildGunships(house) && house.spice>=BOMBER_COST){
       startAirUnitProduction(house,'bomber',BOMBER_COST);
       addLog('House '+house.name+' begins cluster gunship production.');
     }
@@ -4403,7 +4579,7 @@ function newGame(chosenId, rivalId){
     const primaryKey=spot.x+','+spot.y;
     placementFootprint('place-airport',spot.x,spot.y).forEach(([fx,fy],i)=>{
       const entry=(i===0)
-        ? {x:fx,y:fy,type:'airport',owner:h.id,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
+        ? {x:fx,y:fy,type:'airport',owner:h.id,lvl:1,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
         : {x:fx,y:fy,type:'airport',owner:h.id,primary:false,primaryKey};
       buildingMap.set(fx+','+fy, entry);
     });
@@ -4853,7 +5029,9 @@ Promise.all([
   // TEX above) — the baked trooper photo tile didn't read as soldiers.
   loadImageTextureStripped(TILE_PNG.tank).then(t=>{ TEX.harvester=t; }),
   loadImageTextureStripped(TILE_PNG.tankUnit).then(t=>{ TEX.tank=t; }),
-  loadImageTexture(TILE_PNG.outpost).then(t=>{ TEX.silo=t; }),
+  // The silo keeps the procedural siloCanvas art (cylinder + domed cap + chute,
+  // set in TEX above) — the baked `outpost` photo tile read as a power-plant
+  // block rather than as a silo.
   // Turbine keeps the procedural windTurbineCanvas art (clear tower+blades,
   // set in TEX above) — the baked turbineBldg photo tile was an ambiguous
   // grey blob that read as the same building as the refinery on the map.
