@@ -213,20 +213,22 @@
     position:absolute; display:none; pointer-events:none; z-index:15;
     border:1px solid #33ff66; background:rgba(51,255,102,.15);
   }
-  /* Fixed to the board's top-left corner rather than anchored next to the
-     selected unit, so it never covers the nearby tiles/enemies the new
-     click-to-move-or-attack interaction relies on clicking. top:8px here is
-     only a pre-JS fallback — #hudBar floats fixed above the board with a
-     higher z-index, so openCtxMenuFor() overwrites top on every open to sit
-     just below hudBar's actual rendered height instead of under it. */
-  #ctxMenu{
-    position:absolute; top:8px; left:8px; display:none; flex-direction:column;
+  /* Fixed to the board's bottom-right corner rather than anchored next to
+     the selected unit, so it never covers the nearby tiles/enemies the
+     click-to-move-or-attack interaction relies on clicking. bottom:8px here
+     is only a pre-JS fallback — #actionBar is a fixed, full-width strip
+     along the real bottom of the screen (z-index 40, above this menu's 19),
+     so openCtxMenuFor()/openBuildingMenu() overwrite bottom on every open to
+     clear its actual rendered height instead of rendering hidden underneath it. */
+  #ctxMenu, #buildingMenu{
+    position:absolute; bottom:8px; right:8px; display:none; flex-direction:column;
     background:#241609; border:1px solid var(--rust); border-radius:4px;
-    box-shadow:0 6px 18px rgba(0,0,0,.6); z-index:19; overflow:hidden; min-width:110px;
+    box-shadow:0 6px 18px rgba(0,0,0,.6); z-index:41; overflow:hidden; min-width:110px;
   }
-  #ctxMenu button{ border:none; border-bottom:1px solid #3a2712; border-radius:0; justify-content:flex-start; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
-  #ctxMenu button:last-child{border-bottom:none;}
-  #ctxMenu .ctx-title{ font-size:9px; color:var(--sand-2); padding:5px 10px; background:#160d05; letter-spacing:1px; }
+  #ctxMenu button, #buildingMenu button{ border:none; border-bottom:1px solid #3a2712; border-radius:0; justify-content:flex-start; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
+  #ctxMenu button:last-child, #buildingMenu button:last-child{border-bottom:none;}
+  #ctxMenu button:disabled, #buildingMenu button:disabled{ opacity:.45; cursor:not-allowed; }
+  #ctxMenu .ctx-title, #buildingMenu .ctx-title{ font-size:9px; color:var(--sand-2); padding:5px 10px; background:#160d05; letter-spacing:1px; }
   #modeHint{
     position:absolute; top:66px; left:50%; transform:translateX(-50%);
     background:rgba(20,12,4,.85); border:1px solid var(--rust); border-radius:12px;
@@ -264,6 +266,7 @@
   <div class="hudRow">
     <span id="gameTitle" class="houseTag"><span class="brandIcon" title="Galacticus"></span><span id="gameClock">00:00</span></span>
     <button id="musicToggle" class="hudBtn" title="Toggle music">🔊</button>
+    <button id="saveGameBtn" class="hudBtn" title="Save game">💾</button>
     <span id="playerHouseTitle" class="houseTag"></span>
     <div class="statCombo">
       <span class="statItem" title="Spice bank"><b>S</b><span id="pSpice">0</span></span>
@@ -292,6 +295,11 @@
         <button id="ctxRetreat">Retreat</button>
         <button id="ctxHarvest">Harvest</button>
         <button id="ctxCancel">Cancel</button>
+      </div>
+      <div id="buildingMenu">
+        <div class="ctx-title" id="buildingMenuTitle">Stronghold</div>
+        <button id="btnUpgrade">Upgrade</button>
+        <button id="btnCloseBuilding">Close</button>
       </div>
       <div id="actionBar">
         <button id="buildHarvester" class="iconBtn" title="Harvester — 60 spice"><span class="costBadge">60</span></button>
@@ -332,7 +340,8 @@
   <div class="card">
     <h2>Galacticus</h2>
     <p class="sub2">Skirmish against the machine, or duel a friend directly — no server, just a room code.</p>
-    <button id="modeVsAi" style="justify-content:center;">Play vs AI ▶</button>
+    <button id="modeContinue" style="justify-content:center; display:none;">Continue Saved Game ▶</button>
+    <button id="modeVsAi" style="justify-content:center; margin-top:8px;">Play vs AI ▶</button>
     <button id="modeOnline" style="justify-content:center; margin-top:8px;">Play Online (1v1) ▶</button>
   </div>
 </div>
@@ -433,8 +442,14 @@ const JET_HP=90, BOMBER_HP=150;
 const JET_PRODUCTION_MS=180000;    // 3 minutes
 const BOMBER_PRODUCTION_MS=300000; // 5 minutes
 const AIR_PRODUCTION_MS={ jet:JET_PRODUCTION_MS, bomber:BOMBER_PRODUCTION_MS };
-function airProductionMs(type){ return AIR_PRODUCTION_MS[type]||JET_PRODUCTION_MS; }
-function airProductionMinutes(type){ return Math.round(airProductionMs(type)/60000); }
+// A house's stronghold/turret war-council upgrade halves this build time and
+// adds UPGRADE_DMG_MULT to every unit shot — see house.upgraded, applied in
+// applyCombatUnitAttack/applyBuildingAttack and here.
+function airProductionMs(type,house){
+  const base=AIR_PRODUCTION_MS[type]||JET_PRODUCTION_MS;
+  return (house && house.upgraded) ? base/UPGRADE_AIR_SPEED_MULT : base;
+}
+function airProductionMinutes(type,house){ return Math.round(airProductionMs(type,house)/60000); }
 const VISION_RADIUS=5;
 const BASE_HP_MAX=10000; // stronghold "power points"
 const TROOP_SHOT_DMG=10; // one trooper shot drains 10 power points, from a base or a unit
@@ -453,8 +468,15 @@ const TURBINE_DMG_BONUS=5; // each wind turbine adds +5 damage to every shot the
 // that reaches the interior of a base can actually knock out its economy.
 const BUILDING_HP={ turbine:350, silo:450, refinery:450, airport:500, turret:400 };
 const TURRET_COST=90;
-const TURRET_DMG=150, TURRET_COOLDOWN_MS=2000;
+const TURRET_DMG=75, TURRET_COOLDOWN_MS=2000; // basic tower — half its old 150 power drain per hit
 const TURRET_RANGE=5;
+// House war-council upgrade: bought once from the stronghold or turret action
+// menu. Doubles airplane build speed and adds a flat 20% to every mobile
+// unit's shot (troopers/tanks/jets/bombers) — turrets are excluded since
+// their own dmg was just halved above.
+const UPGRADE_COST=1000;
+const UPGRADE_AIR_SPEED_MULT=2;
+const UPGRADE_DMG_MULT=1.2;
 // Jets and bombers are airborne — they never path around mountains or other
 // units/buildings, they fly straight there.
 const FLYER_TYPES={ jet:true, bomber:true };
@@ -2206,7 +2228,7 @@ function updateAirProdClocks(now){
       // readout row never sits on top of it
       w.wrap.x=cx+off; w.wrap.y=top-CLEPSYDRA_H*0.5-22+bob;
       const deadline=prod[type][0];
-      drawClepsydra(w.glass,type,airProdProgress(type,deadline,now),now);
+      drawClepsydra(w.glass,type,airProdProgress(type,deadline,now,h),now);
       w.label.text=formatCountdown(deadline-now);
     });
     AIR_TYPES.forEach(type=>{ if(active.indexOf(type)<0) c.widgets[type].wrap.visible=false; });
@@ -2357,11 +2379,12 @@ function beginStep(u,nx,ny){
 const PATH_MAX_NODES=3000;
 function octileH(x,y,tx,ty){ const dx=Math.abs(x-tx),dy=Math.abs(y-ty); return Math.max(dx,dy)+0.4142*Math.min(dx,dy); }
 const PATH_DIRS8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-// unitType gates which units may end a path ON a building tile (only a
-// harvester may target a silo/refinery, for its dropoff); movingId is
-// excluded from the "occupied by another unit" block so a unit never
-// blocks its own path.
-function findPath(sx,sy,tx,ty,unitType,movingId){
+// unitType/ownerId gate which units may end a path ON a building tile (only
+// a harvester may target its OWN silo/refinery, for its dropoff — any other
+// building, or another house's silo/refinery, still blocks like terrain);
+// movingId is excluded from the "occupied by another unit" block so a unit
+// never blocks its own path.
+function findPath(sx,sy,tx,ty,unitType,movingId,ownerId){
   if(sx===tx && sy===ty) return [];
   if(!inBounds(tx,ty) || !passable(tx,ty)) return null;
   const occupied=new Set();
@@ -2394,10 +2417,11 @@ function findPath(sx,sy,tx,ty,unitType,movingId){
       const isDest=(nx===tx && ny===ty);
       // Strongholds always block routing (units approach adjacent to fight,
       // never stand on the tile — see approachTile). Other buildings block
-      // too, except a harvester may end its path exactly on one (its
-      // silo/refinery dropoff) — troopers/tanks/other units never enter them.
+      // too, except a harvester may end its path exactly on its OWN silo or
+      // refinery (its dropoff) — every other building/owner combo, and every
+      // other unit type, still can't enter.
       if(isBaseTile(nx,ny)) continue;
-      if(buildingMap.has(nx+','+ny) && !(isDest && unitType==='harvester')) continue;
+      if(buildingMap.has(nx+','+ny) && !(isDest && unitType==='harvester' && isDropoffTile({id:ownerId},nx,ny))) continue;
       // Units block each other's routes like terrain, except a unit may
       // still step onto its own final destination tile.
       if(occupied.has(nx+','+ny) && !isDest) continue;
@@ -2453,7 +2477,7 @@ function stepToward(u,tx,ty){
   const stale=!u._path || u._path.length===0;
   const dueForRecalc=!u._lastPathCalc || now-u._lastPathCalc>=PATH_RECALC_MS;
   if(stale || (targetMoved && dueForRecalc)){
-    u._path=findPath(u.x,u.y,tx,ty,u.type,u.id) || [];
+    u._path=findPath(u.x,u.y,tx,ty,u.type,u.id,u.owner) || [];
     u._pathTarget={x:tx,y:ty};
     u._lastPathCalc=now;
   }
@@ -2530,14 +2554,14 @@ function startAirUnitProduction(house,unitType,cost){
   house.airProd=house.airProd||{};
   const queue=house.airProd[unitType]=house.airProd[unitType]||[];
   const prevDeadline=queue.length?queue[queue.length-1]:performance.now();
-  queue.push(prevDeadline+airProductionMs(unitType));
+  queue.push(prevDeadline+airProductionMs(unitType,house));
 }
 // How far through its build the aircraft at the head of a type's queue is,
 // 0..1. Every entry matures exactly one build-time after the one in front of
 // it, so an entry's own start is simply its deadline minus that build time —
 // no separate start timestamp to keep in sync (or to ship over the wire).
-function airProdProgress(type,deadline,now){
-  const dur=airProductionMs(type);
+function airProdProgress(type,deadline,now,house){
+  const dur=airProductionMs(type,house);
   return Math.max(0,Math.min(1,1-(deadline-now)/dur));
 }
 function tickAirProduction(house){
@@ -2692,12 +2716,13 @@ function applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase){
   // house.power is the sum of that house's wind-turbine bonuses — every shot,
   // trooper or tank, hits harder by that flat amount.
   const isAirBurst=(u.type==='jet' || u.type==='bomber');
+  const upgradeMult=(house.upgraded && u.type!=='turret')?UPGRADE_DMG_MULT:1;
   let dmg=0, anyHit=false;
   const shots=isAirBurst?AIR_SHOTS_PER_BURST:1;
   for(let i=0;i<shots;i++){
     if(isAirBurst && Math.random()>=AIR_HIT_CHANCE) continue;
     anyHit=true;
-    dmg+=stats.dmg+(house.power||0);
+    dmg+=(stats.dmg+(house.power||0))*upgradeMult;
   }
   if(!anyHit){
     addLog('House '+house.name+"'s "+u.type+' fires a burst and misses.');
@@ -2780,12 +2805,13 @@ function applyBuildingAttack(house,u,targetHouse,buildingKey){
   if(!resolved) return true; // already destroyed by someone else
   u._lastAttack=now; u._lastCombatAt=now;
   const isAirBurst=(u.type==='jet' || u.type==='bomber');
+  const upgradeMult=(house.upgraded && u.type!=='turret')?UPGRADE_DMG_MULT:1;
   let dmg=0, anyHit=false;
   const shots=isAirBurst?AIR_SHOTS_PER_BURST:1;
   for(let i=0;i<shots;i++){
     if(isAirBurst && Math.random()>=AIR_HIT_CHANCE) continue;
     anyHit=true;
-    dmg+=stats.dmg+(house.power||0);
+    dmg+=(stats.dmg+(house.power||0))*upgradeMult;
   }
   if(!anyHit){
     addLog('House '+house.name+"'s "+u.type+' fires a burst and misses.');
@@ -3191,6 +3217,87 @@ async function saveLearning(profile){
   } catch(e){}
 }
 
+// ================= save / load (single-player only) =================
+// Reuses the airProd remaining-ms trick from the multiplayer serializer
+// (serializeAirProd/deserializeAirProd) so a resumed clepsydra is honest
+// even after a real page reload resets performance.now()'s zero point.
+const SAVE_KEY='galacticus-save-v1';
+function serializeUnitSave(u){ return {id:u.id, owner:u.owner, type:u.type, x:u.x, y:u.y, hp:u.hp, carrying:u.carrying}; }
+function serializeHouseSave(h){
+  return { id:h.id, name:h.name, color:h.color, colorCss:h.colorCss, alive:h.alive, ai:h.ai,
+    baseHp:h.baseHp, baseHpMax:h.baseHpMax, base:h.base,
+    spice:h.spice, cap:h.cap, power:h.power, upgraded:!!h.upgraded, airProd:serializeAirProd(h),
+    spentEconomy:h.spentEconomy, spentMilitary:h.spentMilitary, lastAttacker:h.lastAttacker,
+    units:h.units.map(serializeUnitSave) };
+}
+function deserializeHouseSave(hd){
+  return { id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss, alive:hd.alive, ai:hd.ai,
+    baseHp:hd.baseHp, baseHpMax:hd.baseHpMax, base:hd.base,
+    spice:hd.spice, cap:hd.cap, power:hd.power, upgraded:!!hd.upgraded, airProd:deserializeAirProd(hd.airProd),
+    spentEconomy:hd.spentEconomy||0, spentMilitary:hd.spentMilitary||0, lastAttacker:hd.lastAttacker||null,
+    units:hd.units.map(u=>({...u, order:null, dir:0, frame:0, moving:false, sprite:null, moveFrom:null, moveTo:null, moveStart:0})) };
+}
+async function saveGame(){
+  if(mp){ addLog('Online matches cannot be saved.'); return; }
+  if(!state || gameOver) return;
+  const payload=JSON.stringify({
+    v:1, terrain, explored,
+    spiceMap:Array.from(spiceMap.values()),
+    buildingMap:Array.from(buildingMap.entries()),
+    houses:state.houses.map(serializeHouseSave),
+    worms:state.worms.map(w=>({x:w.x,y:w.y,dir:w.dir,rest:w.rest})),
+    log:state.log.slice(-40),
+    elapsedMs:performance.now()-state.startTime
+  });
+  try{
+    if(window.storage && window.storage.set) await window.storage.set(SAVE_KEY, payload, false);
+    else localStorage.setItem(SAVE_KEY, payload);
+    addLog('Game saved.');
+    document.getElementById('modeContinue').style.display='flex';
+  } catch(e){ addLog('Save failed.'); }
+}
+async function readSavedGame(){
+  try{
+    if(window.storage && window.storage.get){
+      const res=await window.storage.get(SAVE_KEY, false);
+      return (res && res.value) ? JSON.parse(res.value) : null;
+    }
+    const raw=localStorage.getItem(SAVE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e){ return null; }
+}
+async function loadGame(){
+  const save=await readSavedGame();
+  if(!save) return false;
+  ensureAudio(); startMusic(); stopSim();
+  mp=null; gameOver=false; mpEndShown=false;
+  document.getElementById('modeOverlay').style.display='none';
+  document.getElementById('overlay').style.display='none';
+  terrain=save.terrain;
+  buildingMap=new Map(save.buildingMap);
+  spiceMap=new Map(save.spiceMap.map(dep=>[dep.x+','+dep.y, dep]));
+  explored=save.explored;
+  learning=await loadLearning();
+  state={
+    startTime:performance.now()-(save.elapsedMs||0), log:save.log||[], selectedUnits:[],
+    worms:(save.worms||[]).map(w=>({x:w.x,y:w.y,rest:w.rest||0,dir:w.dir||0,frame:0,sprite:null,hiddenUntil:0,nextVanishCheck:performance.now()+WORM_VANISH_CYCLE_MS})),
+    houses:save.houses.map(deserializeHouseSave)
+  };
+  buildWorldVisuals();
+  layerUnits.removeChildren(); layerFx.removeChildren();
+  resetAirClocks();
+  selectionRings=[]; activeFx=[];
+  syncAllSprites();
+  const ph=playerHouse();
+  revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
+  ph.units.forEach(u=>revealAround(u.x,u.y,VISION_RADIUS));
+  centerCameraOn(ph.base.x, ph.base.y);
+  renderStats(); renderLog(); updateClock(); renderMinimap();
+  simHandle=setInterval(gameTick, TICK_MS);
+  addLog('Game loaded.');
+  return true;
+}
+
 async function endGame(result){
   gameOver=true;
   const overlay=document.getElementById('overlay');
@@ -3319,6 +3426,7 @@ function deselect(){
   hidePlacementPreview();
   boardHost.classList.remove('targeting');
   updateSelectionRing();
+  hideBuildingMenu();
 }
 // Closes the context menu without clearing the selection — used once an
 // order has actually been issued (menu action or direct map click), so it
@@ -3354,6 +3462,14 @@ function selectUnits(units){
   boardHost.classList.add('targeting'); openCtxMenuFor();
 }
 const UNIT_LABEL={ harvester:'Harvester', trooper:'Trooper', tank:'Tank', jet:'Sky fighter', bomber:'Cluster gunship' };
+// #actionBar is a fixed, full-width strip pinned to the real bottom of the
+// screen; its height isn't fixed (a media query shrinks it on narrow
+// screens), so read its actual rendered top edge each time a bottom-right
+// menu opens instead of hardcoding an offset that could sit under it.
+function clearActionBar(el){
+  const barTop=document.getElementById('actionBar').getBoundingClientRect().top;
+  el.style.bottom=(window.innerHeight-barTop+8)+'px';
+}
 function openCtxMenuFor(){
   const sel=state.selectedUnits;
   const title = sel.length===1
@@ -3366,12 +3482,7 @@ function openCtxMenuFor(){
   document.getElementById('ctxEngage').style.display=anyCombat?'flex':'none';
   document.getElementById('ctxHarvest').style.display=allHarvester?'flex':'none';
   document.getElementById('ctxCancel').style.display=allHarvester?'none':'flex';
-  // #hudBar (title/stats row + the #log history bar) is a fixed, floating
-  // header with a higher z-index than ctxMenu's hardcoded top:8px, so the
-  // menu used to render right underneath it, hidden. hudBar's height isn't
-  // fixed (it can wrap), so read its real rendered bottom edge each time
-  // instead of hardcoding a taller offset that could still be wrong.
-  ctxMenu.style.top=(document.getElementById('hudBar').getBoundingClientRect().bottom+8)+'px';
+  clearActionBar(ctxMenu);
   ctxMenu.style.display='flex'; modeHint.textContent='Click a tile to move, or an enemy to attack'; modeHint.style.display='block';
 }
 document.getElementById('ctxAttack').onclick=()=>{
@@ -3416,6 +3527,43 @@ document.getElementById('ctxHarvest').onclick=()=>{
   if(units.length){ followUnit=units[0]; if(isMpClient()) mpSend({type:'cmd', kind:'harvest', unitIds:units.map(u=>u.id)}); }
 };
 document.getElementById('ctxCancel').onclick=()=>{ deselect(); };
+
+// Building action menu — opened by clicking your own stronghold or turret.
+// Buildings have no selection concept of their own (unlike units), so this
+// just tracks which house/building the menu is currently showing for.
+const buildingMenu=document.getElementById('buildingMenu');
+let buildingMenuCtx=null;
+function hideBuildingMenu(){
+  buildingMenu.style.display='none';
+  buildingMenuCtx=null;
+}
+function openBuildingMenu(house,kind){
+  buildingMenuCtx={house,kind};
+  document.getElementById('buildingMenuTitle').textContent=(kind==='base')?'Stronghold':'Turret';
+  const btn=document.getElementById('btnUpgrade');
+  if(house.upgraded){
+    btn.textContent='Upgraded ✓'; btn.disabled=true;
+  } else {
+    btn.textContent='Upgrade — '+UPGRADE_COST+' spice'; btn.disabled=house.spice<UPGRADE_COST;
+  }
+  clearActionBar(buildingMenu);
+  buildingMenu.style.display='flex';
+  modeHint.style.display='none';
+}
+function applyHouseUpgrade(house){
+  house.upgraded=true;
+  house.spice-=UPGRADE_COST;
+  addLog("House "+house.name+" completes the war-council upgrade — airplanes roll out twice as fast and every unit hits "+Math.round((UPGRADE_DMG_MULT-1)*100)+"% harder.");
+}
+document.getElementById('btnUpgrade').onclick=()=>{
+  const ctx=buildingMenuCtx;
+  if(!ctx || ctx.house.upgraded || ctx.house.spice<UPGRADE_COST) return;
+  if(isMpClient()){ mpSend({type:'cmd', kind:'upgrade'}); addLog('Upgrade requested.'); hideBuildingMenu(); return; }
+  applyHouseUpgrade(ctx.house);
+  hideBuildingMenu();
+  renderStats();
+};
+document.getElementById('btnCloseBuilding').onclick=()=>{ hideBuildingMenu(); };
 
 function tileFromEvent(e){
   const rect=app.view.getBoundingClientRect();
@@ -3611,6 +3759,13 @@ function handleBoardClick(e){
   // follow-up orders can be issued right away — only Cancel, Escape, or
   // selecting something else clears it.
   if(state.selectedUnits.length){
+    // Clicking your own stronghold/turret always opens its building menu,
+    // even with units selected — otherwise this fell through to the move
+    // logic below, which just blocks onto a base tile and silently logs
+    // "not a valid destination" instead of ever showing the menu.
+    if(x>=ph.base.x && x<=ph.base.x+1 && y>=ph.base.y && y<=ph.base.y+1){ openBuildingMenu(ph,'base'); return; }
+    const ownBuildingHere=resolveBuildingTarget(x+','+y);
+    if(ownBuildingHere && ownBuildingHere.b.owner===ph.id && ownBuildingHere.b.type==='turret'){ openBuildingMenu(ph,'turret'); return; }
     const friendlyAtTile=ph.units.find(o=>o.x===x && o.y===y);
     if(friendlyAtTile){
       if(!state.selectedUnits.includes(friendlyAtTile)) selectUnit(friendlyAtTile);
@@ -3627,7 +3782,7 @@ function handleBoardClick(e){
       const flyer=isFlyer(u.type);
       if(!flyer && !passable(x,y)){ blockedMsg='Rocky mountains block that route.'; return; }
       if(!flyer && isBaseTile(x,y)){ blockedMsg='A stronghold tile is never a valid destination.'; return; }
-      if(!flyer && buildingMap.has(x+','+y) && u.type!=='harvester'){ blockedMsg='Only harvesters can enter a silo or refinery.'; return; }
+      if(!flyer && buildingMap.has(x+','+y) && !(u.type==='harvester' && isDropoffTile(ph,x,y))){ blockedMsg='Only harvesters can enter their own silo or refinery.'; return; }
       u.order={kind:'move', x, y}; if(!mover) mover=u; moverIds.push(u.id);
     });
     if(mover){
@@ -3635,6 +3790,16 @@ function handleBoardClick(e){
       if(isMpClient()) mpSend({type:'cmd', kind:'move', unitIds:moverIds, x, y});
     }
     else if(blockedMsg) addLog(blockedMsg);
+    return;
+  }
+
+  if(x>=ph.base.x && x<=ph.base.x+1 && y>=ph.base.y && y<=ph.base.y+1){
+    openBuildingMenu(ph,'base');
+    return;
+  }
+  const ownBuilding=resolveBuildingTarget(x+','+y);
+  if(ownBuilding && ownBuilding.b.owner===ph.id && ownBuilding.b.type==='turret'){
+    openBuildingMenu(ph,'turret');
     return;
   }
 
@@ -3697,7 +3862,7 @@ document.getElementById('recruitJet').onclick=()=>{
   if(isMpClient()){ mpSend({type:'cmd', kind:'recruitJet'}); addLog('Sky fighter requested.'); return; }
   startAirUnitProduction(ph,'jet',JET_COST);
   const jetQueued=ph.airProd.jet.length;
-  addLog('Sky fighter on the slipway — ready in '+airProductionMinutes('jet')+' minutes.'
+  addLog('Sky fighter on the slipway — ready in '+airProductionMinutes('jet',ph)+' minutes.'
     +(jetQueued>1?' '+jetQueued+' now stacked up on the runway.':'')); renderStats();
 };
 document.getElementById('recruitBomber').onclick=()=>{
@@ -3708,7 +3873,7 @@ document.getElementById('recruitBomber').onclick=()=>{
   if(isMpClient()){ mpSend({type:'cmd', kind:'recruitBomber'}); addLog('Cluster gunship requested.'); return; }
   startAirUnitProduction(ph,'bomber',BOMBER_COST);
   const gunshipQueued=ph.airProd.bomber.length;
-  addLog('Cluster gunship on the slipway — ready in '+airProductionMinutes('bomber')+' minutes.'
+  addLog('Cluster gunship on the slipway — ready in '+airProductionMinutes('bomber',ph)+' minutes.'
     +(gunshipQueued>1?' '+gunshipQueued+' now stacked up on the runway.':'')); renderStats();
 };
 document.getElementById('recruitTank').onclick=()=>{
@@ -3755,6 +3920,9 @@ document.getElementById('restartBtn').onclick=()=>{
   if(mp){ if(mp.peer) mp.peer.destroy(); mp=null; showModeSelect(); }
   else showHouseSelect();
 };
+document.getElementById('saveGameBtn').onclick=()=>{ saveGame(); };
+document.getElementById('modeContinue').onclick=()=>{ loadGame(); };
+readSavedGame().then(save=>{ if(save) document.getElementById('modeContinue').style.display='flex'; });
 
 // ================= multiplayer (PeerJS, host-authoritative) =================
 // One peer (whoever creates the room) is the "host": it runs the exact same
@@ -3805,7 +3973,7 @@ function deserializeAirProd(sent){
 function serializeHouse(h){
   return { id:h.id, name:h.name, color:h.color, colorCss:h.colorCss, alive:h.alive,
     baseHp:h.baseHp, baseHpMax:h.baseHpMax, base:h.base,
-    spice:h.spice, cap:h.cap, power:h.power, airProd:serializeAirProd(h),
+    spice:h.spice, cap:h.cap, power:h.power, upgraded:!!h.upgraded, airProd:serializeAirProd(h),
     units:h.units.map(serializeUnit) };
 }
 function buildInitMessage(){
@@ -3831,7 +3999,7 @@ function buildSnapshot(){
 function deserializeHouse(hd){
   return { id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss, alive:hd.alive,
     ai:false, baseHp:hd.baseHp, baseHpMax:hd.baseHpMax, base:hd.base,
-    spice:hd.spice, cap:hd.cap, power:hd.power, airProd:deserializeAirProd(hd.airProd),
+    spice:hd.spice, cap:hd.cap, power:hd.power, upgraded:!!hd.upgraded, airProd:deserializeAirProd(hd.airProd),
     units:hd.units.map(u=>({...u, order:null, dir:0, frame:0, moving:false, sprite:null, moveFrom:null, moveTo:null, moveStart:0})),
     spentEconomy:0, spentMilitary:0, lastAttacker:null };
 }
@@ -4041,6 +4209,8 @@ function applyRemoteCommand(msg){
       startAirUnitProduction(house,'bomber',BOMBER_COST);
       addLog('House '+house.name+' begins cluster gunship production.');
     }
+  } else if(msg.kind==='upgrade'){
+    if(!house.upgraded && house.spice>=UPGRADE_COST) applyHouseUpgrade(house);
   }
 }
 function checkBothPicked(){
@@ -4124,16 +4294,37 @@ document.getElementById('onlineBack').onclick=()=>{
   document.getElementById('onlineOverlay').style.display='none';
   document.getElementById('modeOverlay').style.display='flex';
 };
+// PeerJS's default ICE config is STUN-only (Google's public STUN servers) —
+// enough to punch through most home routers, but mobile carrier NAT is
+// almost always symmetric, which STUN alone can't traverse. Without a TURN
+// relay fallback, a phone-on-cellular peer just retries the ICE handshake
+// forever and never opens a data channel. Open Relay Project's free public
+// TURN server (openrelayproject) fixes that last-resort case.
+const ICE_SERVERS=[
+  { urls:'stun:stun.relay.metered.ca:80' },
+  { urls:'turn:global.relay.metered.ca:80', username:'openrelayproject', credential:'openrelayproject' },
+  { urls:'turn:global.relay.metered.ca:443', username:'openrelayproject', credential:'openrelayproject' },
+  { urls:'turn:global.relay.metered.ca:443?transport=tcp', username:'openrelayproject', credential:'openrelayproject' }
+];
 document.getElementById('onlineCreate').onclick=()=>{
   const code=genRoomCode();
   document.getElementById('onlineChoice').style.display='none';
   document.getElementById('onlineStatus').textContent='Creating room...';
-  const peer=new Peer(('gxdune-'+code).toLowerCase());
+  const peer=new Peer(('gxdune-'+code).toLowerCase(), {config:{iceServers:ICE_SERVERS}});
   mp={role:'host', peer, conn:null, connected:false, myHouseId:null, remoteHouseId:null, roomCode:code};
   peer.on('open',()=>{
     document.getElementById('onlineStatus').innerHTML='Room code: <b style="font-size:20px; letter-spacing:4px;">'+code+'</b><br>Share it with your opponent — waiting for them to join...';
   });
-  peer.on('connection',(conn)=>{
+  // Only the very first incoming connection goes through the house-pick
+  // flow — this listener unbinds itself right away so a later drop/rejoin
+  // (which fires 'connection' again) is handled solely by the reconnect
+  // listener onMpDisconnect re-arms. Without the off() here, both listeners
+  // fired on a rejoin: onMpData/onMpDisconnect got double-bound to the new
+  // conn, and this handler threw the match back to showHouseSelect() even
+  // though the game was already running, which is what stranded the host on
+  // "waiting for opponent to pick" while the client sat on "disconnected".
+  function onFirstConnection(conn){
+    peer.off('connection', onFirstConnection);
     mp.conn=conn;
     conn.on('data', onMpData);
     conn.on('close', onMpDisconnect);
@@ -4143,7 +4334,8 @@ document.getElementById('onlineCreate').onclick=()=>{
       houseSelectMode='online';
       showHouseSelect();
     });
-  });
+  }
+  peer.on('connection', onFirstConnection);
   peer.on('error',(err)=>{ document.getElementById('onlineStatus').textContent='Connection error: '+((err&&err.type)||err); });
 };
 document.getElementById('onlineJoin').onclick=()=>{
@@ -4154,7 +4346,7 @@ document.getElementById('onlineJoinGo').onclick=()=>{
   const code=document.getElementById('joinCodeInput').value.trim().toUpperCase();
   if(!code) return;
   document.getElementById('onlineStatus').textContent='Connecting...';
-  const peer=new Peer();
+  const peer=new Peer({config:{iceServers:ICE_SERVERS}});
   mp={role:'client', peer, conn:null, connected:false, myHouseId:null, remoteHouseId:null, roomCode:code};
   peer.on('open',()=>{
     const conn=peer.connect(('gxdune-'+code).toLowerCase(), {reliable:true});
@@ -4195,7 +4387,7 @@ function newGame(chosenId, rivalId){
       // uses mp.myHouseId (not this flag) to tell the two apart.
       ai: hd.id!==chosenId && !(mp && mp.remoteHouseId===hd.id),
       base:{...HOUSE_SPAWNS[hd.id]}, baseHp:BASE_HP_MAX, baseHpMax:BASE_HP_MAX,
-      spice:START_SPICE, cap:START_CAP, power:0, units:[],
+      spice:START_SPICE, cap:START_CAP, power:0, units:[], upgraded:false,
       spentEconomy:0, spentMilitary:0, alive:true, lastAttacker:null
     }))
   };
