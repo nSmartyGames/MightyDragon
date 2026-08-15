@@ -155,6 +155,38 @@
     0%,100%{ opacity:.55; transform:translateX(-50%) scale(1); }
     50%{ opacity:1; transform:translateX(-50%) scale(1.2); }
   }
+  /* Radar sweep laid over a hub button (and over the upgrade menu's own Buy
+     button) for as long as whatever it ordered is still under construction —
+     BUILD_TIME_MS for everything except aircraft, which keep the hourglass +
+     countdown above instead. Two stacked pseudo-element layers, both at 30%
+     opacity so the button's icon, cost badge and label stay readable
+     underneath: ::before is the static scope (two range rings plus a
+     crosshair over a dark green screen), ::after is the wedge that sweeps
+     around it. Purely decorative, so both are pointer-events:none and the
+     class is toggled by refreshBuildRadar(). */
+  button.building{ position:relative; }
+  button.building::before,
+  button.building::after{
+    content:''; position:absolute; inset:0; border-radius:3px;
+    pointer-events:none; opacity:.3;
+  }
+  button.building::before{
+    /* closest-side keeps the two range rings circular and centred on a wide,
+       short button (the upgrade menu's) as readily as on a square-ish hub
+       button — without it the radius is measured to the far corner and the
+       rings spill off the top and bottom edges as bare arcs. */
+    background:
+      radial-gradient(circle closest-side at 50% 50%, transparent 0 44%, #7dffa6 44% 48%, transparent 48%),
+      radial-gradient(circle closest-side at 50% 50%, transparent 0 88%, #7dffa6 88% 92%, transparent 92%),
+      linear-gradient(#7dffa6,#7dffa6) 50% 0/1px 100% no-repeat,
+      linear-gradient(#7dffa6,#7dffa6) 0 50%/100% 1px no-repeat,
+      #07200f;
+  }
+  button.building::after{
+    background:conic-gradient(from 0deg, #7dffa6 0deg, rgba(125,255,166,.35) 22deg, transparent 65deg, transparent 360deg);
+    animation:radarSweep 1.25s linear infinite;
+  }
+  @keyframes radarSweep{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
   button{
     font-family:inherit; background:linear-gradient(180deg,#4a3220,#2c1c0d); color:var(--paper);
     border:1px solid var(--sand-3); border-radius:4px; padding:8px 10px; font-size:12px; cursor:pointer;
@@ -334,6 +366,8 @@
         <div>Click a unit to select it, Shift+drag to box-select several. Click a tile to move, an enemy to attack.</div>
         <div>Attack arms group targeting. Search &amp; Destroy auto-hunts nearby enemies. Retreat pulls units back to base.</div>
         <div>Buildings need a clear grass or desert tile.</div>
+        <div>Every build, recruit and upgrade except aircraft takes 5 seconds — a radar sweep runs over the button that ordered it until the work is done. Spice is charged the moment you order.</div>
+        <div>Clicking your own stronghold opens its upgrade menu even with units selected.</div>
         <div>Click your own turret, airport or stronghold (with nothing selected) to open its upgrade menu — turrets buy damage, range and hull; the stronghold buys power and a house-wide damage bonus; the airport buys the gunship pad and faster builds.</div>
         <div>Drag the map, use arrow keys, or click the minimap to scroll. Fog clears as you explore.</div>
         <div>Troopers drain 10 power/shot, tanks 20/2s (turbines add +5). Drain a stronghold's 10k power to eliminate it.</div>
@@ -2870,6 +2904,108 @@ function tickAirProduction(house){
   });
 }
 
+// ================= ground construction (5s) =================
+// Everything that can be ordered EXCEPT aircraft — harvesters, troopers,
+// tanks, every structure, and every structure upgrade — takes BUILD_TIME_MS
+// to finish instead of landing on the same frame as the click. Aircraft are
+// deliberately left out: the airport keeps its own minutes-long queue in
+// startAirUnitProduction, with the clepsydra and countdown badge that go
+// with it.
+//
+// The shape mirrors the air queue: the spice is charged the moment the order
+// goes in, and the effect itself is a closure run by tickBuildJobs once its
+// deadline passes. Jobs live in this module-level list rather than on the
+// house objects precisely because they hold closures — nothing here is ever
+// serialized into a multiplayer snapshot.
+const BUILD_TIME_MS=5000;
+let buildJobs=[];
+function queueBuildJob(run){ buildJobs.push({deadline:performance.now()+BUILD_TIME_MS, run}); }
+function tickBuildJobs(){
+  if(!buildJobs.length) return;
+  const now=performance.now();
+  const due=buildJobs.filter(j=>now>=j.deadline);
+  if(!due.length) return;
+  buildJobs=buildJobs.filter(j=>now<j.deadline);
+  due.forEach(j=>j.run());
+}
+// The visible half of the same clock: a radar sweep over the button that was
+// pressed. Keyed by element id (not the node) so a button that gets
+// re-rendered underneath — the upgrade menu rebuilds its body after every
+// purchase — still picks the sweep back up.
+const buildRadarTimers=new Map();
+function showBuildRadar(btnId){
+  if(!btnId) return;
+  buildRadarTimers.set(btnId, performance.now()+BUILD_TIME_MS);
+  refreshBuildRadar();
+}
+function refreshBuildRadar(){
+  const now=performance.now();
+  buildRadarTimers.forEach((end,id)=>{
+    const el=document.getElementById(id);
+    if(now>=end){ buildRadarTimers.delete(id); if(el) el.classList.remove('building'); }
+    else if(el) el.classList.add('building');
+  });
+}
+setInterval(refreshBuildRadar, 120);
+// One entry point for every order the local player places: light the radar,
+// and queue the effect — unless we are a multiplayer client, where the host
+// owns the simulation and runs the same 5s clock on its side (see
+// handleClientCmd), so the radar here is only the local echo of it.
+function startPlayerBuild(btnId, run){
+  showBuildRadar(btnId);
+  if(run && !isMpClient()) queueBuildJob(run);
+}
+function clearBuildJobs(){
+  buildJobs=[];
+  buildRadarTimers.forEach((end,id)=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.remove('building');
+  });
+  buildRadarTimers.clear();
+}
+// Shared tail of every unit order that matures: the unit pops out next to the
+// house's stronghold, exactly where the instant version used to put it.
+function spawnBuiltUnit(house,type,msg){
+  if(!house.alive) return;
+  const spawn=findFreeSpawnTile(house.base.x, house.base.y);
+  const u=makeUnit(house.id,type,spawn.x,spawn.y);
+  house.units.push(u); ensureSprite(u);
+  addLog(msg); renderStats();
+}
+// Structures are ordered against a tile that was free when the click landed,
+// but 5 seconds is long enough for a second order (or an enemy's) to claim
+// the same square first. Rather than silently overwriting whatever got there,
+// a blocked site hands the spice back.
+function completeStructure(house,type,x,y,cost,doneMsg){
+  const big = type==='refinery' || type==='airport';
+  const footprint = big ? [[x,y],[x+1,y],[x,y+1],[x+1,y+1]] : [[x,y]];
+  if(!house.alive) return;
+  if(footprint.some(([fx,fy])=>buildingMap.has(fx+','+fy))){
+    house.spice=Math.min(house.cap, house.spice+cost);
+    addLog('The site was taken before construction finished — '+cost+' spice refunded.');
+    renderStats(); return;
+  }
+  const primaryKey=x+','+y;
+  footprint.forEach(([fx,fy],i)=>{
+    let entry;
+    if(!big) entry={x:fx,y:fy,type,owner:house.id,hp:BUILDING_HP[type],hpMax:BUILDING_HP[type]};
+    else if(i===0) entry={x:fx,y:fy,type,owner:house.id,primary:true,hp:BUILDING_HP[type],hpMax:BUILDING_HP[type]};
+    else entry={x:fx,y:fy,type,owner:house.id,primary:false,primaryKey};
+    if(type==='turret' || (type==='airport' && i===0)) entry.lvl=1;
+    buildingMap.set(fx+','+fy, entry);
+  });
+  if(type==='turbine') house.power+=TURBINE_DMG_BONUS;
+  else if(type==='silo') house.cap+=SILO_CAP_BONUS;
+  else if(type==='refinery'){
+    house.cap+=REFINERY_CAP_BONUS;
+    const spawn=findFreeSpawnTile(x,y);
+    const freeHarvester=makeUnit(house.id,'harvester',spawn.x,spawn.y);
+    house.units.push(freeHarvester); ensureSprite(freeHarvester);
+  }
+  addLog(doneMsg);
+  redrawSpiceAndBuildings(); renderStats();
+}
+
 // ================= real-time order resolution =================
 function harvestAt(u){
   const now=performance.now();
@@ -3566,6 +3702,7 @@ function gameTick(){
   if(!state || gameOver) return;
   const now=performance.now();
 
+  tickBuildJobs();
   state.houses.forEach(h=>{
     if(!h.alive) return;
     stepHouseUnits(h);
@@ -3802,13 +3939,26 @@ document.getElementById('upgBuy').onclick=()=>{
     else if(upgTarget.kind==='airport') mpSend({type:'cmd', kind:'upgradeAirport', key:upgTarget.key});
     else mpSend({type:'cmd', kind:'upgradeTurret', key:upgTarget.key});
     addLog('Upgrade requested.');
+    startPlayerBuild('upgBuy');
     closeUpgradeMenu();
     return;
   }
-  const ok = upgTarget.kind==='base' ? applyBaseUpgrade(ph)
-    : upgTarget.kind==='airport' ? applyAirportUpgrade(ph, upgTarget.key)
-    : applyTurretUpgrade(ph, upgTarget.key);
-  if(ok) renderUpgradeMenu(); else addLog('Not enough spice for that upgrade.');
+  // Upgrades take the same BUILD_TIME_MS as everything else that isn't an
+  // aircraft. The spice is charged inside applyXUpgrade, i.e. when the work
+  // finishes rather than when it is ordered — that also keeps a level bought
+  // twice in quick succession walking the ladder one honest step at a time.
+  // The captured target is re-resolved by key on the way through, so a turret
+  // blown up mid-upgrade simply fails the apply instead of editing a corpse.
+  const target={...upgTarget};
+  addLog('Upgrade under way.');
+  startPlayerBuild('upgBuy', ()=>{
+    const house=playerHouse();
+    if(!house) return;
+    const ok = target.kind==='base' ? applyBaseUpgrade(house)
+      : target.kind==='airport' ? applyAirportUpgrade(house, target.key)
+      : applyTurretUpgrade(house, target.key);
+    if(ok) renderUpgradeMenu(); else addLog('The upgrade could not be completed.');
+  });
 };
 document.getElementById('upgClose').onclick=closeUpgradeMenu;
 
@@ -4001,21 +4151,25 @@ function handleBoardClick(e){
   const ph=playerHouse();
 
   if(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo' || uiMode.type==='place-turret')){
-    const key=x+','+y;
     if(!placementValid(uiMode.type,x,y)){ addLog('Cannot build there — needs clear, explored ground.'); }
     else {
-      const cost = uiMode.type==='place-turbine' ? TURBINE_COST : uiMode.type==='place-silo' ? SILO_COST : TURRET_COST;
+      const type = uiMode.type==='place-turbine' ? 'turbine' : uiMode.type==='place-silo' ? 'silo' : 'turret';
+      const cost = type==='turbine' ? TURBINE_COST : type==='silo' ? SILO_COST : TURRET_COST;
+      const btnId = type==='turbine' ? 'buildTurbine' : type==='silo' ? 'buildSilo' : 'buildTurret';
+      const label = type==='turbine' ? 'Wind turbine' : type==='silo' ? 'Silo' : 'Turret';
+      const doneMsg = type==='turbine' ? 'Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'
+        : type==='silo' ? 'Silo constructed — capacity +'+SILO_CAP_BONUS+'.'
+        : 'Turret constructed.';
       if(ph.spice>=cost){
         if(isMpClient()){
-          const kind = uiMode.type==='place-turbine'?'buildTurbine':uiMode.type==='place-silo'?'buildSilo':'buildTurret';
+          const kind = type==='turbine'?'buildTurbine':type==='silo'?'buildSilo':'buildTurret';
           mpSend({type:'cmd', kind, x, y});
-          addLog((uiMode.type==='place-turbine'?'Wind turbine':uiMode.type==='place-silo'?'Silo':'Turret')+' requested.');
+          addLog(label+' requested.');
+          startPlayerBuild(btnId);
         } else {
           ph.spice-=cost;
-          if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); ph.power+=TURBINE_DMG_BONUS; addLog('Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'); }
-          else if(uiMode.type==='place-silo'){ buildingMap.set(key,{x,y,type:'silo',owner:ph.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
-          else { buildingMap.set(key,{x,y,type:'turret',owner:ph.id,lvl:1,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret}); addLog('Turret constructed.'); }
-          redrawSpiceAndBuildings();
+          addLog(label+' under construction.');
+          startPlayerBuild(btnId, ()=>completeStructure(ph,type,x,y,cost,doneMsg));
         }
       }
     }
@@ -4029,21 +4183,12 @@ function handleBoardClick(e){
       if(isMpClient()){
         mpSend({type:'cmd', kind:'buildRefinery', x, y});
         addLog('Refinery requested.');
+        startPlayerBuild('buildRefinery');
       } else {
         ph.spice-=REFINERY_COST;
-        const primaryKey=x+','+y;
-        placementFootprint('place-refinery',x,y).forEach(([fx,fy],i)=>{
-          const entry=(i===0)
-            ? {x:fx,y:fy,type:'refinery',owner:ph.id,primary:true,hp:BUILDING_HP.refinery,hpMax:BUILDING_HP.refinery}
-            : {x:fx,y:fy,type:'refinery',owner:ph.id,primary:false,primaryKey};
-          buildingMap.set(fx+','+fy, entry);
-        });
-        ph.cap+=REFINERY_CAP_BONUS;
-        const spawn=findFreeSpawnTile(x,y);
-        const freeHarvester=makeUnit(ph.id,'harvester',spawn.x,spawn.y);
-        ph.units.push(freeHarvester); ensureSprite(freeHarvester);
-        addLog('Refinery constructed — capacity +'+REFINERY_CAP_BONUS+', a new harvester joins the fleet.');
-        redrawSpiceAndBuildings();
+        addLog('Refinery under construction.');
+        startPlayerBuild('buildRefinery', ()=>completeStructure(ph,'refinery',x,y,REFINERY_COST,
+          'Refinery constructed — capacity +'+REFINERY_CAP_BONUS+', a new harvester joins the fleet.'));
       }
     }
     uiMode=null; modeHint.style.display='none'; hidePlacementPreview(); renderStats();
@@ -4056,17 +4201,12 @@ function handleBoardClick(e){
       if(isMpClient()){
         mpSend({type:'cmd', kind:'buildAirport', x, y});
         addLog('Airport requested.');
+        startPlayerBuild('buildAirport');
       } else {
         ph.spice-=AIRPORT_COST;
-        const primaryKey=x+','+y;
-        placementFootprint('place-airport',x,y).forEach(([fx,fy],i)=>{
-          const entry=(i===0)
-            ? {x:fx,y:fy,type:'airport',owner:ph.id,lvl:1,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
-            : {x:fx,y:fy,type:'airport',owner:ph.id,primary:false,primaryKey};
-          buildingMap.set(fx+','+fy, entry);
-        });
-        addLog('Runway laid — sky fighters (3min) and cluster gunships (5min) can now be built here.');
-        redrawSpiceAndBuildings();
+        addLog('Airport under construction.');
+        startPlayerBuild('buildAirport', ()=>completeStructure(ph,'airport',x,y,AIRPORT_COST,
+          'Runway laid — sky fighters (3min) and cluster gunships (5min) can now be built here.'));
       }
     }
     uiMode=null; modeHint.style.display='none'; hidePlacementPreview(); renderStats();
@@ -4097,6 +4237,18 @@ function handleBoardClick(e){
   // follow-up orders can be issued right away — only Cancel, Escape, or
   // selecting something else clears it.
   if(state.selectedUnits.length){
+    // Your own stronghold wins the click outright, whatever is selected —
+    // trooper, tank, harvester or aircraft. Ground units were never allowed
+    // to move onto a stronghold tile anyway (the click just logged "never a
+    // valid destination"), and for a flyer, parking on your own roof is far
+    // less likely to be what was meant than opening the stronghold itself.
+    // Enemy strongholds are untouched: those still fall through to the attack
+    // branch below. openUpgradeMenu deselects, so the base ends up as the
+    // one selected thing.
+    if(ph.alive && x>=ph.base.x && x<=ph.base.x+1 && y>=ph.base.y && y<=ph.base.y+1){
+      openUpgradeMenu({kind:'base'});
+      return;
+    }
     const friendlyAtTile=ph.units.find(o=>o.x===x && o.y===y);
     if(friendlyAtTile){
       if(!state.selectedUnits.includes(friendlyAtTile)) selectUnit(friendlyAtTile);
@@ -4139,12 +4291,11 @@ function handleBoardClick(e){
 document.getElementById('buildHarvester').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<HARVESTER_COST || gameOver) return;
-  if(isMpClient()){ mpSend({type:'cmd', kind:'buildHarvester'}); addLog('Harvester requested.'); return; }
+  if(isMpClient()){ mpSend({type:'cmd', kind:'buildHarvester'}); addLog('Harvester requested.'); startPlayerBuild('buildHarvester'); return; }
   ph.spice-=HARVESTER_COST;
-  const spawn=findFreeSpawnTile(ph.base.x, ph.base.y);
-  const h=makeUnit(ph.id,'harvester', spawn.x, spawn.y);
-  ph.units.push(h); ensureSprite(h);
-  addLog('New harvester deployed.'); renderStats();
+  addLog('Harvester on the assembly line.');
+  startPlayerBuild('buildHarvester', ()=>spawnBuiltUnit(ph,'harvester','New harvester deployed.'));
+  renderStats();
 };
 document.getElementById('buildTurbine').onclick=()=>{
   const ph=playerHouse();
@@ -4174,12 +4325,11 @@ document.getElementById('buildTurret').onclick=()=>{
 document.getElementById('recruitTroop').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<TROOP_COST || gameOver) return;
-  if(isMpClient()){ mpSend({type:'cmd', kind:'recruitTroop'}); addLog('Trooper requested.'); return; }
+  if(isMpClient()){ mpSend({type:'cmd', kind:'recruitTroop'}); addLog('Trooper requested.'); startPlayerBuild('recruitTroop'); return; }
   ph.spice-=TROOP_COST;
-  const spawn=findFreeSpawnTile(ph.base.x, ph.base.y);
-  const t=makeUnit(ph.id,'trooper', spawn.x, spawn.y);
-  ph.units.push(t); ensureSprite(t);
-  addLog('A trooper joins your army.'); renderStats();
+  addLog('A trooper is kitting up.');
+  startPlayerBuild('recruitTroop', ()=>spawnBuiltUnit(ph,'trooper','A trooper joins your army.'));
+  renderStats();
 };
 document.getElementById('recruitJet').onclick=()=>{
   const ph=playerHouse();
@@ -4207,12 +4357,11 @@ document.getElementById('recruitBomber').onclick=()=>{
 document.getElementById('recruitTank').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<TANK_COST || gameOver) return;
-  if(isMpClient()){ mpSend({type:'cmd', kind:'recruitTank'}); addLog('Tank requested.'); return; }
+  if(isMpClient()){ mpSend({type:'cmd', kind:'recruitTank'}); addLog('Tank requested.'); startPlayerBuild('recruitTank'); return; }
   ph.spice-=TANK_COST;
-  const spawn=findFreeSpawnTile(ph.base.x, ph.base.y);
-  const t=makeUnit(ph.id,'tank', spawn.x, spawn.y);
-  ph.units.push(t); ensureSprite(t);
-  addLog('A tank joins your army.'); renderStats();
+  addLog('A tank is rolling off the line.');
+  startPlayerBuild('recruitTank', ()=>spawnBuiltUnit(ph,'tank','A tank joins your army.'));
+  renderStats();
 };
 // Live mm:ss countdown on the jet/bomber cost badges while producing —
 // renderStats() only fires on state changes, not every second, so this runs
@@ -4354,6 +4503,7 @@ function applyMpInit(msg){
   buildWorldVisuals();
   layerUnits.removeChildren(); layerFx.removeChildren();
   resetAirClocks();
+  clearBuildJobs();
   selectionRings=[]; activeFx=[];
   syncAllSprites();
   const ph=playerHouse();
@@ -4464,82 +4614,59 @@ function applyRemoteCommand(msg){
     } else if(t.kind==='base'){ target={kind:'base', houseId:t.houseId}; }
     else if(t.kind==='building'){ target={kind:'building', key:t.key, houseId:t.houseId, type:t.btype}; }
     if(target) issueAttackOrders(units, target);
+  // Every case from here down to the aircraft ones is a build, recruit or
+  // upgrade, so the host runs it through the same BUILD_TIME_MS delay the
+  // remote player's own radar sweep is already counting down locally —
+  // otherwise the unit would pop out on their screen a full 5s before their
+  // button stopped sweeping. The spice check moves inside the job with it:
+  // affordability is settled when the work finishes, not when it is ordered.
   } else if(msg.kind==='buildHarvester'){
-    if(house.spice>=HARVESTER_COST){
+    queueBuildJob(()=>{
+      if(house.spice<HARVESTER_COST) return;
       house.spice-=HARVESTER_COST;
-      const spawn=findFreeSpawnTile(house.base.x, house.base.y);
-      const h=makeUnit(house.id,'harvester', spawn.x, spawn.y);
-      house.units.push(h); ensureSprite(h);
-      addLog('House '+house.name+' deploys a new harvester.');
-    }
+      spawnBuiltUnit(house,'harvester','House '+house.name+' deploys a new harvester.');
+    });
   } else if(msg.kind==='recruitTroop'){
-    if(house.spice>=TROOP_COST){
+    queueBuildJob(()=>{
+      if(house.spice<TROOP_COST) return;
       house.spice-=TROOP_COST;
-      const spawn=findFreeSpawnTile(house.base.x, house.base.y);
-      const t=makeUnit(house.id,'trooper', spawn.x, spawn.y);
-      house.units.push(t); ensureSprite(t);
-      addLog('House '+house.name+' recruits a trooper.');
-    }
+      spawnBuiltUnit(house,'trooper','House '+house.name+' recruits a trooper.');
+    });
   } else if(msg.kind==='recruitTank'){
-    if(house.spice>=TANK_COST){
+    queueBuildJob(()=>{
+      if(house.spice<TANK_COST) return;
       house.spice-=TANK_COST;
-      const spawn=findFreeSpawnTile(house.base.x, house.base.y);
-      const t=makeUnit(house.id,'tank', spawn.x, spawn.y);
-      house.units.push(t); ensureSprite(t);
-      addLog('House '+house.name+' recruits a tank.');
-    }
+      spawnBuiltUnit(house,'tank','House '+house.name+' recruits a tank.');
+    });
   } else if(msg.kind==='upgradeTurret'){
-    applyTurretUpgrade(house, msg.key);
+    queueBuildJob(()=>applyTurretUpgrade(house, msg.key));
   } else if(msg.kind==='upgradeAirport'){
-    applyAirportUpgrade(house, msg.key);
+    queueBuildJob(()=>applyAirportUpgrade(house, msg.key));
   } else if(msg.kind==='upgradeBase'){
-    applyBaseUpgrade(house);
+    queueBuildJob(()=>applyBaseUpgrade(house));
   } else if(msg.kind==='buildTurbine' || msg.kind==='buildSilo' || msg.kind==='buildTurret'){
     const key=msg.x+','+msg.y;
-    const cost=msg.kind==='buildTurbine'?TURBINE_COST:msg.kind==='buildSilo'?SILO_COST:TURRET_COST;
-    const ok=house.spice>=cost && !buildingMap.has(key) && !spiceMap.has(key)
-      && terrain[msg.y] && terrain[msg.y][msg.x]!=='mountain' && !isBaseTile(msg.x,msg.y);
-    if(ok){
+    const type=msg.kind==='buildTurbine'?'turbine':msg.kind==='buildSilo'?'silo':'turret';
+    const cost=type==='turbine'?TURBINE_COST:type==='silo'?SILO_COST:TURRET_COST;
+    const doneMsg='House '+house.name+(type==='turbine'?' raises a wind turbine.':type==='silo'?' builds a silo.':' builds a turret.');
+    queueBuildJob(()=>{
+      const ok=house.spice>=cost && !buildingMap.has(key) && !spiceMap.has(key)
+        && terrain[msg.y] && terrain[msg.y][msg.x]!=='mountain' && !isBaseTile(msg.x,msg.y);
+      if(!ok) return;
       house.spice-=cost;
-      if(msg.kind==='buildTurbine'){ buildingMap.set(key,{x:msg.x,y:msg.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); house.power+=TURBINE_DMG_BONUS; addLog('House '+house.name+' raises a wind turbine.'); }
-      else if(msg.kind==='buildSilo'){ buildingMap.set(key,{x:msg.x,y:msg.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); house.cap+=SILO_CAP_BONUS; addLog('House '+house.name+' builds a silo.'); }
-      else { buildingMap.set(key,{x:msg.x,y:msg.y,type:'turret',owner:house.id,lvl:1,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret}); addLog('House '+house.name+' builds a turret.'); }
-      redrawSpiceAndBuildings();
-    }
-  } else if(msg.kind==='buildRefinery'){
-    const footprint=[[msg.x,msg.y],[msg.x+1,msg.y],[msg.x,msg.y+1],[msg.x+1,msg.y+1]];
-    const blocked=footprint.some(([fx,fy])=> !inBounds(fx,fy) || terrain[fy][fx]==='mountain' || buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy) || isBaseTile(fx,fy));
-    if(!blocked && house.spice>=REFINERY_COST){
-      house.spice-=REFINERY_COST;
-      const primaryKey=msg.x+','+msg.y;
-      footprint.forEach(([fx,fy],i)=>{
-        const entry=(i===0)
-          ? {x:fx,y:fy,type:'refinery',owner:house.id,primary:true,hp:BUILDING_HP.refinery,hpMax:BUILDING_HP.refinery}
-          : {x:fx,y:fy,type:'refinery',owner:house.id,primary:false,primaryKey};
-        buildingMap.set(fx+','+fy, entry);
-      });
-      house.cap+=REFINERY_CAP_BONUS;
-      const spawn=findFreeSpawnTile(msg.x,msg.y);
-      const freeHarvester=makeUnit(house.id,'harvester',spawn.x,spawn.y);
-      house.units.push(freeHarvester); ensureSprite(freeHarvester);
-      addLog('House '+house.name+' completes a refinery.');
-      redrawSpiceAndBuildings();
-    }
-  } else if(msg.kind==='buildAirport'){
-    const footprint=[[msg.x,msg.y],[msg.x+1,msg.y],[msg.x,msg.y+1],[msg.x+1,msg.y+1]];
-    const blocked=footprint.some(([fx,fy])=> !inBounds(fx,fy) || terrain[fy][fx]==='mountain' || buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy) || isBaseTile(fx,fy));
-    if(!blocked && house.spice>=AIRPORT_COST){
-      house.spice-=AIRPORT_COST;
-      const primaryKey=msg.x+','+msg.y;
-      footprint.forEach(([fx,fy],i)=>{
-        const entry=(i===0)
-          ? {x:fx,y:fy,type:'airport',owner:house.id,lvl:1,primary:true,hp:BUILDING_HP.airport,hpMax:BUILDING_HP.airport}
-          : {x:fx,y:fy,type:'airport',owner:house.id,primary:false,primaryKey};
-        buildingMap.set(fx+','+fy, entry);
-      });
-      addLog('House '+house.name+' completes an airport.');
-      redrawSpiceAndBuildings();
-    }
+      completeStructure(house,type,msg.x,msg.y,cost,doneMsg);
+    });
+  } else if(msg.kind==='buildRefinery' || msg.kind==='buildAirport'){
+    const type=msg.kind==='buildRefinery'?'refinery':'airport';
+    const cost=type==='refinery'?REFINERY_COST:AIRPORT_COST;
+    const doneMsg='House '+house.name+(type==='refinery'?' completes a refinery.':' completes an airport.');
+    queueBuildJob(()=>{
+      const footprint=[[msg.x,msg.y],[msg.x+1,msg.y],[msg.x,msg.y+1],[msg.x+1,msg.y+1]];
+      const blocked=footprint.some(([fx,fy])=> !inBounds(fx,fy) || terrain[fy][fx]==='mountain' || buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy) || isBaseTile(fx,fy));
+      if(blocked || house.spice<cost) return;
+      house.spice-=cost;
+      completeStructure(house,type,msg.x,msg.y,cost,doneMsg);
+    });
   } else if(msg.kind==='recruitJet'){
     if(hasAirport(house) && house.spice>=JET_COST){
       startAirUnitProduction(house,'jet',JET_COST);
@@ -4775,6 +4902,7 @@ async function start(chosenId, rivalId){
   layerUnits.removeChildren();
   layerFx.removeChildren();
   resetAirClocks();
+  clearBuildJobs();
   selectionRings=[]; activeFx=[];
   syncAllSprites();
   revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
