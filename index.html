@@ -219,14 +219,23 @@
      only a pre-JS fallback — #hudBar floats fixed above the board with a
      higher z-index, so openCtxMenuFor() overwrites top on every open to sit
      just below hudBar's actual rendered height instead of under it. */
-  #ctxMenu{
+  #ctxMenu, #upgMenu{
     position:absolute; top:8px; left:8px; display:none; flex-direction:column;
     background:#241609; border:1px solid var(--rust); border-radius:4px;
     box-shadow:0 6px 18px rgba(0,0,0,.6); z-index:19; overflow:hidden; min-width:110px;
   }
-  #ctxMenu button{ border:none; border-bottom:1px solid #3a2712; border-radius:0; justify-content:flex-start; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
-  #ctxMenu button:last-child{border-bottom:none;}
-  #ctxMenu .ctx-title{ font-size:9px; color:var(--sand-2); padding:5px 10px; background:#160d05; letter-spacing:1px; }
+  #upgMenu{ min-width:172px; }
+  #ctxMenu button, #upgMenu button{ border:none; border-bottom:1px solid #3a2712; border-radius:0; justify-content:flex-start; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
+  #ctxMenu button:last-child, #upgMenu button:last-child{border-bottom:none;}
+  #ctxMenu .ctx-title, #upgMenu .ctx-title{ font-size:9px; color:var(--sand-2); padding:5px 10px; background:#160d05; letter-spacing:1px; }
+  /* Stat readout between the upgrade menu's title and its buttons: current
+     value on the left, what the next level buys on the right. */
+  #upgMenu .upg-stats{ padding:6px 10px; font-size:10px; color:var(--sand-2); border-bottom:1px solid #3a2712; }
+  #upgMenu .urow{ display:flex; justify-content:space-between; gap:10px; line-height:1.5; }
+  #upgMenu .urow b{ color:var(--sand); font-weight:normal; }
+  #upgMenu .urow .up{ color:#7ddc7d; }
+  #upgMenu .upg-cost{ margin-top:4px; color:var(--spice); letter-spacing:1px; }
+  #upgMenu button:disabled{ opacity:.45; cursor:not-allowed; }
   #modeHint{
     position:absolute; top:66px; left:50%; transform:translateX(-50%);
     background:rgba(20,12,4,.85); border:1px solid var(--rust); border-radius:12px;
@@ -293,6 +302,12 @@
         <button id="ctxHarvest">Harvest</button>
         <button id="ctxCancel">Cancel</button>
       </div>
+      <div id="upgMenu">
+        <div class="ctx-title" id="upgTitle">Structure</div>
+        <div class="upg-stats" id="upgStats"></div>
+        <button id="upgBuy">Upgrade</button>
+        <button id="upgClose">Close</button>
+      </div>
       <div id="actionBar">
         <button id="buildHarvester" class="iconBtn" title="Harvester — 60 spice"><span class="costBadge">60</span></button>
         <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice"><span class="costBadge">50</span></button>
@@ -318,6 +333,7 @@
         <div>Click a unit to select it, Shift+drag to box-select several. Click a tile to move, an enemy to attack.</div>
         <div>Attack arms group targeting. Search &amp; Destroy auto-hunts nearby enemies. Retreat pulls units back to base.</div>
         <div>Buildings need a clear grass or desert tile.</div>
+        <div>Click your own turret or stronghold (with nothing selected) to open its upgrade menu — turrets buy damage, range and hull; the stronghold buys power and a house-wide damage bonus.</div>
         <div>Drag the map, use arrow keys, or click the minimap to scroll. Fog clears as you explore.</div>
         <div>Troopers drain 10 power/shot, tanks 20/2s (turbines add +5). Drain a stronghold's 10k power to eliminate it.</div>
         <div>Harvesters unload at a silo or refinery — build one or spice is wasted. A refinery = 4 silos plus a free harvester.</div>
@@ -455,6 +471,33 @@ const BUILDING_HP={ turbine:350, silo:450, refinery:450, airport:500, turret:400
 const TURRET_COST=90;
 const TURRET_DMG=150, TURRET_COOLDOWN_MS=2000;
 const TURRET_RANGE=5;
+// Upgrade ladders for the two structures a player can pour spice back into
+// after they exist: turrets and the stronghold itself. Index 0 is what each
+// starts at (cost 0, never bought); every later entry is one upgrade step,
+// with `cost` the spice charged to reach it. A turret entry carries `lvl`
+// (absent means 1) and a house carries `baseLvl`, so old saves/snapshots
+// without the field still read as level 1.
+const TURRET_LEVELS=[
+  { name:'Turret',          dmg:TURRET_DMG,     range:TURRET_RANGE,   hpMax:BUILDING_HP.turret, cost:0 },
+  { name:'Reinforced gun',  dmg:TURRET_DMG+70,  range:TURRET_RANGE+1, hpMax:600,                cost:80 },
+  { name:'Siege battery',   dmg:TURRET_DMG+170, range:TURRET_RANGE+2, hpMax:850,                cost:160 },
+];
+// Stronghold levels raise the power pool AND add a flat house-wide damage
+// bonus on top of whatever the wind turbines contribute (same house.power
+// pot every shot already reads).
+const BASE_LEVELS=[
+  { name:'Stronghold',     hpMax:BASE_HP_MAX,       power:0,  cost:0 },
+  { name:'Citadel',        hpMax:BASE_HP_MAX+5000,  power:15, cost:220 },
+  { name:'Bastion palace', hpMax:BASE_HP_MAX+12000, power:35, cost:450 },
+];
+function turretLevel(b){ return Math.min(Math.max(1, b.lvl||1), TURRET_LEVELS.length); }
+function turretStats(b){ return TURRET_LEVELS[turretLevel(b)-1]; }
+function baseLevel(h){ return Math.min(Math.max(1, h.baseLvl||1), BASE_LEVELS.length); }
+// Damage one shot from this attacker deals before the house-wide power bonus.
+// Only turrets vary by level; every unit type reads its flat COMBAT_STATS row.
+function shotDamageOf(u){
+  return u.type==='turret' ? turretStats(u).dmg : COMBAT_STATS[u.type].dmg;
+}
 // Jets and bombers are airborne — they never path around mountains or other
 // units/buildings, they fly straight there.
 const FLYER_TYPES={ jet:true, bomber:true };
@@ -2296,7 +2339,9 @@ function renderStats(){
   document.getElementById('pCap').textContent=ph.cap;
   document.getElementById('pPower').textContent=ph.power;
   document.getElementById('pArmy').textContent=ph.units.filter(isCombatUnit).length;
-  document.getElementById('pStronghold').textContent=fmtK(Math.max(0,Math.ceil(ph.baseHp)))+'/'+fmtK(ph.baseHpMax);
+  const bLvl=baseLevel(ph);
+  document.getElementById('pStronghold').textContent=
+    fmtK(Math.max(0,Math.ceil(ph.baseHp)))+'/'+fmtK(ph.baseHpMax)+(bLvl>1?' Lv'+bLvl:'');
 
   const rivalsEl=document.getElementById('rivalsContainer');
   rivalsEl.innerHTML='';
@@ -2330,6 +2375,10 @@ function renderStats(){
   document.getElementById('recruitJet').disabled=!airportOwned || ph.spice<JET_COST || gameOver;
   document.getElementById('recruitBomber').disabled=!airportOwned || ph.spice<BOMBER_COST || gameOver;
   document.getElementById('recruitTank').disabled=ph.spice<TANK_COST || gameOver;
+  // An open upgrade menu is priced against live spice and shows live hull HP,
+  // so it re-renders on the same tick as the rest of the HUD — that also
+  // closes it by itself if the turret it was pointing at just died.
+  if(upgTarget) renderUpgradeMenu();
 }
 
 // ================= movement helpers =================
@@ -2697,7 +2746,7 @@ function applyCombatUnitAttack(house,u,targetHouse,targetUnit,targetIsBase){
   for(let i=0;i<shots;i++){
     if(isAirBurst && Math.random()>=AIR_HIT_CHANCE) continue;
     anyHit=true;
-    dmg+=stats.dmg+(house.power||0);
+    dmg+=shotDamageOf(u)+(house.power||0);
   }
   if(!anyHit){
     addLog('House '+house.name+"'s "+u.type+' fires a burst and misses.');
@@ -2785,7 +2834,7 @@ function applyBuildingAttack(house,u,targetHouse,buildingKey){
   for(let i=0;i<shots;i++){
     if(isAirBurst && Math.random()>=AIR_HIT_CHANCE) continue;
     anyHit=true;
-    dmg+=stats.dmg+(house.power||0);
+    dmg+=shotDamageOf(u)+(house.power||0);
   }
   if(!anyHit){
     addLog('House '+house.name+"'s "+u.type+' fires a burst and misses.');
@@ -2832,7 +2881,7 @@ function findNearestEnemyUnitInRange(house,x,y,range){
 function tickTurretDefense(house){
   buildingMap.forEach(b=>{
     if(b.owner!==house.id || b.type!=='turret') return;
-    const t=findNearestEnemyUnitInRange(house,b.x,b.y,TURRET_RANGE);
+    const t=findNearestEnemyUnitInRange(house,b.x,b.y,turretStats(b).range);
     if(t) applyCombatUnitAttack(house,b,t.targetHouse,t.targetUnit,false);
   });
 }
@@ -3092,7 +3141,7 @@ function aiTurnForHouse(house){
       house.spice-=SILO_COST; house.cap+=SILO_CAP_BONUS; spentEcon+=SILO_COST; redrawSpiceAndBuildings();
     } else if(budget>=TURRET_COST && Math.random()<0.4){
       const spot=findFreeTileNear(house.base.x,house.base.y);
-      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turret',owner:house.id,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret});
+      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turret',owner:house.id,lvl:1,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret});
       house.spice-=TURRET_COST; spentEcon+=TURRET_COST; redrawSpiceAndBuildings();
       addLog('House '+house.name+' builds a turret.');
     } else if(!hasAirport(house) && budget>=AIRPORT_COST && Math.random()<0.3){
@@ -3316,6 +3365,7 @@ function deselect(){
   if(!state) return;
   state.selectedUnits=[]; uiMode=null; followUnit=null;
   ctxMenu.style.display='none'; modeHint.style.display='none';
+  closeUpgradeMenu();
   hidePlacementPreview();
   boardHost.classList.remove('targeting');
   updateSelectionRing();
@@ -3327,6 +3377,124 @@ function deselect(){
 function hideCtxMenu(){
   ctxMenu.style.display='none'; modeHint.style.display='none';
 }
+// ---- structure upgrades (turret / stronghold) ----
+// Clicking one of your own turrets, or your own stronghold, with nothing
+// selected opens this menu: current stats on the left, what the next level
+// buys on the right, and one button that charges the spice. upgTarget is
+// {kind:'turret', key} or {kind:'base'} — kept as a key rather than the
+// building object so a snapshot that rebuilds buildingMap (multiplayer
+// client) can't leave the menu editing a stale, detached entry.
+const upgMenu=document.getElementById('upgMenu');
+let upgTarget=null;
+// Your own turret or stronghold at this tile, or null. The stronghold is a
+// 2x2 anchored at h.base, so any of its four tiles opens it.
+function ownUpgradableAt(ph,x,y){
+  if(!ph || !ph.alive) return null;
+  if(x>=ph.base.x && x<=ph.base.x+1 && y>=ph.base.y && y<=ph.base.y+1) return {kind:'base'};
+  const hit=resolveBuildingTarget(x+','+y);
+  if(hit && hit.b.owner===ph.id && hit.b.type==='turret') return {kind:'turret', key:hit.key};
+  return null;
+}
+function closeUpgradeMenu(){ upgTarget=null; upgMenu.style.display='none'; }
+function openUpgradeMenu(target){
+  deselect();
+  upgTarget=target;
+  renderUpgradeMenu();
+}
+// Rebuilds the menu body from live game state. Called on open and again after
+// every purchase, so the ladder walks forward without reopening the menu.
+function renderUpgradeMenu(){
+  if(!upgTarget) return;
+  const ph=playerHouse();
+  if(!ph){ closeUpgradeMenu(); return; }
+  const rows=[];
+  let lvl, ladder, cur, next, title;
+  if(upgTarget.kind==='base'){
+    ladder=BASE_LEVELS; lvl=baseLevel(ph);
+    cur=ladder[lvl-1]; next=ladder[lvl]||null;
+    title=cur.name+' — Lv'+lvl;
+    rows.push(['Power', fmtK(Math.max(0,Math.ceil(ph.baseHp)))+'/'+fmtK(cur.hpMax), next?fmtK(next.hpMax):null]);
+    rows.push(['Damage bonus', '+'+cur.power, next?('+'+next.power):null]);
+  } else {
+    const hit=resolveBuildingTarget(upgTarget.key);
+    // Destroyed while the menu was open — nothing left to upgrade.
+    if(!hit || hit.b.owner!==ph.id || hit.b.type!=='turret'){ closeUpgradeMenu(); return; }
+    const b=hit.b;
+    ladder=TURRET_LEVELS; lvl=turretLevel(b);
+    cur=ladder[lvl-1]; next=ladder[lvl]||null;
+    title=cur.name+' — Lv'+lvl;
+    rows.push(['Damage', String(cur.dmg), next?String(next.dmg):null]);
+    rows.push(['Range', cur.range+' tiles', next?(next.range+' tiles'):null]);
+    rows.push(['Hull', Math.max(0,Math.ceil(b.hp))+'/'+cur.hpMax, next?String(next.hpMax):null]);
+  }
+  document.getElementById('upgTitle').textContent=title;
+  let html=rows.map(([label,now,up])=>
+    '<div class="urow"><span>'+label+'</span><b>'+now+(up?' <span class="up">&rarr; '+up+'</span>':'')+'</b></div>'
+  ).join('');
+  html += next
+    ? '<div class="upg-cost">Next: '+next.name+' — '+next.cost+' spice</div>'
+    : '<div class="upg-cost">Fully upgraded</div>';
+  document.getElementById('upgStats').innerHTML=html;
+  const buy=document.getElementById('upgBuy');
+  buy.textContent = next ? ('Upgrade ('+next.cost+')') : 'Max level';
+  buy.disabled = !next || ph.spice<next.cost || gameOver;
+  upgMenu.style.top=(document.getElementById('hudBar').getBoundingClientRect().bottom+8)+'px';
+  upgMenu.style.display='flex';
+}
+// Charges the spice and applies one step of the turret ladder. Shared by the
+// local click path and the host's handler for a client's relayed command, so
+// both players pay and gain exactly the same thing.
+function applyTurretUpgrade(house,key){
+  const hit=resolveBuildingTarget(key);
+  if(!hit || hit.b.owner!==house.id || hit.b.type!=='turret') return false;
+  const b=hit.b, lvl=turretLevel(b);
+  const next=TURRET_LEVELS[lvl];
+  if(!next || house.spice<next.cost) return false;
+  house.spice-=next.cost; house.spentEconomy+=next.cost;
+  // Damage already taken carries over — an upgrade raises the ceiling and
+  // adds the difference, it does not repair a turret back to full.
+  b.hp+=next.hpMax-b.hpMax;
+  b.hpMax=next.hpMax;
+  b.lvl=lvl+1;
+  addLog('House '+house.name+"'s turret is upgraded to a "+next.name.toLowerCase()+' — '+next.dmg+' damage, '+next.range+' tile range.');
+  redrawSpiceAndBuildings(); renderStats();
+  return true;
+}
+function applyBaseUpgrade(house){
+  const lvl=baseLevel(house);
+  const next=BASE_LEVELS[lvl];
+  if(!next || !house.alive || house.spice<next.cost) return false;
+  const prev=BASE_LEVELS[lvl-1];
+  house.spice-=next.cost; house.spentEconomy+=next.cost;
+  house.baseHp+=next.hpMax-house.baseHpMax;
+  house.baseHpMax=next.hpMax;
+  // The stronghold's bonus rides in the same house.power pot the turbines
+  // feed, so only the step's delta is added — re-adding the full figure
+  // would compound every time a later level is bought.
+  house.power+=next.power-prev.power;
+  house.baseLvl=lvl+1;
+  addLog('House '+house.name+"'s stronghold is rebuilt as a "+next.name.toLowerCase()+' — '+fmtK(next.hpMax)+' power, +'+next.power+' damage on every shot.');
+  redrawSpiceAndBuildings(); renderStats();
+  return true;
+}
+document.getElementById('upgBuy').onclick=()=>{
+  if(!upgTarget || gameOver) return;
+  const ph=playerHouse();
+  if(!ph) return;
+  if(isMpClient()){
+    // The client owns no simulation — ask the host to charge and apply it,
+    // then wait for the next snapshot to show the new level.
+    if(upgTarget.kind==='base') mpSend({type:'cmd', kind:'upgradeBase'});
+    else mpSend({type:'cmd', kind:'upgradeTurret', key:upgTarget.key});
+    addLog('Upgrade requested.');
+    closeUpgradeMenu();
+    return;
+  }
+  const ok = upgTarget.kind==='base' ? applyBaseUpgrade(ph) : applyTurretUpgrade(ph, upgTarget.key);
+  if(ok) renderUpgradeMenu(); else addLog('Not enough spice for that upgrade.');
+};
+document.getElementById('upgClose').onclick=closeUpgradeMenu;
+
 // Drops one unit out of the current multi-selection (used when it dies or is
 // eaten) without disturbing the rest of the selection.
 function dropFromSelection(u){
@@ -3351,6 +3519,7 @@ function dropFromSelection(u){
 function selectUnit(u){ selectUnits([u]); }
 function selectUnits(units){
   state.selectedUnits=units; uiMode=null; updateSelectionRing();
+  closeUpgradeMenu();
   boardHost.classList.add('targeting'); openCtxMenuFor();
 }
 const UNIT_LABEL={ harvester:'Harvester', trooper:'Trooper', tank:'Tank', jet:'Sky fighter', bomber:'Cluster gunship' };
@@ -3528,7 +3697,7 @@ function handleBoardClick(e){
           ph.spice-=cost;
           if(uiMode.type==='place-turbine'){ buildingMap.set(key,{x,y,type:'turbine',owner:ph.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); ph.power+=TURBINE_DMG_BONUS; addLog('Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'); }
           else if(uiMode.type==='place-silo'){ buildingMap.set(key,{x,y,type:'silo',owner:ph.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); ph.cap+=SILO_CAP_BONUS; addLog('Silo constructed — capacity +'+SILO_CAP_BONUS+'.'); }
-          else { buildingMap.set(key,{x,y,type:'turret',owner:ph.id,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret}); addLog('Turret constructed.'); }
+          else { buildingMap.set(key,{x,y,type:'turret',owner:ph.id,lvl:1,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret}); addLog('Turret constructed.'); }
           redrawSpiceAndBuildings();
         }
       }
@@ -3640,6 +3809,12 @@ function handleBoardClick(e){
 
   const clicked=ph.units.find(u=>u.x===x&&u.y===y);
   if(clicked){ selectUnit(clicked); return; }
+  // Nothing selected and no unit on the tile: your own turret or stronghold
+  // opens its upgrade menu. Checked last so it never steals a click that was
+  // meant as an order — with units selected, the branch above already
+  // returned.
+  const upg=ownUpgradableAt(ph,x,y);
+  if(upg){ openUpgradeMenu(upg); return; }
   deselect();
 }
 
@@ -3804,7 +3979,7 @@ function deserializeAirProd(sent){
 }
 function serializeHouse(h){
   return { id:h.id, name:h.name, color:h.color, colorCss:h.colorCss, alive:h.alive,
-    baseHp:h.baseHp, baseHpMax:h.baseHpMax, base:h.base,
+    baseHp:h.baseHp, baseHpMax:h.baseHpMax, baseLvl:h.baseLvl||1, base:h.base,
     spice:h.spice, cap:h.cap, power:h.power, airProd:serializeAirProd(h),
     units:h.units.map(serializeUnit) };
 }
@@ -3830,7 +4005,7 @@ function buildSnapshot(){
 }
 function deserializeHouse(hd){
   return { id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss, alive:hd.alive,
-    ai:false, baseHp:hd.baseHp, baseHpMax:hd.baseHpMax, base:hd.base,
+    ai:false, baseHp:hd.baseHp, baseHpMax:hd.baseHpMax, baseLvl:hd.baseLvl||1, base:hd.base,
     spice:hd.spice, cap:hd.cap, power:hd.power, airProd:deserializeAirProd(hd.airProd),
     units:hd.units.map(u=>({...u, order:null, dir:0, frame:0, moving:false, sprite:null, moveFrom:null, moveTo:null, moveStart:0})),
     spentEconomy:0, spentMilitary:0, lastAttacker:null };
@@ -3878,6 +4053,9 @@ function applyMpSnapshot(msg){
   msg.houses.forEach(hd=>{
     const h=houseById(hd.id); if(!h) return;
     h.alive=hd.alive; h.baseHp=hd.baseHp; h.spice=hd.spice; h.cap=hd.cap; h.power=hd.power;
+    // Both move only when a stronghold upgrade lands, but the client mirrors
+    // rather than simulates, so they have to travel with every snapshot.
+    h.baseHpMax=hd.baseHpMax; h.baseLvl=hd.baseLvl||1;
     // Mirrored, not simulated: the client never runs tickAirProduction, it
     // just re-bases whatever the host says is still on the slipway.
     const air=deserializeAirProd(hd.airProd);
@@ -3915,6 +4093,9 @@ function applyMpSnapshot(msg){
   syncAllSprites();
   redrawSpiceAndBuildings();
   renderStats(); renderLog(); renderMinimap(); updateClock();
+  // An open upgrade menu is showing numbers this snapshot may have just
+  // changed (the host applied the purchase, or the turret was destroyed).
+  if(upgTarget) renderUpgradeMenu();
   if(gameOver && !mpEndShown){ mpEndShown=true; showMpEndScreen(); }
 }
 function showMpEndScreen(){
@@ -3985,6 +4166,10 @@ function applyRemoteCommand(msg){
       house.units.push(t); ensureSprite(t);
       addLog('House '+house.name+' recruits a tank.');
     }
+  } else if(msg.kind==='upgradeTurret'){
+    applyTurretUpgrade(house, msg.key);
+  } else if(msg.kind==='upgradeBase'){
+    applyBaseUpgrade(house);
   } else if(msg.kind==='buildTurbine' || msg.kind==='buildSilo' || msg.kind==='buildTurret'){
     const key=msg.x+','+msg.y;
     const cost=msg.kind==='buildTurbine'?TURBINE_COST:msg.kind==='buildSilo'?SILO_COST:TURRET_COST;
@@ -3994,7 +4179,7 @@ function applyRemoteCommand(msg){
       house.spice-=cost;
       if(msg.kind==='buildTurbine'){ buildingMap.set(key,{x:msg.x,y:msg.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine}); house.power+=TURBINE_DMG_BONUS; addLog('House '+house.name+' raises a wind turbine.'); }
       else if(msg.kind==='buildSilo'){ buildingMap.set(key,{x:msg.x,y:msg.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}); house.cap+=SILO_CAP_BONUS; addLog('House '+house.name+' builds a silo.'); }
-      else { buildingMap.set(key,{x:msg.x,y:msg.y,type:'turret',owner:house.id,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret}); addLog('House '+house.name+' builds a turret.'); }
+      else { buildingMap.set(key,{x:msg.x,y:msg.y,type:'turret',owner:house.id,lvl:1,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret}); addLog('House '+house.name+' builds a turret.'); }
       redrawSpiceAndBuildings();
     }
   } else if(msg.kind==='buildRefinery'){
@@ -4194,7 +4379,7 @@ function newGame(chosenId, rivalId){
       // also be ai:false so aiTurnForHouse leaves it alone — playerHouse()
       // uses mp.myHouseId (not this flag) to tell the two apart.
       ai: hd.id!==chosenId && !(mp && mp.remoteHouseId===hd.id),
-      base:{...HOUSE_SPAWNS[hd.id]}, baseHp:BASE_HP_MAX, baseHpMax:BASE_HP_MAX,
+      base:{...HOUSE_SPAWNS[hd.id]}, baseHp:BASE_HP_MAX, baseHpMax:BASE_HP_MAX, baseLvl:1,
       spice:START_SPICE, cap:START_CAP, power:0, units:[],
       spentEconomy:0, spentMilitary:0, alive:true, lastAttacker:null
     }))
