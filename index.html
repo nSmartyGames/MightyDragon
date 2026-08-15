@@ -118,7 +118,8 @@
     flex:1 1 0; width:auto; height:60px; padding:0; position:relative;
     background-size:34px 34px; background-position:center; background-repeat:no-repeat;
   }
-  #buildHarvester{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVR4nN1SyxHFIAiETBqxrvSglKL0kLZohXd4ISPxM87klj0hLLCrIgwQY1SLmRlHvG1UWMXrATvAutwe1ykgIhARFRGt85YTESUiN7BrIec8PTcWDCEEp6YeUNdqOL+qqiml7gAAgFLKvwnx7mssGGk137zCc2sPxmdmdHeAiMeDeDLzcZFd3uLpR7LmGZyCa+PyR/oIfs7ATUgSh/exAAAAAElFTkSuQmCC'); }
+  /* Six-wheeled haul truck, matching the map sprite haulTruckCanvas draws. */
+  #buildHarvester{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g fill="%23888888"><rect x="0.4" y="2.3" width="2.1" height="4.8" rx="0.6"/><rect x="13.5" y="2.3" width="2.1" height="4.8" rx="0.6"/><rect x="0.1" y="8.7" width="4.1" height="5.6" rx="0.7"/><rect x="11.8" y="8.7" width="4.1" height="5.6" rx="0.7"/></g><rect x="2.9" y="0.6" width="10.2" height="14.7" rx="1.2" fill="%23ffffff"/><rect x="3.4" y="1.4" width="9.2" height="2.6" rx="0.5" fill="%23bfbfbf"/><rect x="4" y="1.9" width="3.2" height="1.4" rx="0.3" fill="%233a4f63"/><rect x="3.8" y="5.6" width="8.4" height="8.8" rx="0.6" fill="%23989898"/></svg>'); }
   #buildTurbine{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaklEQVR4nM2SQQrAIAwEN6XvTb4SP+hXtpdaaNFEsIXOSYkZNioQwJPozBYVZ1gWyKiQRRcRAYB91Gxm176UMheHD1Q1vcRQQJK11lBwG6HN1ciagT8843cCVWVv/XqC7kdquHsqWE6wzAGHm0qrAAzDnwAAAABJRU5ErkJggg=='); }
   #buildSilo{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAi0lEQVR4nN2SsRXDIAxEv/O8CMswDjAKj1moNAgtoziV/QgI7BRpchXijtMhgAVyzseKB9gAnHOD0Fp7rUVEPZxS2vazCCEMglIKIqJyMUYAXqt4s84tBoPTWYPG7f1GG7ePrl1lMDDGTBMA1Fo/6uUMnuAfDbz3U7HGqc/YT7rlbhN8iyvB6gf+FG8TqylG5bxpTQAAAABJRU5ErkJggg=='); }
   #buildRefinery{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAFhUlEQVR4nK1XzWtTWRT/3fs+kpAPJRhtOziF4kcWftRR8WvRSmEWg4yCDSLMQjfquBm6HQbSLrob/COcdiFZjKuBMggtg1KQLgK6qDg1lDavaiQvH7ZN3r33zKJ9b15eU02rBw4vefeec373nN+5716GNpLNZvn09DQ/evQoaze+U5mfn6fBwUE1NjamPjs5k8loXyNop76DK2QA6O7du98sLy9/L4T4VikFItpVJhhjxDmHrutvk8nk3w8fPvx3WwCZTEbL5XLy+vXrI0qpbF9f355UKgUi2k1sPwiUy2W8fv26IYR48Pjx499GR0cxNjZGAMgLDgDXrl375fbt2/TkyRNaX193iOiraLPZdGZnZ9X9+/fp6tWrD/wx2abSnTt3ui3LWhgZGTEuX77MVldXOQBslmDXq+ecg4gQjUYpn8/L8fFxPRQK9U9MTOSz2SzXBwYGtJmZGbG4uPhDOp0Onz9/XtTrdQ0AarUa1tbWvqgM4XAYe/bsQbVaZcePH8exY8fo6dOnwwDylmVpXqsJIXr37dtHuq6DiFCtVmHbNhzHgRACjuN4v3ei1WoV5XIZAMA5RyqVYlLKXmCjPXUfWKmUYkQEIQQ+fvzopU/TNBiGsTFJSjiOA8Y6awzOOVZXVxGJRKCUglIKAKQ7rs/NzbmOGRGBiCCl9J6maaJWq2FhYQFEhK6uLnR1dcFxHK/OnxPXl8snf1vrwcnuJCEENE2DZVl49uwZIpEILMsC5xz9/f04efLkjjLhLi7IJx4M7ksThBCYnZ3FpUuXcO/ePVy8eBFKKeTzeViWBU3TvJV1qkEQLQCICEopSCnBGINt27BtG4ZhQEoJKaUHtFgsbgG9E922BP76a5oGzjmmpqYwNzeHYrEI0zSxvr4OwzA8Z5zzoJst4g/sn8+DE9wUCSEQjUbR29uLSqWCxcVFcM7RaDQQjUZx8OBBj4iujZu9oK+gfjIDfmMhBE6dOgUiwtLSEqSUSCaTOHPmDMLhMIQQYIx5jnVdh6Zpnq1bStevm12/tABw0flBMMZw9uxZpNNpCCGQSCTAOUez2WwJbpomPnz4gFKphEgkggMHDsAwDA9ku/q3ANiOscBGN0QiETDGWsjoD/7ixQssLS1BCIFSqYRUKoULFy4gkUhsKYtftnSBv07BcjiO4/13x3Rdh2VZKBQKuHnzJm7duoXu7m6srKzg+fPnwQ3II3hbAO3IuB2J3CdjDMViEVJKcM69gKFQCOVyGdVqFZzzFr/+Lti2BO12raC4IEKhEN6/f4/JyUkopVAqlWCapsehoN+2XeCiaseBT0mz2URPTw8SiQSWl5dhGAZ0XUe9Xsfhw4cRjUbhOE5L5vzSsg8EU9yJugQ9d+4cUqkUNG3j3Hno0CGcOHECQogtNn7xMsAYI3+b7OQk1Gw2kUwmMTAwgFqtBl3XEYvFtmzfPv+eY/8+oDHGyDUwTdM7E3QKgjGGeDwOIkKj0fDqHw6HPYJuvvOO53osFqPNDLytVCrMcRxIKRGNRiGlRKPR6AgAsEFK/yeaiBAKhRCPx71s2LZNAN4CQL1eZ/rg4KCamZnB3r17/3rz5o16+fIlO336tLJtm8diMYTD4S86lLqf7Hg8TgsLCzQ/P89isdifANDX16cY8P+dYGhoaDyVSv1648YNmU6niXPe8YHjU1khIhQKBTx69EgvFAqT09PTPw0PD2u5XE663lk2m2Wjo6MYGhr63TCMkSNHjiCZTHqr3ykQ145zjkqlglevXmFtbe2Pnp6enycmJtawQcQtVy4GgK5cufJduVz+USnVGzzD7UQYY8QYA2NsJR6P/zU1NfWPP05bo2w22xntdyccgfto25VlMhnt3bt3X+Vq7sr+/fspl8vJ4Pv/APHIBIcb8PVtAAAAAElFTkSuQmCC'); }
@@ -1295,6 +1296,62 @@ function siloCanvas(cx,size){
   cx.fillStyle='#b4b4b4'; cx.fill();
   cx.strokeStyle='rgba(0,0,0,.5)'; cx.lineWidth=0.7; cx.stroke();
 }
+// The harvester as the biggest truck on the map: an ultra-class mining haul
+// truck seen from above — six tyres (duals at the back) spread nearly the full
+// tile, a bumper and headlights across the nose, the operator cab tucked under
+// the dump body's overhanging canopy, engine deck and exhaust stacks alongside,
+// and a huge open bed running to the tail. It used to borrow the baked `tank`
+// photo tile, which was the same silhouette as the actual tank unit.
+//
+// Everything is greyscale so the per-house tint still recolors it; the spice in
+// the bed is NOT drawn here — it rides in the harvest FX (see updateHarvestSand)
+// so the load keeps its spice color under any house tint.
+//
+// Geometry is written in 16px-tile units and scaled by k, so the texture can be
+// baked oversized (HAUL_TRUCK_SUPERSAMPLE) and smoothed back down: at a plain
+// 16px the cab, stacks and bed ribs all collapse into the same grey pixel, and
+// rotating that to eight headings smears what is left.
+const HAUL_TRUCK_SUPERSAMPLE=4;
+const HAUL_TRUCK_SCALE=1.35; // ...and it rides this much larger than a 1-tile unit
+function haulTruckCanvas(cx,size){
+  const k=size/16;
+  const R=(x,y,w,h,r)=>roundedRectPath(cx,x*k,y*k,w*k,h*k,(r||0)*k);
+  const fill=(c)=>{ cx.fillStyle=c; cx.fill(); };
+  const line=(c,w)=>{ cx.strokeStyle=c; cx.lineWidth=w*k; cx.stroke(); };
+  // --- tyres: two up front, dual pairs at the rear, all standing proud of the
+  // body so the truck reads as enormous even at a glance
+  const tyre=(x,y,w,h)=>{
+    R(x,y,w,h,0.7); fill('#242424');
+    cx.fillStyle='rgba(255,255,255,.16)';
+    for(let ty=y+0.6;ty<y+h-0.4;ty+=1.1) cx.fillRect(x*k,ty*k,w*k,0.35*k);
+  };
+  tyre(0.35,2.3,2.1,4.8); tyre(13.55,2.3,2.1,4.8);          // steer axle
+  tyre(0.05,8.7,2.0,5.6); tyre(2.15,8.7,2.0,5.6);           // rear duals, left
+  tyre(11.85,8.7,2.0,5.6); tyre(13.95,8.7,2.0,5.6);         // rear duals, right
+  // --- frame between the axles
+  R(2.9,1.0,10.2,14.2,1.2); fill('#b0b0b0'); line('rgba(0,0,0,.55)',0.5);
+  // --- nose: bumper bar, headlights, engine deck and the operator cab
+  R(2.6,0.5,10.8,1.5,0.5); fill('#4c4c4c'); line('rgba(0,0,0,.6)',0.45);
+  cx.fillStyle='#ffe9a8';
+  [3.4,11.0].forEach(hx=>{ cx.beginPath(); cx.arc((hx+0.6)*k,1.25*k,0.5*k,0,Math.PI*2); cx.fill(); });
+  R(8.4,1.7,4.5,3.0,0.5); fill('#c6c6c6'); line('rgba(0,0,0,.45)',0.4);
+  cx.fillStyle='rgba(0,0,0,.35)';
+  for(let gy=2.1;gy<4.4;gy+=0.7) cx.fillRect(8.8*k,gy*k,3.7*k,0.3*k); // radiator grille
+  R(3.1,1.7,4.2,3.0,0.5); fill('#f2f2f2'); line('rgba(0,0,0,.5)',0.45);
+  R(3.5,2.0,3.4,1.3,0.3); fill('#2f4a63');                            // windscreen
+  cx.fillStyle='#3a3a3a';                                             // exhaust stacks
+  cx.fillRect(7.5*k,1.5*k,0.65*k,2.6*k); cx.fillRect(8.5*k,1.5*k,0.65*k,2.6*k);
+  // --- dump body: the bed itself, then the canopy lip overhanging the cab.
+  // Kept narrower than the axles on purpose, so all six tyres stand out past
+  // it — half of what says "haul truck" at this size is the wheels.
+  R(2.6,5.0,10.8,10.3,0.9); fill('#dedede'); line('rgba(0,0,0,.6)',0.55);
+  R(3.6,6.3,8.8,8.2,0.6); fill('#8d8d8d');                            // load pocket
+  cx.fillStyle='rgba(0,0,0,.22)';                                     // side ribs
+  for(let ry=6.8;ry<14.4;ry+=1.5){ cx.fillRect(2.8*k,ry*k,0.9*k,0.4*k); cx.fillRect(12.3*k,ry*k,0.9*k,0.4*k); }
+  R(3.5,14.3,9.0,1.2,0.4); fill('#c2c2c2'); line('rgba(0,0,0,.5)',0.4); // tail lip the load rides over
+  R(2.6,3.4,10.8,2.3,0.7); fill('#f0f0f0'); line('rgba(0,0,0,.55)',0.5); // canopy over the cab
+  cx.fillStyle='rgba(0,0,0,.18)'; cx.fillRect(3.0*k,5.3*k,10.0*k,0.5*k);
+}
 // A single-tile defense structure: a round sandbagged bunker base with a
 // fixed-bearing gun barrel on top — "a gun machine on a tower, one tile" —
 // distinct from the 2x2 rounded-rooftop language used by refinery/airport
@@ -1331,7 +1388,6 @@ function turretCanvas(cx,size){
 // per-house tint-at-render still works). Trooper/tank are single static
 // sprites rotated via sprite.rotation instead of pre-baked per-direction frames.
 const TILE_PNG = {
-  tank: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVR4nN1SyxHFIAiETBqxrvSglKL0kLZohXd4ISPxM87klj0hLLCrIgwQY1SLmRlHvG1UWMXrATvAutwe1ykgIhARFRGt85YTESUiN7BrIec8PTcWDCEEp6YeUNdqOL+qqiml7gAAgFLKvwnx7mssGGk137zCc2sPxmdmdHeAiMeDeDLzcZFd3uLpR7LmGZyCa+PyR/oIfs7ATUgSh/exAAAAAElFTkSuQmCC',
   tankUnit: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACx0lEQVR4nD2Su0ozURSFv5k5Zy7JjIREYhC8IOhfWVqlsBALbXwFn8AH0MoXsRFLq4hgZydYGhBLRRPwksQhM+Pczpy/EFPvzV5rr/UZvV5Pa60xDAPDMMjzHCEE39/fANi2DYDjONi2jZSSPM/RWlOWJaZlWcRxTBiGVFXFeDxmOBzS6XRQStFsNrFte7ZjWRaWZSGEQEqJKMsS13VRShFFEZ7n0W63MU0T3/cBaDQaRFFEu90mjmOyLMPzPIQQCN/3MU2TMAxxHIeiKJhOp9RqNSzLYjQaobWm1WqRpilJkmAYBgBzc3O/DmzbZjQa0e/32dvbY3NzE9u2MU2TJEno9/t0u13SNEUIQVVVSCk5PDxEZFnG4+MjDw8PdLtd1tfX6XQ6ZFmGlBLDMJBS4vs+QggAtNY4jsPBwQFCCIFlWdi2Tb1eRylFVVVYloVpmkgpeXt74/z8HMuy0FpjmiZlWXJ2doaoqoqbmxtWVlaYTCa8vLzMFP4Ora2tcXl5SZqmAIRhyL9//zg5OUFMp1MMw0ApxdPTE0opBoMBeZ5jmuZs5vs+lmVRVRWDwYCNjQ0AhOd5vL+/02q10Frz+vqKaZoAs7SLoiAMQwCUUnx+flJV1W+VtVqN/f197u7uWFhYQGtNlmUYhsEfoX+/l2XJeDxme3ub+fl5lFIIKSXLy8tcX19TFAV5ns9o+1PUWv/aFYIwDNnd3cV1XaIoQvz8/HB7e8vOzg7Pz8+zhB3HIY5jfN8niiLq9TpZlrG1tcX9/T1LS0s0Gg3MyWRCr9djNBoRBAG+7+P7PkEQEAQBc3NzBEFArVYjCAKSJOHi4oKvry+yLEM0m02Ojo44PT1lcXGRLMsAZrQVRYGUEqUUjuMwHA45Pj5mdXWVNE0xrq6utG3bfHx8IKWkqipc1yWOYxzHwXVdkiShLEs8z0MpRb1enzHyH8DFZAUne4LhAAAAAElFTkSuQmCC',
   refineryBldg: 'data:image/png;base64,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',
   strongholdBldg: 'data:image/png;base64,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'
@@ -1424,7 +1480,12 @@ function roundedRectPath(cx,x,y,w,h,rad){
   cx.closePath();
 }
 const TEX = {
-  harvester: null, // filled in by preloadImageTiles()
+  // Baked oversized and smoothed back down — see haulTruckCanvas.
+  harvester: (()=>{
+    const t=canvasTexture(TILE*HAUL_TRUCK_SUPERSAMPLE, haulTruckCanvas);
+    t.baseTexture.scaleMode=PIXI.SCALE_MODES.LINEAR;
+    return t;
+  })(),
   trooper: canvasTexture(TILE, trooperCanvas),
   tank: null,
   sandTrail: canvasTexture(TILE, sandTrailCanvas),
@@ -2057,9 +2118,16 @@ function textureFor(u){
   }
   return TEX[u.type];
 }
+// On-screen scale for a unit's sprite. The harvester is the odd one out twice
+// over: its texture is baked HAUL_TRUCK_SUPERSAMPLE× oversized (so it has to be
+// scaled back down), and it rides HAUL_TRUCK_SCALE larger than a one-tile unit
+// so it looms over everything else on the map, as the biggest truck should.
+function unitSpriteScale(type){
+  return type==='harvester' ? ZOOM*HAUL_TRUCK_SCALE/HAUL_TRUCK_SUPERSAMPLE : ZOOM;
+}
 function ensureSprite(u){
   if(!u.sprite){
-    u.sprite=new PIXI.Sprite(textureFor(u)); u.sprite.anchor.set(0.5); u.sprite.scale.set(ZOOM);
+    u.sprite=new PIXI.Sprite(textureFor(u)); u.sprite.anchor.set(0.5); u.sprite.scale.set(unitSpriteScale(u.type));
     u.sprite.tint=houseById(u.owner).color;
     u.sprite.rotation=dirAngle(u.dir);
     u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; layerUnits.addChild(u.sprite);
@@ -2169,6 +2237,78 @@ function updateActiveFx(now){
     }
     return true;
   });
+}
+// ---- the harvester's sand conveyor ----
+// While a harvester is scooping, sand ramps up the back of the truck: a
+// translucent conveyor band running from the ground behind the tail up over the
+// tail lip, grains riding up it (growing as they climb, so the ramp reads as
+// rising rather than lying flat), a dust cloud where the pickup bites into the
+// dune, and the load itself heaped in the bed. It runs for HARVEST_SAND_MS
+// after each scoop, and since a working harvester scoops every
+// HARVEST_INTERVAL_MS the ramp simply stays up until it stops harvesting, then
+// fades out over the last stretch.
+//
+// Driven off u._lastHarvest rather than spawned as a one-shot fx, so it tracks
+// the truck's heading, never double-spawns, and needs nothing torn down when
+// harvesting stops. Multiplayer clients don't run harvestAt at all — they stamp
+// _lastHarvest themselves when a snapshot shows the cargo going up.
+const HARVEST_SAND_MS=2000;
+const SAND_GRAINS=11;
+function updateHarvestSand(u,now){
+  const on = u.type==='harvester' && u._lastHarvest && (now-u._lastHarvest)<HARVEST_SAND_MS
+    && u.sprite && u.sprite.visible;
+  if(!on){ if(u._sandFx) u._sandFx.visible=false; return; }
+  if(!u._sandFx){ u._sandFx=new PIXI.Graphics(); layerFx.addChild(u._sandFx); }
+  const g=u._sandFx;
+  g.visible=true; g.x=u.sprite.x; g.y=u.sprite.y;
+  g.clear();
+  // The texture's nose points up, so the tail direction is the sprite's
+  // rotation turned around; `lat` is the sideways axis across the ramp.
+  const a=u.sprite.rotation;
+  const bx=-Math.sin(a), by=Math.cos(a);   // toward the tail
+  const lx=Math.cos(a),  ly=Math.sin(a);   // across it
+  const at=(d,s)=>({ x:bx*d+lx*s, y:by*d+ly*s });
+  const t=(now-u._lastHarvest)/HARVEST_SAND_MS;
+  const fade=Math.min(1,(1-t)*2.5); // holds full while scooping, drops off at the end
+  // Distances are measured back from the sprite's center in world pixels: the
+  // tail lip sits ~20px behind it on a HAUL_TRUCK_SCALE truck, and the pickup
+  // bites the dune a little beyond that.
+  const GROUND=44, LIP=19;
+  // conveyor band, wide where it bites the dune and narrowing as it rides up
+  const p=[at(GROUND,8),at(GROUND,-8),at(LIP,-4.5),at(LIP,4.5)];
+  g.beginFill(0xc98b46,0.28*fade);
+  g.drawPolygon([p[0].x,p[0].y,p[1].x,p[1].y,p[2].x,p[2].y,p[3].x,p[3].y]);
+  g.endFill();
+  // side rails, so the band reads as a ramp climbing to the lip rather than as
+  // a stain lying flat on the sand
+  g.lineStyle(1.2,0xa46f33,0.5*fade);
+  g.moveTo(p[0].x,p[0].y); g.lineTo(p[3].x,p[3].y);
+  g.moveTo(p[1].x,p[1].y); g.lineTo(p[2].x,p[2].y);
+  g.lineStyle(0);
+  // grains riding up the band
+  for(let i=0;i<SAND_GRAINS;i++){
+    const ph=((now/620)+i/SAND_GRAINS)%1;
+    const d=GROUND+(LIP-GROUND)*ph;
+    const spread=(((i*37)%11)/5-1)*6.5*(1-ph*0.75);
+    const pt=at(d,spread+Math.sin(ph*Math.PI*2+i)*0.8);
+    g.beginFill(i%3?0xe0894a:0xf0b070, fade*Math.min(1,ph*4));
+    g.drawCircle(pt.x,pt.y,1+ph*1.5);
+    g.endFill();
+  }
+  // dust kicked up where the pickup bites the dune
+  const puff=at(GROUND+3,0);
+  g.beginFill(0xd9b98a,0.20*fade*(0.7+0.3*Math.sin(now/140)));
+  g.drawEllipse(puff.x,puff.y,9,6);
+  g.endFill();
+  // and the load itself, heaped in the bed by however much cargo is aboard
+  const load=Math.max(0.25,Math.min(1,(u.carrying||0)/HARVESTER_CAP));
+  const heap=at(7,0);
+  g.beginFill(0xd2743a,0.85*fade);
+  g.drawEllipse(heap.x,heap.y,8*load,6.5*load);
+  g.endFill();
+  g.beginFill(0xf0a05a,0.6*fade);
+  g.drawEllipse(heap.x-lx*1.5,heap.y-ly*1.5,4.5*load,3*load);
+  g.endFill();
 }
 function updateHealthBar(u,now){
   const bar=u._hpBar; if(!bar) return;
@@ -2381,6 +2521,7 @@ app.ticker.add((delta)=>{
       } else { u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; }
       u.sprite.visible = (h===ph) || !!(explored[u.y] && explored[u.y][u.x]);
       if(u._hpBar) updateHealthBar(u,now);
+      if(u.type==='harvester') updateHarvestSand(u,now);
     });
   });
   updateActiveFx(now);
@@ -2763,6 +2904,9 @@ function removeUnitVisuals(u){
   // the session.
   if(u.sprite){ layerUnits.removeChild(u.sprite); u.sprite.destroy(); }
   if(u._hpBar){ layerFx.removeChild(u._hpBar); u._hpBar.destroy(); }
+  // Same story for the harvester's sand conveyor: its own Graphics, its own
+  // buffer to give back.
+  if(u._sandFx){ layerFx.removeChild(u._sandFx); u._sandFx.destroy(); u._sandFx=null; }
 }
 // Fires the attacker's shot FX at the target's current screen position:
 // a laser+spark for troopers, a lobbed bomb burst for tanks.
@@ -4243,6 +4387,10 @@ function applyMpSnapshot(msg){
             order:null, dir:0, frame:0, moving:false, sprite:null, moveFrom:null, moveTo:null, moveStart:0 };
         h.units.push(u);
       } else {
+        // Cargo going up is the client's only sign that a scoop happened —
+        // harvestAt runs on the host and _lastHarvest is a host timestamp that
+        // would mean nothing here, so the sand ramp is timed off the delta.
+        if(u.type==='harvester' && ud.carrying>u.carrying) u._lastHarvest=performance.now();
         u.x=ud.x; u.y=ud.y; u.hp=ud.hp; u.carrying=ud.carrying; u.moving=false;
         if(u.sprite){ u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; }
       }
@@ -5027,7 +5175,9 @@ document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && upmOverlay.st
 Promise.all([
   // Trooper keeps the procedural trooperCanvas art (3-soldier squad, set in
   // TEX above) — the baked trooper photo tile didn't read as soldiers.
-  loadImageTextureStripped(TILE_PNG.tank).then(t=>{ TEX.harvester=t; }),
+  // The harvester keeps the procedural haulTruckCanvas art (six-wheeled mining
+  // hauler, set in TEX above) — it used to borrow the baked `tank` photo tile,
+  // which gave it the same silhouette as the tank unit.
   loadImageTextureStripped(TILE_PNG.tankUnit).then(t=>{ TEX.tank=t; }),
   // The silo keeps the procedural siloCanvas art (cylinder + domed cap + chute,
   // set in TEX above) — the baked `outpost` photo tile read as a power-plant
