@@ -392,6 +392,7 @@
   <div class="card">
     <h2>Play Online</h2>
     <p class="sub2" id="onlineIntro">Create a room and send the code to a friend, or join theirs. Both sides pick a House, then the duel begins.</p>
+    <p class="sub2" style="font-size:11px; opacity:.75;">Use two devices. Two tabs on one phone can't play each other — whichever tab is in the background gets frozen by the OS, which stalls its side of the match.</p>
     <div id="onlineChoice">
       <button id="onlineCreate" style="justify-content:center;">Create Room ▶</button>
       <button id="onlineJoin" style="justify-content:center; margin-top:8px;">Join Room ▶</button>
@@ -4415,8 +4416,58 @@ function genRoomCode(){
   let s=''; for(let i=0;i<5;i++) s+=chars[Math.floor(Math.random()*chars.length)];
   return s;
 }
+// The one place a room code becomes a PeerJS id. It used to be spelled out at
+// each call site, and one of them (the client's mid-game reconnect) forgot the
+// .toLowerCase() the host registers with — so that retry loop dialled
+// "gxdune-ABCDE" at a host listening on "gxdune-abcde" and could never
+// reconnect.
+function peerRoomId(code){ return ('gxdune-'+code).toLowerCase(); }
 function showMpWait(text){ document.getElementById('mpWaitText').textContent=text; document.getElementById('mpWaitOverlay').style.display='flex'; }
 function hideMpWait(){ document.getElementById('mpWaitOverlay').style.display='none'; }
+// PeerJS holds its signalling socket open with a setTimeout heartbeat every
+// 5s. A backgrounded tab has its timers throttled to a crawl — iOS suspends
+// them outright — so the heartbeat stops, the server drops the socket, and the
+// peer fires a 'network' error ("Lost connection to server") followed by
+// 'disconnected'. That is exactly what happens when you create a room and then
+// switch to another tab or another browser to join it: the host tab, now in
+// the background, loses its socket and the room code stops resolving.
+//
+// None of it is fatal. peer.reconnect() re-registers the SAME id, so the room
+// code stays valid. This wires that up: retry with backoff, retry immediately
+// the moment the tab is foregrounded again (the one instant a throttled timer
+// is guaranteed to run), and leave genuinely dead errors to the caller.
+const RECOVERABLE_PEER_ERRORS={ network:true, 'socket-error':true, 'socket-closed':true, disconnected:true };
+function isRecoverablePeerError(err){ return !!RECOVERABLE_PEER_ERRORS[err && err.type]; }
+function attachPeerResilience(peer, onState){
+  let tries=0, timer=null;
+  const stop=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+  // At most one attempt in flight. A failed reconnect emits 'disconnected'
+  // again, so without this guard the event and the timer would drive each
+  // other into a tight retry loop and the backoff would never be felt.
+  const schedule=()=>{
+    if(timer || !peer || peer.destroyed || !peer.disconnected) return;
+    timer=setTimeout(attempt, Math.min(15000, 1000*Math.pow(2, Math.min(tries++, 4))));
+  };
+  const attempt=()=>{
+    timer=null;
+    if(!peer || peer.destroyed) return;
+    if(!peer.disconnected){ tries=0; return; }
+    try{ peer.reconnect(); }catch(e){}
+    schedule();
+  };
+  peer.on('disconnected', ()=>{ if(onState) onState('reconnecting'); schedule(); });
+  peer.on('open', ()=>{ tries=0; stop(); if(onState) onState('open'); });
+  peer.on('close', stop);
+  // Coming back to the foreground is the one moment a throttled tab is
+  // guaranteed to run code, so retry there and now — not on whatever the
+  // backoff had queued up.
+  const wake=()=>{
+    if(document.visibilityState!=='visible') return;
+    if(peer && !peer.destroyed && peer.disconnected){ tries=0; stop(); attempt(); }
+  };
+  document.addEventListener('visibilitychange', wake);
+  window.addEventListener('pageshow', wake);
+}
 
 function serializeUnit(u){ return {id:u.id, owner:u.owner, type:u.type, x:u.x, y:u.y, hp:u.hp, carrying:u.carrying}; }
 // Air production queues travel as REMAINING milliseconds, not as absolute
@@ -4712,19 +4763,24 @@ function onMpData(msg){
   else if(msg.type==='init') applyMpInit(msg);
   else if(msg.type==='snapshot') applyMpSnapshot(msg);
 }
-function onMpDisconnect(){
+// `conn` is the connection that closed. Dials that were abandoned while
+// hunting for the host close later and would otherwise fire this for a
+// connection that is no longer the live one, tearing down a session that is
+// perfectly healthy — so anything that isn't the current connection is ignored.
+function onMpDisconnect(conn){
   if(!mp) return;
+  if(conn && mp.conn && conn!==mp.conn) return;
   if(mp.role==='host'){
     // Host pauses its own simulation and waits for the same room code to be
     // rejoined; a fresh 'init' is sent the moment it reconnects.
     if(simHandle) stopSim();
     showMpWait('Your opponent disconnected — waiting for them to reconnect...');
     mp.peer.off('connection'); // avoid stacking duplicate listeners on re-arm below
-    mp.peer.on('connection',(conn)=>{
-      mp.conn=conn;
-      conn.on('data', onMpData);
-      conn.on('close', onMpDisconnect);
-      conn.on('open', ()=>{
+    mp.peer.on('connection',(c)=>{
+      mp.conn=c;
+      c.on('data', onMpData);
+      c.on('close', ()=>onMpDisconnect(c));
+      c.on('open', ()=>{
         hideMpWait();
         if(state){ mpSend(buildInitMessage()); simHandle=setInterval(gameTick, TICK_MS); }
       });
@@ -4732,11 +4788,22 @@ function onMpDisconnect(){
   } else {
     showMpWait('Disconnected from the host — trying to reconnect...');
     const code=mp.roomCode;
+    // Retried on a timer rather than only on 'error': a dial to a host that is
+    // itself mid-reconnect can simply hang, never erroring, and the old
+    // error-only retry left the client waiting forever on that one attempt.
     const retry=()=>{
-      if(!mp) return;
-      const conn=mp.peer.connect('gxdune-'+code, {reliable:true});
-      conn.on('open', ()=>{ mp.conn=conn; conn.on('data', onMpData); conn.on('close', onMpDisconnect); hideMpWait(); });
-      conn.on('error', ()=>{ setTimeout(retry, 2000); });
+      if(!mp || mp.role!=='client') return;
+      if(mp.peer.destroyed) return;
+      if(mp.peer.disconnected){ setTimeout(retry, 2000); return; }
+      const c=mp.peer.connect(peerRoomId(code), {reliable:true});
+      let settled=false;
+      c.on('open', ()=>{
+        settled=true;
+        mp.conn=c; c.on('data', onMpData); c.on('close', ()=>onMpDisconnect(c));
+        hideMpWait();
+      });
+      c.on('error', ()=>{ if(!settled){ settled=true; setTimeout(retry, 2000); } });
+      setTimeout(()=>{ if(!settled){ settled=true; try{ c.close(); }catch(e){} retry(); } }, 5000);
     };
     setTimeout(retry, 1500);
   }
@@ -4764,15 +4831,24 @@ document.getElementById('onlineCreate').onclick=()=>{
   const code=genRoomCode();
   document.getElementById('onlineChoice').style.display='none';
   document.getElementById('onlineStatus').textContent='Creating room...';
-  const peer=new Peer(('gxdune-'+code).toLowerCase());
+  const peer=new Peer(peerRoomId(code));
   mp={role:'host', peer, conn:null, connected:false, myHouseId:null, remoteHouseId:null, roomCode:code};
-  peer.on('open',()=>{
-    document.getElementById('onlineStatus').innerHTML='Room code: <b style="font-size:20px; letter-spacing:4px;">'+code+'</b><br>Share it with your opponent — waiting for them to join...';
+  const status=document.getElementById('onlineStatus');
+  const codeLine='Room code: <b style="font-size:20px; letter-spacing:4px;">'+code+'</b><br>';
+  const showWaiting=()=>{ status.innerHTML=codeLine+'Share it with your opponent — waiting for them to join...'; };
+  peer.on('open', showWaiting);
+  // Losing the signalling socket only matters until the two peers have an open
+  // data channel — after that the match runs directly between them. So the
+  // room code stays on screen throughout and the wording stays calm.
+  attachPeerResilience(peer, (s)=>{
+    if(!mp || mp.connected) return;
+    if(s==='open') showWaiting();
+    else status.innerHTML=codeLine+'Reconnecting to the room server — leave this tab open and in the foreground while your opponent joins.';
   });
   peer.on('connection',(conn)=>{
     mp.conn=conn;
     conn.on('data', onMpData);
-    conn.on('close', onMpDisconnect);
+    conn.on('close', ()=>onMpDisconnect(conn));
     conn.on('open',()=>{
       mp.connected=true;
       document.getElementById('onlineOverlay').style.display='none';
@@ -4780,7 +4856,10 @@ document.getElementById('onlineCreate').onclick=()=>{
       showHouseSelect();
     });
   });
-  peer.on('error',(err)=>{ document.getElementById('onlineStatus').textContent='Connection error: '+((err&&err.type)||err); });
+  peer.on('error',(err)=>{
+    if(isRecoverablePeerError(err)) return; // attachPeerResilience is already on it
+    status.textContent='Connection error: '+((err&&err.type)||err);
+  });
 };
 document.getElementById('onlineJoin').onclick=()=>{
   document.getElementById('onlineChoice').style.display='none';
@@ -4789,23 +4868,58 @@ document.getElementById('onlineJoin').onclick=()=>{
 document.getElementById('onlineJoinGo').onclick=()=>{
   const code=document.getElementById('joinCodeInput').value.trim().toUpperCase();
   if(!code) return;
-  document.getElementById('onlineStatus').textContent='Connecting...';
+  const status=document.getElementById('onlineStatus');
+  status.textContent='Connecting...';
   const peer=new Peer();
   mp={role:'client', peer, conn:null, connected:false, myHouseId:null, remoteHouseId:null, roomCode:code};
-  peer.on('open',()=>{
-    const conn=peer.connect(('gxdune-'+code).toLowerCase(), {reliable:true});
+  // A host whose tab is in the background has usually been dropped by the
+  // signalling server and is mid-reconnect, so the room code resolves to
+  // nothing for a few seconds and the very first dial answers 'peer-
+  // unavailable'. One shot at it used to be the whole attempt; instead keep
+  // redialling for about a minute, which is long enough for the host to be
+  // brought back to the foreground and re-register under the same code.
+  const DIAL_TIMEOUT_MS=5000, MAX_DIALS=12;
+  let dials=0, dialTimer=null;
+  const dial=()=>{
+    dialTimer=null;
+    if(!mp || mp.connected || !peer || peer.destroyed) return;
+    // Nothing can be dialled while our own socket is down — attachPeerResilience
+    // is bringing it back, so just look again shortly.
+    if(peer.disconnected){ dialTimer=setTimeout(dial, 2000); return; }
+    if(dials>=MAX_DIALS){
+      status.innerHTML='No answer from room <b>'+code+'</b>.<br>Check the code, and make sure the host\'s tab is open and in the foreground — a backgrounded tab drops off the room server.';
+      return;
+    }
+    dials++;
+    status.textContent = dials===1 ? 'Connecting...' : 'No answer yet — retrying ('+dials+'/'+MAX_DIALS+')...';
+    // Abandon the previous half-open attempt so failed dials don't pile up.
+    if(mp.conn){ try{ mp.conn.close(); }catch(e){} }
+    const conn=peer.connect(peerRoomId(code), {reliable:true});
     mp.conn=conn;
     conn.on('data', onMpData);
-    conn.on('close', onMpDisconnect);
+    conn.on('close', ()=>onMpDisconnect(conn));
     conn.on('open',()=>{
+      if(dialTimer){ clearTimeout(dialTimer); dialTimer=null; }
       mp.connected=true;
       document.getElementById('onlineOverlay').style.display='none';
       houseSelectMode='online';
       showHouseSelect();
     });
-    conn.on('error',(err)=>{ document.getElementById('onlineStatus').textContent='Could not connect: '+((err&&err.type)||err); });
+    conn.on('error',()=>{}); // the timer below is what retries
+    dialTimer=setTimeout(dial, DIAL_TIMEOUT_MS);
+  };
+  peer.on('open', dial);
+  attachPeerResilience(peer, (s)=>{
+    if(!mp || mp.connected) return;
+    if(s==='reconnecting') status.textContent='Reconnecting to the room server...';
   });
-  peer.on('error',(err)=>{ document.getElementById('onlineStatus').textContent='Could not connect: '+((err&&err.type)||err); });
+  peer.on('error',(err)=>{
+    const t=err && err.type;
+    // 'peer-unavailable' just means the host is not registered right this
+    // second; recoverable socket errors are the resilience wiring's job.
+    if(t==='peer-unavailable' || isRecoverablePeerError(err)) return;
+    status.textContent='Could not connect: '+(t||err);
+  });
 };
 
 // ================= boot =================
