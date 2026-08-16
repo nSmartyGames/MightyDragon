@@ -1298,38 +1298,32 @@ function windTurbineRotorCanvas(cx,size){
   [-90,30,150].forEach(a=>blade(a,6.3,0.62));
   cx.fillStyle='#5f5f5f'; cx.beginPath(); cx.arc(hubX,hubY,0.9*k,0,Math.PI*2); cx.fill();
 }
-// Spice silo: an upright storage cylinder with a domed cap, hoop bands and a
-// loading chute — the shape a silo is supposed to have. It used to borrow the
-// baked `outpost` photo tile, which read as a squat power-plant block and was
-// indistinguishable from the other economy buildings at a glance. White/
-// light-grey like the turbine so the per-house tint still recolors it.
+// Spice silo: a squat storage tank seen from directly above, baked natively
+// at the 2x2 footprint (size = TILE*2) like `base` below — it used to be a
+// 1-tile side-view cylinder stretched over 2 tiles, which read as a thin
+// needle floating in an otherwise empty 2x2 square. White/light-grey like
+// the turbine so the per-house tint still recolors it.
 function siloCanvas(cx,size){
-  const cxm=size/2, bodyTop=5.2, bodyBot=14.2, halfW=3.6;
-  // domed cap
-  cx.beginPath(); cx.ellipse(cxm,bodyTop,halfW,2.6,0,Math.PI,0);
-  cx.fillStyle='#f2f2f2'; cx.fill();
-  cx.strokeStyle='rgba(0,0,0,.5)'; cx.lineWidth=0.7; cx.stroke();
-  // cylinder body, lit from the left so it reads as round rather than flat
-  const grd=cx.createLinearGradient(cxm-halfW,0,cxm+halfW,0);
-  grd.addColorStop(0,'#c9c9c9'); grd.addColorStop(0.35,'#f4f4f4'); grd.addColorStop(1,'#9d9d9d');
-  cx.fillStyle=grd; cx.fillRect(cxm-halfW,bodyTop,halfW*2,bodyBot-bodyTop);
-  cx.strokeStyle='rgba(0,0,0,.5)'; cx.lineWidth=0.7;
-  cx.strokeRect(cxm-halfW,bodyTop,halfW*2,bodyBot-bodyTop);
-  // corrugation hoops around the barrel
-  cx.strokeStyle='rgba(0,0,0,.22)'; cx.lineWidth=0.6;
-  for(let y=bodyTop+2.2;y<bodyBot-0.6;y+=2.2){
-    cx.beginPath(); cx.moveTo(cxm-halfW,y); cx.lineTo(cxm+halfW,y); cx.stroke();
+  const cxm=size/2, r=size/2-3;
+  // tank roof: a radial gradient so the disc reads as a dome, not a flat lid
+  const grd=cx.createRadialGradient(cxm-r*0.3,cxm-r*0.3,r*0.15,cxm,cxm,r);
+  grd.addColorStop(0,'#f6f6f6'); grd.addColorStop(0.7,'#dcdcdc'); grd.addColorStop(1,'#a8a8a8');
+  cx.beginPath(); cx.arc(cxm,cxm,r,0,Math.PI*2);
+  cx.fillStyle=grd; cx.fill();
+  cx.strokeStyle='rgba(0,0,0,.55)'; cx.lineWidth=1; cx.stroke();
+  // corrugation rings, concentric like a tank viewed from above
+  cx.strokeStyle='rgba(0,0,0,.18)'; cx.lineWidth=0.6;
+  for(let rr=r*0.35;rr<r;rr+=r*0.3){
+    cx.beginPath(); cx.arc(cxm,cxm,rr,0,Math.PI*2); cx.stroke();
   }
-  // roof vent and the loading chute running down the shaded flank
+  // roof vent/hatch, offset off-center like the base's dome
+  cx.beginPath(); cx.arc(cxm+r*0.25,cxm-r*0.25,r*0.28,0,Math.PI*2);
+  cx.fillStyle='rgba(0,0,0,.35)'; cx.fill();
+  cx.beginPath(); cx.arc(cxm+r*0.19,cxm-r*0.31,r*0.11,0,Math.PI*2);
+  cx.fillStyle='rgba(255,255,255,.5)'; cx.fill();
+  // loading chute running to one edge, seen from above as a straight pipe
   cx.fillStyle='#5f5f5f';
-  cx.fillRect(cxm-0.7,bodyTop-3.6,1.4,1.6);
-  cx.fillRect(cxm+halfW-0.4,bodyTop+1.4,1.3,bodyBot-bodyTop-2.6);
-  // discharge hopper + skirt at the foot
-  cx.beginPath();
-  cx.moveTo(cxm-halfW,bodyBot); cx.lineTo(cxm+halfW,bodyBot);
-  cx.lineTo(cxm+1.5,size-1.2); cx.lineTo(cxm-1.5,size-1.2); cx.closePath();
-  cx.fillStyle='#b4b4b4'; cx.fill();
-  cx.strokeStyle='rgba(0,0,0,.5)'; cx.lineWidth=0.7; cx.stroke();
+  cx.fillRect(cxm-1.1,cxm+r*0.15,2.2,size/2-r+3);
 }
 // The harvester as the biggest truck on the map: an ultra-class mining haul
 // truck seen from above — six tyres (duals at the back) spread nearly the full
@@ -1535,7 +1529,7 @@ const TEX = {
     return t;
   })(),
   turret: canvasTexture(TILE, turretCanvas),
-  silo: canvasTexture(TILE, siloCanvas),
+  silo: canvasTexture(TILE*2, siloCanvas),
   // A rounded, shaded rooftop viewed from directly above, rather than a flat
   // white square — reads as a smoother, more solid headquarters once tinted
   // per-house at render time (base sprites are tinted, so this stays greyscale).
@@ -2055,8 +2049,7 @@ function redrawSpiceAndBuildings(){
   buildingMap.forEach(b=>{
     if(b.primary===false) return; // footprint-only tile of a multi-tile building; drawn once at its origin
     const tex = b.type==='turbine'?TEX.turbine : b.type==='turret'?TEX.turret : b.type==='silo'?TEX.silo : b.type==='airport'?TEX.airport : TEX.refineryBody;
-    const sp=new PIXI.Sprite(tex); sp.x=b.x*SZ; sp.y=b.y*SZ;
-    sp.scale.set(b.type==='silo'?ZOOM*2:ZOOM); // silo's source art is 1 tile, stretched to fill its 2x2 footprint
+    const sp=new PIXI.Sprite(tex); sp.x=b.x*SZ; sp.y=b.y*SZ; sp.scale.set(ZOOM);
     const owner=houseById(b.owner);
     // The airport is the one building left untinted — it's a runway now, and
     // tinting tarmac by house color turns it back into an unreadable slab.
@@ -5461,9 +5454,9 @@ Promise.all([
   // hauler, set in TEX above) — it used to borrow the baked `tank` photo tile,
   // which gave it the same silhouette as the tank unit.
   loadImageTextureStripped(TILE_PNG.tankUnit).then(t=>{ TEX.tank=t; }),
-  // The silo keeps the procedural siloCanvas art (cylinder + domed cap + chute,
-  // set in TEX above) — the baked `outpost` photo tile read as a power-plant
-  // block rather than as a silo.
+  // The silo keeps the procedural siloCanvas art (top-down tank dome + rings
+  // + chute, set in TEX above) — the baked `outpost` photo tile read as a
+  // power-plant block rather than as a silo.
   // Turbine keeps the procedural windTurbineCanvas art (clear tower+blades,
   // set in TEX above) — the baked turbineBldg photo tile was an ambiguous
   // grey blob that read as the same building as the refinery on the map.
