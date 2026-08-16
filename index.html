@@ -4998,8 +4998,13 @@ function newGame(chosenId, rivalId){
   scatterSpice();
   // Every house starts with a silo already built next to its stronghold, so
   // harvesters have somewhere to unload from turn one instead of spilling cargo.
+  // ignoreFog is required here — nothing is explored yet this early in newGame,
+  // so without it placementValid rejects every tile and this always fell
+  // through to the findFreeTileNear fallback below, which only checks the
+  // single origin tile (not the silo's full 2x2 footprint) and would happily
+  // hand back a spot whose other 3 tiles land right on top of the base.
   state.houses.forEach(h=>{
-    const spot=findFreeFootprintNear(h.base.x,h.base.y,'place-silo') || findFreeTileNear(h.base.x,h.base.y);
+    const spot=findFreeFootprintNear(h.base.x,h.base.y,'place-silo',true) || findFreeTileNear(h.base.x,h.base.y);
     const primaryKey=spot.x+','+spot.y;
     placementFootprint('place-silo',spot.x,spot.y).forEach(([fx,fy],i)=>{
       const entry=(i===0)
