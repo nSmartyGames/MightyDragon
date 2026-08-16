@@ -140,24 +140,37 @@
     position:absolute; right:2px; bottom:1px; font-size:9px; color:var(--sand-2);
     background:rgba(10,6,2,.75); padding:1px 3px; border-radius:3px; line-height:1.2;
   }
-  /* Hourglass shown above the fighter/gunship recruit button, in the bottom
+  /* Radar badge shown above the fighter/gunship recruit button, in the bottom
      action bar, for the 3 (fighter) or 5 (gunship) minutes it takes to build
      — a visible cue on the button itself (not just the countdown text in
-     .costBadge) that production is under way, mirroring the clepsydra that
-     hovers over the airport out on the map. Hidden unless .active is on. */
-  .prodHourglass{
-    position:absolute; left:50%; top:-15px; transform:translateX(-50%);
-    font-size:13px; line-height:1; display:none; pointer-events:none;
-    animation:prodHourglassPulse 1.1s ease-in-out infinite;
+     .costBadge) that production is under way, mirroring the radar scope that
+     hovers over the airport out on the map. The sweep loops every 20s as a
+     stylized "still building" cue — it does not track the actual remaining
+     build time; that's what the countdown text above the badge is for.
+     Hidden unless .active is on. */
+  .prodRadar{
+    position:absolute; left:50%; top:-16px; transform:translateX(-50%);
+    width:13px; height:13px; border-radius:50%; display:none; pointer-events:none;
   }
-  .prodHourglass.active{ display:block; }
-  @keyframes prodHourglassPulse{
-    0%,100%{ opacity:.55; transform:translateX(-50%) scale(1); }
-    50%{ opacity:1; transform:translateX(-50%) scale(1.2); }
+  .prodRadar.active{ display:block; }
+  .prodRadar::before,
+  .prodRadar::after{ content:''; position:absolute; inset:0; border-radius:50%; }
+  .prodRadar::before{
+    background:
+      radial-gradient(circle closest-side at 50% 50%, transparent 0 44%, #7dffa6 44% 48%, transparent 48%),
+      radial-gradient(circle closest-side at 50% 50%, transparent 0 88%, #7dffa6 88% 92%, transparent 92%),
+      linear-gradient(#7dffa6,#7dffa6) 50% 0/1px 100% no-repeat,
+      linear-gradient(#7dffa6,#7dffa6) 0 50%/100% 1px no-repeat,
+      #07200f;
   }
+  .prodRadar::after{
+    background:conic-gradient(from 0deg, #7dffa6 0deg, rgba(125,255,166,.35) 22deg, transparent 65deg, transparent 360deg);
+    animation:prodRadarSweep 20s linear infinite;
+  }
+  @keyframes prodRadarSweep{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
   /* Radar sweep laid over a hub button (and over the upgrade menu's own Buy
      button) for as long as whatever it ordered is still under construction —
-     BUILD_TIME_MS for everything except aircraft, which keep the hourglass +
+     BUILD_TIME_MS for everything except aircraft, which keep the radar badge +
      countdown above instead. Two stacked pseudo-element layers, both at 30%
      opacity so the button's icon, cost badge and label stay readable
      underneath: ::before is the static scope (two range rings plus a
@@ -349,8 +362,8 @@
         <button id="buildAirport" class="iconBtn" title="Airport runway — 190 spice, builds sky fighters (upgrade it to a gunship pad for cluster gunships)"><span class="costBadge">190</span></button>
         <button id="buildTurret" class="iconBtn" title="Turret — 90 spice"><span class="costBadge">90</span></button>
         <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice"><span class="costBadge">25</span></button>
-        <button id="recruitJet" class="iconBtn" title="Sky fighter — 130 spice, needs an airport, 3min build (press again to queue another)"><span class="costBadge">130</span><span class="prodHourglass" id="jetHourglass">⏳</span></button>
-        <button id="recruitBomber" class="iconBtn" title="Cluster gunship — 220 spice, needs an airport upgraded to a gunship pad, 5min build, bombs a 3x3 block (press again to queue another)"><span class="costBadge">220</span><span class="prodHourglass" id="bomberHourglass">⏳</span></button>
+        <button id="recruitJet" class="iconBtn" title="Sky fighter — 130 spice, needs an airport, 3min build (press again to queue another)"><span class="costBadge">130</span><span class="prodRadar" id="jetRadar"></span></button>
+        <button id="recruitBomber" class="iconBtn" title="Cluster gunship — 220 spice, needs an airport upgraded to a gunship pad, 5min build, bombs a 3x3 block (press again to queue another)"><span class="costBadge">220</span><span class="prodRadar" id="bomberRadar"></span></button>
         <button id="recruitTank" class="iconBtn" title="Recruit tank — 100 spice"><span class="costBadge">100</span></button>
       </div>
     </div>
@@ -373,7 +386,7 @@
         <div>Troopers drain 10 power/shot, tanks 20/2s (turbines add +5). Drain a stronghold's 10k power to eliminate it.</div>
         <div>Harvesters unload at a silo or refinery — build one or spice is wasted. A refinery = 4 silos plus a free harvester.</div>
         <div>Troopers and tanks fight refineries adjacent, never enter them. Sandworms have a 1-in-5 swallow chance and give up after 5s. A hit auto-rallies idle units to Search &amp; Destroy.</div>
-        <div>An airport runway builds sky fighters in 3 min. Cluster gunships stay locked (and their button hidden) until the airport is upgraded to a gunship pad for 500 spice; they then take 5 min, and a third airport level cuts every build time by 30%. The clepsydra hovering over the runway counts the build down; press a recruit button again to queue another and a count badge appears mid-runway. Gunships bomb the whole 3x3 block around their target.</div>
+        <div>An airport runway builds sky fighters in 3 min. Cluster gunships stay locked (and their button hidden) until the airport is upgraded to a gunship pad for 500 spice; they then take 5 min, and a third airport level cuts every build time by 30%. The radar scope hovering over the runway counts the build down; press a recruit button again to queue another and a count badge appears mid-runway. Gunships bomb the whole 3x3 block around their target.</div>
       </div>
     </div>
   </div>
@@ -480,7 +493,7 @@ const AIRPORT_COST=190, JET_COST=130, BOMBER_COST=220;
 const JET_HP=90, BOMBER_HP=150;
 // Per-type wall-clock build time from recruit click to takeoff. The light
 // sky fighter rolls out in 3 minutes; the heavy cluster gunship still takes
-// the full 5. Both are visualised by the clepsydra hovering over the airport
+// the full 5. Both are visualised by the radar scope hovering over the airport
 // (see updateAirProdClocks).
 const JET_PRODUCTION_MS=180000;    // 3 minutes
 const BOMBER_PRODUCTION_MS=300000; // 5 minutes
@@ -503,7 +516,7 @@ const TANK_SHOT_DMG=20; // one tank shot drains 20 power points
 const TANK_ATTACK_COOLDOWN_MS=2000; // tanks fire once every 2 seconds
 const JET_ATTACK_COOLDOWN_MS=650; // fast, light strafing runs
 const BOMBER_ATTACK_COOLDOWN_MS=2600; // slow, heavy payload
-const AIR_SHOT_DMG=100, AIR_SHOTS_PER_BURST=3, AIR_HIT_CHANCE=0.5;
+const AIR_SHOT_DMG=50, AIR_SHOTS_PER_BURST=3, AIR_HIT_CHANCE=0.5;
 // The gunship empties its pods over the 3x3 block of tiles centered on its
 // attack destination — radius 1 in Chebyshev distance is exactly those 9
 // tiles. Everything enemy standing in the block (units AND buildings) eats
@@ -2361,13 +2374,14 @@ function updateHealthBar(u,now){
   bar.x=u.sprite.x; bar.y=u.sprite.y-SZ*0.68;
 }
 
-// ============ clepsydra: the airport's production water clock ============
-// A water clock that hovers over the airport building and unfolds the build
-// currently running there: the upper bowl drains while the lower one fills,
-// a drop falls through the neck, and an mm:ss readout counts down under the
-// frame. One clock per aircraft type in production — sky fighter (3 min) on
-// the left, cluster gunship (5 min) on the right — so an airport working on
-// both shows both clocks side by side.
+// ============ radar: the airport's production scope ============
+// A radar scope that hovers over the airport building and unfolds the build
+// currently running there: an outer ring fills clockwise with real build
+// progress while a sweep wedge spins a full turn every 20s (decorative,
+// matching the hub button's own radar sweep), and an mm:ss readout counts
+// down under the frame. One scope per aircraft type in production — sky
+// fighter (3 min) on the left, cluster gunship (5 min) on the right — so an
+// airport working on both shows both scopes side by side.
 //
 // Press a recruit button a second time and that type stacks up behind the
 // one being built; the extra orders show as a count badge planted in the
@@ -2378,21 +2392,21 @@ function updateHealthBar(u,now){
 // over the HUD.
 const airClocks=new Map(); // houseId -> {root, widgets, badges}
 const AIR_TYPES=['jet','bomber'];
-const CLEPSYDRA_W=17, CLEPSYDRA_H=22;
-// The backing plate is wider than the glass so the mm:ss readout and the
+const RADAR_W=17, RADAR_H=22;
+// The backing plate is wider than the scope so the mm:ss readout and the
 // type pictogram both sit on it without spilling onto the terrain.
-const CLEPSYDRA_PLATE_W=32;
-const CLEPSYDRA_STYLE={
-  jet:    { frame:0xbcd8ff, sand:0xe0522a },
-  bomber: { frame:0xffc44a, sand:0xe0522a }
+const RADAR_PLATE_W=32;
+const RADAR_STYLE={
+  jet:    { frame:0xbcd8ff },
+  bomber: { frame:0xffc44a }
 };
 function makeAirClockWidget(){
   const wrap=new PIXI.Container();
   const glass=new PIXI.Graphics();
   const label=new PIXI.Text('',{fontFamily:'monospace',fontSize:9,fill:0xf3e3c0});
   // sits in the readout row under the frame, to the right of the type
-  // pictogram drawClepsydra() paints at the row's left edge
-  label.anchor.set(0,0); label.x=-CLEPSYDRA_PLATE_W*0.5+9; label.y=CLEPSYDRA_H*0.5+3;
+  // pictogram drawAirRadar() paints at the row's left edge
+  label.anchor.set(0,0); label.x=-RADAR_PLATE_W*0.5+9; label.y=RADAR_H*0.5+3;
   wrap.addChild(glass,label);
   return {wrap,glass,label};
 }
@@ -2425,51 +2439,41 @@ function resetAirClocks(){
   airClocks.forEach(c=>{ layerFx.removeChild(c.root); c.root.destroy({children:true}); });
   airClocks.clear();
 }
-// One clepsydra frame. progress is 0..1 through the current build; the
-// upper bowl holds (1-progress) of the sand, the lower bowl the rest.
-function drawClepsydra(g,type,progress,now){
-  const st=CLEPSYDRA_STYLE[type]||CLEPSYDRA_STYLE.jet;
-  const hw=CLEPSYDRA_W/2, hh=CLEPSYDRA_H/2, neck=1.5;
-  const rem=1-progress;
+// One radar frame. progress is 0..1 through the current build and fills the
+// outer ring clockwise from the top; the inner sweep wedge is decorative and
+// just spins a full turn every 20s, independent of progress.
+function drawAirRadar(g,type,progress,now){
+  const st=RADAR_STYLE[type]||RADAR_STYLE.jet;
+  const hh=RADAR_H/2, r=RADAR_W/2;
   g.clear();
-  // backing plate, sized to cover the frame plus the readout beneath it
+  // backing plate, sized to cover the scope plus the readout beneath it
   g.beginFill(0x140c05,0.66);
-  g.drawRoundedRect(-CLEPSYDRA_PLATE_W*0.5,-hh-5,CLEPSYDRA_PLATE_W,CLEPSYDRA_H+21,3);
+  g.drawRoundedRect(-RADAR_PLATE_W*0.5,-hh-5,RADAR_PLATE_W,RADAR_H+21,3);
   g.endFill();
-  // glass body
-  const body=[-hw,-hh, hw,-hh, neck,0, hw,hh, -hw,hh, -neck,0];
-  g.beginFill(0x6f8ea8,0.18); g.drawPolygon(body); g.endFill();
-  // sand still to fall — pooled against the neck in the upper bowl, its
-  // surface sinking toward the waist as the build runs down
-  if(rem>0.004){
-    g.beginFill(st.sand,0.95);
-    g.drawPolygon([0,-0.4, -hw*rem,-hh*rem-0.4, hw*rem,-hh*rem-0.4]);
-    g.endFill();
-  }
-  // sand already fallen — a heap filling the lower bowl from the base up
-  if(progress>0.004){
-    const s=1-progress;
-    g.beginFill(st.sand,0.95);
-    g.drawPolygon([-hw,hh, hw,hh, hw*s,hh*s, -hw*s,hh*s]);
-    g.endFill();
-  }
-  // the falling drop, on its own fast loop while there's sand left to fall
-  if(rem>0.004){
-    const dt=(now%520)/520;
-    const dy=dt*(hh*(1-progress)-1);
-    g.beginFill(st.sand,0.9); g.drawCircle(0,dy,0.9); g.endFill();
-  }
-  // frame: outline plus the brass caps top and bottom
-  g.lineStyle(1,st.frame,0.95);
-  g.drawPolygon(body);
+  // scope screen, range ring and crosshair — same look as the hub button's
+  // own radar sweep
+  g.beginFill(0x07200f,0.85); g.drawCircle(0,0,r); g.endFill();
+  g.lineStyle(1,0x7dffa6,0.5);
+  g.drawCircle(0,0,r*0.55);
+  g.moveTo(-r,0); g.lineTo(r,0);
+  g.moveTo(0,-r); g.lineTo(0,r);
   g.lineStyle(0);
-  g.beginFill(st.frame,0.9);
-  g.drawRect(-hw-1.5,-hh-2,CLEPSYDRA_W+3,2);
-  g.drawRect(-hw-1.5,hh,CLEPSYDRA_W+3,2);
-  g.endFill();
+  // sweep wedge, one full turn every 20s
+  const ang=((now%20000)/20000)*Math.PI*2, steps=8, sweep=Math.PI/7;
+  const pts=[0,0];
+  for(let i=0;i<=steps;i++){ const a=ang-i*(sweep/steps); pts.push(Math.cos(a)*r, Math.sin(a)*r); }
+  g.beginFill(0x7dffa6,0.35); g.drawPolygon(pts); g.endFill();
+  // outer ring: faint full circle, then the real build progress traced over
+  // it clockwise from the top, tinted per aircraft type
+  g.lineStyle(1,st.frame,0.35); g.drawCircle(0,0,r*0.92); g.lineStyle(0);
+  if(progress>0.004){
+    g.lineStyle(1.6,st.frame,0.95);
+    g.arc(0,0,r*0.92, -Math.PI/2, -Math.PI/2+Math.PI*2*Math.min(1,progress));
+    g.lineStyle(0);
+  }
   // type pictogram beside the mm:ss readout: a nose-up delta for the sky
   // fighter, a rotor disc with four blades for the cluster gunship
-  const gx=-CLEPSYDRA_PLATE_W*0.5+4, gy=hh+7.5;
+  const gx=-RADAR_PLATE_W*0.5+4, gy=hh+7.5;
   if(type==='jet'){
     g.beginFill(st.frame,0.95);
     g.drawPolygon([gx,gy-3, gx+2.6,gy+2.4, gx-2.6,gy+2.4]);
@@ -2515,13 +2519,13 @@ function updateAirProdClocks(now){
     const bob=Math.sin(now/620+airport.x)*1.6;
     active.forEach((type,i)=>{
       const w=c.widgets[type];
-      const off=active.length>1 ? (i===0?-(CLEPSYDRA_PLATE_W*0.5+1):(CLEPSYDRA_PLATE_W*0.5+1)) : 0;
+      const off=active.length>1 ? (i===0?-(RADAR_PLATE_W*0.5+1):(RADAR_PLATE_W*0.5+1)) : 0;
       w.wrap.visible=true;
       // lifted clear of the building's own hp bar (drawn at top-4) so the
       // readout row never sits on top of it
-      w.wrap.x=cx+off; w.wrap.y=top-CLEPSYDRA_H*0.5-22+bob;
+      w.wrap.x=cx+off; w.wrap.y=top-RADAR_H*0.5-22+bob;
       const deadline=prod[type][0];
-      drawClepsydra(w.glass,type,airProdProgress(type,deadline,now,h),now);
+      drawAirRadar(w.glass,type,airProdProgress(type,deadline,now,h),now);
       w.label.text=formatCountdown(deadline-now);
     });
     AIR_TYPES.forEach(type=>{ if(active.indexOf(type)<0) c.widgets[type].wrap.visible=false; });
@@ -2942,7 +2946,7 @@ function tickAirProduction(house){
 // tanks, every structure, and every structure upgrade — takes BUILD_TIME_MS
 // to finish instead of landing on the same frame as the click. Aircraft are
 // deliberately left out: the airport keeps its own minutes-long queue in
-// startAirUnitProduction, with the clepsydra and countdown badge that go
+// startAirUnitProduction, with the radar scope and countdown badge that go
 // with it.
 //
 // The shape mirrors the air queue: the spice is charged the moment the order
@@ -4449,13 +4453,13 @@ setInterval(()=>{
   const bomberBadge=document.querySelector('#recruitBomber .costBadge');
   if(jetBadge) jetBadge.textContent=airProdBadgeText(ph.airProd&&ph.airProd.jet, JET_COST, now);
   if(bomberBadge) bomberBadge.textContent=airProdBadgeText(ph.airProd&&ph.airProd.bomber, BOMBER_COST, now);
-  // Pulsing hourglass above each recruit button, in the bottom action bar,
-  // for as long as that type has anything queued — a visible-on-the-button
-  // cue for the 3min/5min build, separate from the numeric countdown above.
-  const jetHourglass=document.getElementById('jetHourglass');
-  const bomberHourglass=document.getElementById('bomberHourglass');
-  if(jetHourglass) jetHourglass.classList.toggle('active', !!(ph.airProd && ph.airProd.jet && ph.airProd.jet.length));
-  if(bomberHourglass) bomberHourglass.classList.toggle('active', !!(ph.airProd && ph.airProd.bomber && ph.airProd.bomber.length));
+  // Radar badge above each recruit button, in the bottom action bar, for as
+  // long as that type has anything queued — a visible-on-the-button cue for
+  // the 3min/5min build, separate from the numeric countdown above.
+  const jetRadar=document.getElementById('jetRadar');
+  const bomberRadar=document.getElementById('bomberRadar');
+  if(jetRadar) jetRadar.classList.toggle('active', !!(ph.airProd && ph.airProd.jet && ph.airProd.jet.length));
+  if(bomberRadar) bomberRadar.classList.toggle('active', !!(ph.airProd && ph.airProd.bomber && ph.airProd.bomber.length));
 }, 500);
 document.getElementById('restartBtn').onclick=()=>{
   if(mp){ if(mp.peer) mp.peer.destroy(); mp=null; showModeSelect(); }
@@ -4537,7 +4541,7 @@ function serializeUnit(u){ return {id:u.id, owner:u.owner, type:u.type, x:u.x, y
 // deadlines — performance.now() is measured from each machine's own page
 // load, so a host timestamp means nothing on the client. The client rebases
 // them onto its own clock in deserializeAirProd, which is what keeps its
-// airport clepsydra and recruit-button countdown honest.
+// airport radar scope and recruit-button countdown honest.
 function serializeAirProd(h){
   if(!h.airProd) return null;
   const now=performance.now();
