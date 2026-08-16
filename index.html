@@ -3772,12 +3772,28 @@ const modeHint=document.getElementById('modeHint');
 function placementFootprint(placeType,x,y){
   return (placeType==='place-silo'||placeType==='place-refinery'||placeType==='place-airport') ? [[x,y],[x+1,y],[x,y+1],[x+1,y+1]] : [[x,y]];
 }
+// A 2x2 building placed flush against the base shares a full edge (or
+// even just a corner point) with it, and at that zero-gap distance the
+// silo/refinery/airport art — baked to nearly fill its own 2x2 canvas —
+// visually crowds into the base's corner towers. Big buildings need a
+// 1-tile buffer around the base's own footprint; turrets/turbines can
+// still hug it directly, same as before.
+function nearBaseFootprint(x,y,margin){
+  return !!state && state.houses.some(h=>
+    x>=h.base.x-margin && x<=h.base.x+1+margin && y>=h.base.y-margin && y<=h.base.y+1+margin);
+}
 // Single source of truth for "can this building go here" — shared by the
 // hover preview and the actual click handler so the preview never lies.
+// A refinery needs solid ground under its foundation, so sand is off-limits
+// for it specifically — every other building still allows desert tiles.
 function placementValid(placeType,x,y,ignoreFog){
+  const big=placeType==='place-silo'||placeType==='place-refinery'||placeType==='place-airport';
   return placementFootprint(placeType,x,y).every(([fx,fy])=>
-    inBounds(fx,fy) && terrain[fy][fx]!=='mountain' && (ignoreFog || explored[fy][fx]) &&
-    !buildingMap.has(fx+','+fy) && !spiceMap.has(fx+','+fy) && !isBaseTile(fx,fy));
+    inBounds(fx,fy) && terrain[fy][fx]!=='mountain' &&
+    (placeType!=='place-refinery' || terrain[fy][fx]!=='desert') &&
+    (ignoreFog || explored[fy][fx]) &&
+    !buildingMap.has(fx+','+fy) && !spiceMap.has(fx+','+fy) &&
+    (big ? !nearBaseFootprint(fx,fy,1) : !isBaseTile(fx,fy)));
 }
 const placePreview=new PIXI.Graphics();
 placePreview.visible=false;
@@ -4722,11 +4738,11 @@ function applyRemoteCommand(msg){
     queueBuildJob(()=>applyAirportUpgrade(house, msg.key));
   } else if(msg.kind==='upgradeBase'){
     queueBuildJob(()=>applyBaseUpgrade(house));
-  } else if(msg.kind==='buildTurbine' || msg.kind==='buildSilo' || msg.kind==='buildTurret'){
+  } else if(msg.kind==='buildTurbine' || msg.kind==='buildTurret'){
     const key=msg.x+','+msg.y;
-    const type=msg.kind==='buildTurbine'?'turbine':msg.kind==='buildSilo'?'silo':'turret';
-    const cost=type==='turbine'?TURBINE_COST:type==='silo'?SILO_COST:TURRET_COST;
-    const doneMsg='House '+house.name+(type==='turbine'?' raises a wind turbine.':type==='silo'?' builds a silo.':' builds a turret.');
+    const type=msg.kind==='buildTurbine'?'turbine':'turret';
+    const cost=type==='turbine'?TURBINE_COST:TURRET_COST;
+    const doneMsg='House '+house.name+(type==='turbine'?' raises a wind turbine.':' builds a turret.');
     queueBuildJob(()=>{
       const ok=house.spice>=cost && !buildingMap.has(key) && !spiceMap.has(key)
         && terrain[msg.y] && terrain[msg.y][msg.x]!=='mountain' && !isBaseTile(msg.x,msg.y);
@@ -4734,13 +4750,16 @@ function applyRemoteCommand(msg){
       house.spice-=cost;
       completeStructure(house,type,msg.x,msg.y,cost,doneMsg);
     });
-  } else if(msg.kind==='buildRefinery' || msg.kind==='buildAirport'){
-    const type=msg.kind==='buildRefinery'?'refinery':'airport';
-    const cost=type==='refinery'?REFINERY_COST:AIRPORT_COST;
-    const doneMsg='House '+house.name+(type==='refinery'?' completes a refinery.':' completes an airport.');
+  // Silo/refinery/airport are all 2x2 footprints, so every tile they'd occupy
+  // — not just the clicked corner — needs revalidating here on the host.
+  } else if(msg.kind==='buildSilo' || msg.kind==='buildRefinery' || msg.kind==='buildAirport'){
+    const type=msg.kind==='buildSilo'?'silo':msg.kind==='buildRefinery'?'refinery':'airport';
+    const cost=type==='silo'?SILO_COST:type==='refinery'?REFINERY_COST:AIRPORT_COST;
+    const doneMsg='House '+house.name+(type==='silo'?' builds a silo.':type==='refinery'?' completes a refinery.':' completes an airport.');
     queueBuildJob(()=>{
       const footprint=[[msg.x,msg.y],[msg.x+1,msg.y],[msg.x,msg.y+1],[msg.x+1,msg.y+1]];
-      const blocked=footprint.some(([fx,fy])=> !inBounds(fx,fy) || terrain[fy][fx]==='mountain' || buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy) || isBaseTile(fx,fy));
+      const blocked=footprint.some(([fx,fy])=> !inBounds(fx,fy) || terrain[fy][fx]==='mountain'
+        || (type==='refinery' && terrain[fy][fx]==='desert') || buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy) || nearBaseFootprint(fx,fy,1));
       if(blocked || house.spice<cost) return;
       house.spice-=cost;
       completeStructure(house,type,msg.x,msg.y,cost,doneMsg);
