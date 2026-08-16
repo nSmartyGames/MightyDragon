@@ -282,6 +282,7 @@
   #upgMenu .urow .up{ color:#7ddc7d; }
   #upgMenu .upg-cost{ margin-top:4px; color:var(--spice); letter-spacing:1px; }
   #upgMenu button:disabled{ opacity:.45; cursor:not-allowed; }
+  #upgRepair.on{ background:linear-gradient(180deg,#2c5c2c,#173a17); border-color:#4ad34a; color:#c8ffc8; }
   #modeHint{
     position:absolute; top:66px; left:50%; transform:translateX(-50%);
     background:rgba(20,12,4,.85); border:1px solid var(--rust); border-radius:12px;
@@ -352,6 +353,7 @@
         <div class="ctx-title" id="upgTitle">Structure</div>
         <div class="upg-stats" id="upgStats"></div>
         <button id="upgBuy">Upgrade</button>
+        <button id="upgRepair">Repair</button>
         <button id="upgClose">Close</button>
       </div>
       <div id="actionBar">
@@ -526,6 +528,11 @@ const TURBINE_DMG_BONUS=5; // each wind turbine adds +5 damage to every shot the
 // Building hit points — much softer than the 10000hp stronghold, so a raid
 // that reaches the interior of a base can actually knock out its economy.
 const BUILDING_HP={ turbine:350, silo:450, refinery:450, airport:500, turret:400 };
+// Repair mode (turret/airport/stronghold, toggled from the upgrade menu):
+// spice drains continuously at REPAIR_SPICE_PER_SEC and converts to hull at
+// REPAIR_HP_PER_SPICE — together, 1000 HP per 100 spice. See
+// tickStructureRepairs.
+const REPAIR_HP_PER_SPICE=10, REPAIR_SPICE_PER_SEC=10;
 const TURRET_COST=90;
 const TURRET_DMG=150, TURRET_COOLDOWN_MS=2000;
 const TURRET_RANGE=5;
@@ -3326,6 +3333,22 @@ function tickTurretDefense(house){
     if(t) applyCombatUnitAttack(house,b,t.targetHouse,t.targetUnit,false);
   });
 }
+// Drains a house's spice into hull for every turret/airport/stronghold with
+// repair mode on, at REPAIR_SPICE_PER_SEC -> REPAIR_HP_PER_SPICE HP/spice.
+// Auto-switches off once a structure tops out or the house runs out of spice
+// to spend on it, same as the button in the upgrade menu would.
+function tickStructureRepairs(house){
+  const spend=need=>{ const s=Math.min(need,house.spice); house.spice-=s; return s*REPAIR_HP_PER_SPICE; };
+  if(house.repairingBase){
+    if(house.baseHp>=house.baseHpMax || house.spice<=0) house.repairingBase=false;
+    else house.baseHp=Math.min(house.baseHpMax, house.baseHp+spend(REPAIR_SPICE_PER_SEC*TICK_MS/1000));
+  }
+  buildingMap.forEach(b=>{
+    if(b.owner!==house.id || !b.repairing) return;
+    if(b.hp>=b.hpMax || house.spice<=0){ b.repairing=false; return; }
+    b.hp=Math.min(b.hpMax, b.hp+spend(REPAIR_SPICE_PER_SEC*TICK_MS/1000));
+  });
+}
 function stepHouseUnits(house){
   house.units.forEach(u=>{
     if(!u.order || u.moving) return;
@@ -3758,6 +3781,7 @@ function gameTick(){
     autoAssignHarvesters(h);
     tickAirProduction(h);
     tickTurretDefense(h);
+    tickStructureRepairs(h);
   });
 
   const ph=playerHouse();
@@ -3891,11 +3915,12 @@ function renderUpgradeMenu(){
   const ph=playerHouse();
   if(!ph){ closeUpgradeMenu(); return; }
   const rows=[];
-  let lvl, ladder, cur, next, title;
+  let lvl, ladder, cur, next, title, hp, hpMax, repairing;
   if(upgTarget.kind==='base'){
     ladder=BASE_LEVELS; lvl=baseLevel(ph);
     cur=ladder[lvl-1]; next=ladder[lvl]||null;
     title=cur.name+' — Lv'+lvl;
+    hp=ph.baseHp; hpMax=ph.baseHpMax; repairing=!!ph.repairingBase;
     rows.push(['Power', fmtK(Math.max(0,Math.ceil(ph.baseHp)))+'/'+fmtK(cur.hpMax), next?fmtK(next.hpMax):null]);
     rows.push(['Damage bonus', '+'+cur.power, next?('+'+next.power):null]);
   } else {
@@ -3903,6 +3928,7 @@ function renderUpgradeMenu(){
     // Destroyed while the menu was open — nothing left to upgrade.
     if(!hit || hit.b.owner!==ph.id || hit.b.type!==upgTarget.kind){ closeUpgradeMenu(); return; }
     const b=hit.b;
+    hp=b.hp; hpMax=b.hpMax; repairing=!!b.repairing;
     if(upgTarget.kind==='airport'){
       ladder=AIRPORT_LEVELS; lvl=airportLevel(b);
       cur=ladder[lvl-1]; next=ladder[lvl]||null;
@@ -3936,6 +3962,15 @@ function renderUpgradeMenu(){
   const buy=document.getElementById('upgBuy');
   buy.textContent = next ? ('Upgrade ('+next.cost+')') : 'Max level';
   buy.disabled = !next || ph.spice<next.cost || gameOver;
+  // Repair mode: while on, hull drains the house's spice at REPAIR_SPICE_PER_SEC
+  // and converts it to hull at REPAIR_HP_PER_SPICE (1000 HP per 100 spice) —
+  // see tickStructureRepairs. Full hull disables the toggle; the tick itself
+  // also switches it back off once the hull tops out or spice runs dry.
+  const full=hp>=hpMax;
+  const repair=document.getElementById('upgRepair');
+  repair.textContent = full ? 'Hull full' : (repairing ? 'Repairing… (stop)' : 'Repair ('+REPAIR_SPICE_PER_SEC+'/s)');
+  repair.classList.toggle('on', repairing && !full);
+  repair.disabled = full || gameOver;
   upgMenu.style.top=(document.getElementById('hudBar').getBoundingClientRect().bottom+8)+'px';
   upgMenu.style.display='flex';
 }
@@ -3993,6 +4028,31 @@ function applyBaseUpgrade(house){
   redrawSpiceAndBuildings(); renderStats();
   return true;
 }
+// Flips repair mode for a turret/airport/stronghold — instant, not a
+// BUILD_TIME_MS job, since it's a standing toggle rather than a one-shot
+// purchase. tickStructureRepairs does the actual draining every gameTick.
+// Shared by the local click handler and the host's relayed-command path.
+function applyToggleRepair(house,target){
+  if(!target) return false;
+  if(target.kind==='base'){ house.repairingBase=!house.repairingBase; return true; }
+  const hit=resolveBuildingTarget(target.key);
+  if(!hit || hit.b.owner!==house.id || hit.b.type!==target.kind) return false;
+  hit.b.repairing=!hit.b.repairing;
+  return true;
+}
+document.getElementById('upgRepair').onclick=()=>{
+  if(!upgTarget || gameOver) return;
+  const ph=playerHouse();
+  if(!ph) return;
+  if(isMpClient()){
+    // The client owns no simulation — ask the host to flip it, then wait for
+    // the next snapshot to show the new state.
+    mpSend({type:'cmd', kind:'toggleRepair', target:upgTarget});
+    addLog('Repair mode requested.');
+    return;
+  }
+  if(applyToggleRepair(ph,upgTarget)) renderUpgradeMenu();
+};
 document.getElementById('upgBuy').onclick=()=>{
   if(!upgTarget || gameOver) return;
   const ph=playerHouse();
@@ -4565,6 +4625,7 @@ function deserializeAirProd(sent){
 function serializeHouse(h){
   return { id:h.id, name:h.name, color:h.color, colorCss:h.colorCss, alive:h.alive,
     baseHp:h.baseHp, baseHpMax:h.baseHpMax, baseLvl:h.baseLvl||1, base:h.base,
+    repairingBase:!!h.repairingBase,
     spice:h.spice, cap:h.cap, power:h.power, airProd:serializeAirProd(h),
     units:h.units.map(serializeUnit) };
 }
@@ -4591,6 +4652,7 @@ function buildSnapshot(){
 function deserializeHouse(hd){
   return { id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss, alive:hd.alive,
     ai:false, baseHp:hd.baseHp, baseHpMax:hd.baseHpMax, baseLvl:hd.baseLvl||1, base:hd.base,
+    repairingBase:!!hd.repairingBase,
     spice:hd.spice, cap:hd.cap, power:hd.power, airProd:deserializeAirProd(hd.airProd),
     units:hd.units.map(u=>({...u, order:null, dir:0, frame:0, moving:false, sprite:null, moveFrom:null, moveTo:null, moveStart:0})),
     spentEconomy:0, spentMilitary:0, lastAttacker:null };
@@ -4639,6 +4701,7 @@ function applyMpSnapshot(msg){
   msg.houses.forEach(hd=>{
     const h=houseById(hd.id); if(!h) return;
     h.alive=hd.alive; h.baseHp=hd.baseHp; h.spice=hd.spice; h.cap=hd.cap; h.power=hd.power;
+    h.repairingBase=!!hd.repairingBase;
     // Both move only when a stronghold upgrade lands, but the client mirrors
     // rather than simulates, so they have to travel with every snapshot.
     h.baseHpMax=hd.baseHpMax; h.baseLvl=hd.baseLvl||1;
@@ -4766,6 +4829,10 @@ function applyRemoteCommand(msg){
     queueBuildJob(()=>applyAirportUpgrade(house, msg.key));
   } else if(msg.kind==='upgradeBase'){
     queueBuildJob(()=>applyBaseUpgrade(house));
+  } else if(msg.kind==='toggleRepair'){
+    // Instant, not a queued build job — repair mode is a standing toggle,
+    // not a one-shot purchase.
+    applyToggleRepair(house, msg.target);
   } else if(msg.kind==='buildTurbine' || msg.kind==='buildTurret'){
     const key=msg.x+','+msg.y;
     const type=msg.kind==='buildTurbine'?'turbine':'turret';
