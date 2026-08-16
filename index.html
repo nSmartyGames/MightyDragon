@@ -2809,11 +2809,15 @@ function beginWormStep(w,nx,ny){
   w.moveFrom={x:w.x*SZ+SZ/2,y:w.y*SZ+SZ/2}; w.x=nx; w.y=ny;
   w.moveTo={x:w.x*SZ+SZ/2,y:w.y*SZ+SZ/2}; w.moveStart=performance.now(); w.moving=true;
 }
-function findFreeTileNear(cx,cy){
+// avoidDesert is for the AI's own turbine placement — it needs solid ground
+// same as the player does via placementValid, but this helper (also used for
+// harvester move-to-spot and turret placement) is otherwise fog-independent
+// and shouldn't gain a desert restriction those other callers never asked for.
+function findFreeTileNear(cx,cy,avoidDesert){
   for(let r=1;r<8;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
     const x=cx+dx,y=cy+dy;
     if(!inBounds(x,y)) continue;
-    if(terrain[y][x]!=='mountain' && !buildingMap.has(x+','+y) && !isBaseTile(x,y)) return {x,y};
+    if(terrain[y][x]!=='mountain' && (!avoidDesert || terrain[y][x]!=='desert') && !buildingMap.has(x+','+y) && !isBaseTile(x,y)) return {x,y};
   }
   return {x:cx,y:cy};
 }
@@ -3560,7 +3564,7 @@ function aiTurnForHouse(house){
       const pad=findOwnedAirport(house);
       applyAirportUpgrade(house, pad.x+','+pad.y);
     } else if(budget>=TURBINE_COST){
-      const spot=findFreeTileNear(house.base.x,house.base.y);
+      const spot=findFreeTileNear(house.base.x,house.base.y,true);
       buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine});
       house.spice-=TURBINE_COST; house.power+=TURBINE_DMG_BONUS; spentEcon+=TURBINE_COST; redrawSpiceAndBuildings();
     } else if(budget>=SILO_COST){
@@ -3782,15 +3786,16 @@ function nearBaseFootprint(x,y,margin){
   return !!state && state.houses.some(h=>
     x>=h.base.x-margin && x<=h.base.x+1+margin && y>=h.base.y-margin && y<=h.base.y+1+margin);
 }
+// Refinery/turbine/airport all need solid ground under their foundation, so
+// sand is off-limits for those specifically — silo and turret still allow it.
+const NEEDS_SOLID_GROUND=new Set(['place-refinery','place-turbine','place-airport']);
 // Single source of truth for "can this building go here" — shared by the
 // hover preview and the actual click handler so the preview never lies.
-// A refinery needs solid ground under its foundation, so sand is off-limits
-// for it specifically — every other building still allows desert tiles.
 function placementValid(placeType,x,y,ignoreFog){
   const big=placeType==='place-silo'||placeType==='place-refinery'||placeType==='place-airport';
   return placementFootprint(placeType,x,y).every(([fx,fy])=>
     inBounds(fx,fy) && terrain[fy][fx]!=='mountain' &&
-    (placeType!=='place-refinery' || terrain[fy][fx]!=='desert') &&
+    (!NEEDS_SOLID_GROUND.has(placeType) || terrain[fy][fx]!=='desert') &&
     (ignoreFog || explored[fy][fx]) &&
     !buildingMap.has(fx+','+fy) && !spiceMap.has(fx+','+fy) &&
     (big ? !nearBaseFootprint(fx,fy,1) : !isBaseTile(fx,fy)));
@@ -4745,7 +4750,8 @@ function applyRemoteCommand(msg){
     const doneMsg='House '+house.name+(type==='turbine'?' raises a wind turbine.':' builds a turret.');
     queueBuildJob(()=>{
       const ok=house.spice>=cost && !buildingMap.has(key) && !spiceMap.has(key)
-        && terrain[msg.y] && terrain[msg.y][msg.x]!=='mountain' && !isBaseTile(msg.x,msg.y);
+        && terrain[msg.y] && terrain[msg.y][msg.x]!=='mountain'
+        && (type!=='turbine' || terrain[msg.y][msg.x]!=='desert') && !isBaseTile(msg.x,msg.y);
       if(!ok) return;
       house.spice-=cost;
       completeStructure(house,type,msg.x,msg.y,cost,doneMsg);
@@ -4759,7 +4765,7 @@ function applyRemoteCommand(msg){
     queueBuildJob(()=>{
       const footprint=[[msg.x,msg.y],[msg.x+1,msg.y],[msg.x,msg.y+1],[msg.x+1,msg.y+1]];
       const blocked=footprint.some(([fx,fy])=> !inBounds(fx,fy) || terrain[fy][fx]==='mountain'
-        || (type==='refinery' && terrain[fy][fx]==='desert') || buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy) || nearBaseFootprint(fx,fy,1));
+        || ((type==='refinery'||type==='airport') && terrain[fy][fx]==='desert') || buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy) || nearBaseFootprint(fx,fy,1));
       if(blocked || house.spice<cost) return;
       house.spice-=cost;
       completeStructure(house,type,msg.x,msg.y,cost,doneMsg);
