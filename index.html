@@ -2866,6 +2866,32 @@ function findOwnedAirport(house){
   return found;
 }
 function hasAirport(house){ return !!findOwnedAirport(house); }
+// The refinery a house rolls its harvesters out of, or null. A refinery IS the
+// harvester works — the one a new harvester will unload at — so a house that
+// owns one deploys there instead of at the stronghold, which can sit half the
+// map away by the time the second refinery goes up. Closest to the stronghold
+// wins when there are several, and only the primary tile of the 2x2 footprint
+// is ever returned (the other three carry no coordinates of their own).
+function findOwnedRefinery(house){
+  if(!house) return null;
+  let found=null,bestD=Infinity;
+  buildingMap.forEach(b=>{
+    if(b.owner!==house.id || b.type!=='refinery' || b.primary===false) return;
+    const d=Math.abs(b.x-house.base.x)+Math.abs(b.y-house.base.y);
+    if(d<bestD){ bestD=d; found=b; }
+  });
+  return found;
+}
+// Deploy point for a freshly built unit: the refinery for harvesters when the
+// house has one, the stronghold for everything else (and for a harvester in a
+// house with no refinery yet).
+function unitSpawnOrigin(house,type){
+  if(type==='harvester'){
+    const ref=findOwnedRefinery(house);
+    if(ref) return {x:ref.x,y:ref.y};
+  }
+  return {x:house.base.x,y:house.base.y};
+}
 // Build-time multiplier from the house's best airport (1 = the flat figure).
 function airportSpeedOf(house){
   const a=findOwnedAirport(house);
@@ -2984,10 +3010,12 @@ function clearBuildJobs(){
   buildRadarTimers.clear();
 }
 // Shared tail of every unit order that matures: the unit pops out next to the
-// house's stronghold, exactly where the instant version used to put it.
+// house's stronghold — or, for a harvester, next to the refinery it will be
+// hauling to (see unitSpawnOrigin).
 function spawnBuiltUnit(house,type,msg){
   if(!house.alive) return;
-  const spawn=findFreeSpawnTile(house.base.x, house.base.y);
+  const origin=unitSpawnOrigin(house,type);
+  const spawn=findFreeSpawnTile(origin.x, origin.y);
   const u=makeUnit(house.id,type,spawn.x,spawn.y);
   house.units.push(u); ensureSprite(u);
   addLog(msg); renderStats();
@@ -3549,8 +3577,9 @@ function aiTurnForHouse(house){
   if(Math.random()<econShare){
     if(budget>=HARVESTER_COST && house.units.filter(u=>u.type==='harvester').length<7 && Math.random()<0.6){
       house.spice-=HARVESTER_COST; spentEcon+=HARVESTER_COST;
-      const spot=findFreeTileNear(house.base.x,house.base.y);
-      const spawn=findFreeSpawnTile(house.base.x,house.base.y);
+      const origin=unitSpawnOrigin(house,'harvester');
+      const spot=findFreeTileNear(origin.x,origin.y);
+      const spawn=findFreeSpawnTile(origin.x,origin.y);
       const h=makeUnit(house.id,'harvester',spawn.x,spawn.y); h.order={kind:'move',x:spot.x,y:spot.y};
       house.units.push(h); ensureSprite(h); addLog('House '+house.name+' deploys a new harvester.');
     } else if(hasAirport(house) && !canBuildGunships(house) && budget>=AIRPORT_LEVELS[1].cost && Math.random()<0.35){
@@ -4339,7 +4368,10 @@ document.getElementById('buildHarvester').onclick=()=>{
   if(isMpClient()){ mpSend({type:'cmd', kind:'buildHarvester'}); addLog('Harvester requested.'); startPlayerBuild('buildHarvester'); return; }
   ph.spice-=HARVESTER_COST;
   addLog('Harvester on the assembly line.');
-  startPlayerBuild('buildHarvester', ()=>spawnBuiltUnit(ph,'harvester','New harvester deployed.'));
+  // The message is built when the order matures, not when it is placed — a
+  // refinery finished during those 5 seconds is the one it rolls out of.
+  startPlayerBuild('buildHarvester', ()=>spawnBuiltUnit(ph,'harvester',
+    findOwnedRefinery(ph) ? 'New harvester rolls out of the refinery.' : 'New harvester deployed at the stronghold.'));
   renderStats();
 };
 document.getElementById('buildTurbine').onclick=()=>{
