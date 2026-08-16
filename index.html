@@ -1970,19 +1970,40 @@ function carveGrassArea(cx,cy,r){
     if(inBounds(x,y) && dx*dx+dy*dy<=r*r) terrain[y][x]='grass';
   }
 }
+// A spice field is a cluster of 4-6 tiles radiating out from a rich center
+// tile — richness tapers with distance so the field reads as a blob that's
+// dense in the middle and thins out toward its margins, not a flat patch.
+function placeSpiceField(cx,cy,centerAmount){
+  spiceMap.set(cx+','+cy, {x:cx,y:cy,amount:centerAmount});
+  const fieldSize=4+Math.floor(Math.random()*3); // 4-6 tiles total, center included
+  const ring=[];
+  for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+    if(dx===0 && dy===0) continue;
+    ring.push({dx,dy,d:Math.sqrt(dx*dx+dy*dy)});
+  }
+  ring.sort((a,b)=>a.d-b.d);
+  let added=0;
+  for(const r of ring){
+    if(added>=fieldSize-1) break;
+    const x=cx+r.dx, y=cy+r.dy;
+    if(!inBounds(x,y) || terrain[y][x]!=='desert') continue;
+    const key=x+','+y;
+    if(spiceMap.has(key)) continue;
+    const falloff=Math.max(0.25, 1-r.d/3); // outer ring tiles taper down toward the margins
+    spiceMap.set(key, {x,y,amount:Math.floor(centerAmount*falloff)});
+    added++;
+  }
+}
 function scatterSpice(){
   spiceMap=new Map();
-  let placed=0, target=75;
+  let placed=0, targetFields=15;
   let guard=0;
-  while(placed<target && guard<6000){
+  while(placed<targetFields && guard<6000){
     guard++;
     const x=Math.floor(Math.random()*MAPW), y=Math.floor(Math.random()*MAPH);
-    if(terrain[y][x]==='desert'){
-      const key=x+','+y;
-      if(!spiceMap.has(key) && !isNearBase(x,y,4)){
-        spiceMap.set(key, {x,y,amount:80+Math.floor(Math.random()*90)});
-        placed++;
-      }
+    if(terrain[y][x]==='desert' && !spiceMap.has(x+','+y) && !isNearBase(x,y,4)){
+      placeSpiceField(x,y,80+Math.floor(Math.random()*90));
+      placed++;
     }
   }
 }
@@ -2034,7 +2055,8 @@ function redrawSpiceAndBuildings(){
   buildingMap.forEach(b=>{
     if(b.primary===false) return; // footprint-only tile of a multi-tile building; drawn once at its origin
     const tex = b.type==='turbine'?TEX.turbine : b.type==='turret'?TEX.turret : b.type==='silo'?TEX.silo : b.type==='airport'?TEX.airport : TEX.refineryBody;
-    const sp=new PIXI.Sprite(tex); sp.x=b.x*SZ; sp.y=b.y*SZ; sp.scale.set(ZOOM);
+    const sp=new PIXI.Sprite(tex); sp.x=b.x*SZ; sp.y=b.y*SZ;
+    sp.scale.set(b.type==='silo'?ZOOM*2:ZOOM); // silo's source art is 1 tile, stretched to fill its 2x2 footprint
     const owner=houseById(b.owner);
     // The airport is the one building left untinted — it's a runway now, and
     // tinting tarmac by house color turns it back into an unreadable slab.
@@ -2057,7 +2079,7 @@ function redrawSpiceAndBuildings(){
       rotor._rotorPhase=((b.x*5+b.y*11)%6)*(Math.PI/3);
       layerBuildings.addChild(rotor);
     }
-    const w=(b.type==='refinery'||b.type==='airport')?2:1; // both are 2x2 tiles wide
+    const w=(b.type==='refinery'||b.type==='airport'||b.type==='silo')?2:1; // silo/refinery/airport are all 2x2 tiles wide
     drawStaticHpBar(layerBuildings, b.x*SZ+w*SZ/2, b.y*SZ-4, SZ*w*0.7, b.hp, b.hpMax);
     if(b.type==='refinery'){
       // A white flag with the spice mark, planted at the refinery's near
@@ -2802,7 +2824,7 @@ function findFreeTileNear(cx,cy){
   }
   return {x:cx,y:cy};
 }
-// Like findFreeTileNear but for a 2x2 footprint (airport/refinery) — scans
+// Like findFreeTileNear but for a 2x2 footprint (silo/airport/refinery) — scans
 // outward for a spot where the whole footprint is clear, not just one tile.
 // ignoreFog lets newGame()'s free-starting-airport grant use this before
 // any tile has been explored yet (placementValid's explored check is right
@@ -2978,7 +3000,7 @@ function spawnBuiltUnit(house,type,msg){
 // the same square first. Rather than silently overwriting whatever got there,
 // a blocked site hands the spice back.
 function completeStructure(house,type,x,y,cost,doneMsg){
-  const big = type==='refinery' || type==='airport';
+  const big = type==='refinery' || type==='airport' || type==='silo';
   const footprint = big ? [[x,y],[x+1,y],[x,y+1],[x+1,y+1]] : [[x,y]];
   if(!house.alive) return;
   if(footprint.some(([fx,fy])=>buildingMap.has(fx+','+fy))){
@@ -3194,7 +3216,7 @@ function resolveBuildingTarget(key){
   return {key,b};
 }
 function buildingScreenPos(b){
-  const w=(b.type==='refinery'||b.type==='airport')?2:1; // both occupy a 2x2 footprint from their primary tile
+  const w=(b.type==='refinery'||b.type==='airport'||b.type==='silo')?2:1; // all three occupy a 2x2 footprint from their primary tile
   return { x:(b.x+w/2)*SZ, y:(b.y+w/2)*SZ };
 }
 // Applies raw damage to an already-resolved building and handles the shared
@@ -3498,7 +3520,7 @@ function maybeSpawnSpice(){
     for(let tries=0;tries<25;tries++){
       const x=Math.floor(Math.random()*MAPW), y=Math.floor(Math.random()*MAPH);
       if(terrain[y][x]==='desert' && !spiceMap.has(x+','+y)){
-        spiceMap.set(x+','+y, {x,y,amount:60+Math.floor(Math.random()*70)}); break;
+        placeSpiceField(x,y,60+Math.floor(Math.random()*70)); break;
       }
     }
   }
@@ -3549,9 +3571,17 @@ function aiTurnForHouse(house){
       buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine});
       house.spice-=TURBINE_COST; house.power+=TURBINE_DMG_BONUS; spentEcon+=TURBINE_COST; redrawSpiceAndBuildings();
     } else if(budget>=SILO_COST){
-      const spot=findFreeTileNear(house.base.x,house.base.y);
-      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:house.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo});
-      house.spice-=SILO_COST; house.cap+=SILO_CAP_BONUS; spentEcon+=SILO_COST; redrawSpiceAndBuildings();
+      const spot=findFreeFootprintNear(house.base.x,house.base.y,'place-silo');
+      if(spot){
+        const primaryKey=spot.x+','+spot.y;
+        placementFootprint('place-silo',spot.x,spot.y).forEach(([fx,fy],i)=>{
+          const entry=(i===0)
+            ? {x:fx,y:fy,type:'silo',owner:house.id,primary:true,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}
+            : {x:fx,y:fy,type:'silo',owner:house.id,primary:false,primaryKey};
+          buildingMap.set(fx+','+fy, entry);
+        });
+        house.spice-=SILO_COST; house.cap+=SILO_CAP_BONUS; spentEcon+=SILO_COST; redrawSpiceAndBuildings();
+      }
     } else if(budget>=TURRET_COST && Math.random()<0.4){
       const spot=findFreeTileNear(house.base.x,house.base.y);
       buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turret',owner:house.id,lvl:1,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret});
@@ -3745,9 +3775,9 @@ const ctxMenu=document.getElementById('ctxMenu');
 const modeHint=document.getElementById('modeHint');
 
 // Footprint a building of this uiMode type would occupy if placed at (x,y) —
-// single tile for turbine/silo, 2x2 for the refinery/airport (top-left anchored).
+// single tile for turbine, 2x2 for the silo/refinery/airport (top-left anchored).
 function placementFootprint(placeType,x,y){
-  return (placeType==='place-refinery'||placeType==='place-airport') ? [[x,y],[x+1,y],[x,y+1],[x+1,y+1]] : [[x,y]];
+  return (placeType==='place-silo'||placeType==='place-refinery'||placeType==='place-airport') ? [[x,y],[x+1,y],[x,y+1],[x+1,y+1]] : [[x,y]];
 }
 // Single source of truth for "can this building go here" — shared by the
 // hover preview and the actual click handler so the preview never lies.
@@ -3764,7 +3794,7 @@ function isPlaceMode(){ return !!(uiMode && (uiMode.type==='place-turbine' || ui
 function updatePlacementPreview(e){
   if(!isPlaceMode()){ hidePlacementPreview(); return; }
   const {x,y}=tileFromEvent(e);
-  const w=(uiMode.type==='place-refinery'||uiMode.type==='place-airport')?2:1;
+  const w=(uiMode.type==='place-silo'||uiMode.type==='place-refinery'||uiMode.type==='place-airport')?2:1;
   const valid=inBounds(x,y) && placementValid(uiMode.type,x,y);
   const color=valid?0x33cc33:0xdd3333;
   placePreview.clear();
@@ -4306,7 +4336,7 @@ document.getElementById('buildTurbine').onclick=()=>{
 document.getElementById('buildSilo').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<SILO_COST || gameOver) return;
-  uiMode={type:'place-silo'}; modeHint.textContent='PLACE SILO — choose a grass/desert tile'; modeHint.style.display='block';
+  uiMode={type:'place-silo'}; modeHint.textContent='PLACE SILO — choose the top-left of a clear 2x2 area'; modeHint.style.display='block';
 };
 document.getElementById('buildRefinery').onclick=()=>{
   const ph=playerHouse();
@@ -4592,6 +4622,10 @@ function applyMpSnapshot(msg){
         // harvestAt runs on the host and _lastHarvest is a host timestamp that
         // would mean nothing here, so the sand ramp is timed off the delta.
         if(u.type==='harvester' && ud.carrying>u.carrying) u._lastHarvest=performance.now();
+        // Client never runs stepHouseUnits/beginStep itself, so dir has to be
+        // derived here from the position delta each snapshot — otherwise
+        // sprites on the client never rotate to face their movement.
+        const dIdx=dirIndexFromDelta(ud.x-u.x, ud.y-u.y); if(dIdx!==null) u.dir=dIdx;
         u.x=ud.x; u.y=ud.y; u.hp=ud.hp; u.carrying=ud.carrying; u.moving=false;
         if(u.sprite){ u.sprite.x=u.x*SZ+SZ/2; u.sprite.y=u.y*SZ+SZ/2; }
       }
@@ -4953,8 +4987,14 @@ function newGame(chosenId, rivalId){
   // Every house starts with a silo already built next to its stronghold, so
   // harvesters have somewhere to unload from turn one instead of spilling cargo.
   state.houses.forEach(h=>{
-    const spot=findFreeTileNear(h.base.x,h.base.y);
-    buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'silo',owner:h.id,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo});
+    const spot=findFreeFootprintNear(h.base.x,h.base.y,'place-silo') || findFreeTileNear(h.base.x,h.base.y);
+    const primaryKey=spot.x+','+spot.y;
+    placementFootprint('place-silo',spot.x,spot.y).forEach(([fx,fy],i)=>{
+      const entry=(i===0)
+        ? {x:fx,y:fy,type:'silo',owner:h.id,primary:true,hp:BUILDING_HP.silo,hpMax:BUILDING_HP.silo}
+        : {x:fx,y:fy,type:'silo',owner:h.id,primary:false,primaryKey};
+      buildingMap.set(fx+','+fy, entry);
+    });
     h.cap+=SILO_CAP_BONUS;
   });
   // Every house also starts with an airport already built next to its
