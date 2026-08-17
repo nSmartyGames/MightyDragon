@@ -116,8 +116,27 @@
   }
   #actionBar button.iconBtn{
     flex:1 1 0; width:auto; height:60px; padding:0; position:relative;
-    background-size:34px 34px; background-position:center; background-repeat:no-repeat;
+    background-size:34px 34px; background-position:center 62%; background-repeat:no-repeat;
   }
+  /* Name of what the button builds, across the top of it — the icons alone
+     read as a row of unlabelled glyphs. The icon is nudged down (62% above)
+     to leave this strip its own space. */
+  .btnLabel{
+    position:absolute; left:0; right:0; top:3px; text-align:center;
+    font-size:9px; letter-spacing:.4px; text-transform:uppercase;
+    color:var(--sand-2); pointer-events:none; overflow:hidden;
+    white-space:nowrap; text-overflow:ellipsis; padding:0 2px;
+  }
+  /* The grid draw of the three structures that need a turbine of their own. */
+  .powerTag{
+    position:absolute; left:2px; bottom:1px; font-size:9px; color:var(--sand-2);
+    background:rgba(10,6,2,.75); padding:1px 3px; border-radius:3px; line-height:1.2;
+  }
+  /* Nothing spare on the grid: the button stays clickable so pressing it can
+     explain itself in the log, but reads as blocked and its ⚡ tag lights up. */
+  #actionBar button.iconBtn.noPower{ opacity:.55; border-color:#7a3a1c; }
+  #actionBar button.iconBtn.noPower .powerTag{ color:#ffb37a; background:rgba(90,20,4,.85); }
+  .statItem.powerTight #pPower{ color:#ffb37a; }
   /* Six-wheeled haul truck, matching the map sprite haulTruckCanvas draws. */
   #buildHarvester{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g fill="%23888888"><rect x="0.4" y="2.3" width="2.1" height="4.8" rx="0.6"/><rect x="13.5" y="2.3" width="2.1" height="4.8" rx="0.6"/><rect x="0.1" y="8.7" width="4.1" height="5.6" rx="0.7"/><rect x="11.8" y="8.7" width="4.1" height="5.6" rx="0.7"/></g><rect x="2.9" y="0.6" width="10.2" height="14.7" rx="1.2" fill="%23ffffff"/><rect x="3.4" y="1.4" width="9.2" height="2.6" rx="0.5" fill="%23bfbfbf"/><rect x="4" y="1.9" width="3.2" height="1.4" rx="0.3" fill="%233a4f63"/><rect x="3.8" y="5.6" width="8.4" height="8.8" rx="0.6" fill="%23989898"/></svg>'); }
   #buildTurbine{ background-image:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaklEQVR4nM2SQQrAIAwEN6XvTb4SP+hXtpdaaNFEsIXOSYkZNioQwJPozBYVZ1gWyKiQRRcRAYB91Gxm176UMheHD1Q1vcRQQJK11lBwG6HN1ciagT8843cCVWVv/XqC7kdquHsqWE6wzAGHm0qrAAzDnwAAAABJRU5ErkJggg=='); }
@@ -304,7 +323,8 @@
     .statCombo{ height:28px; gap:6px; padding:0 7px; }
     #actionBar{ gap:2px; padding:5px; }
     #actionBar button.iconBtn{ height:48px; background-size:26px 26px; }
-    .costBadge{ font-size:8px; }
+    .costBadge, .powerTag{ font-size:8px; }
+    .btnLabel{ font-size:7px; top:2px; letter-spacing:0; }
     #minimap{ width:90px; height:90px; top:52px; right:5px; }
     #modeHint{ top:52px; }
     .legend{ top:52px; max-width:60%; }
@@ -324,7 +344,8 @@
     <div class="statCombo">
       <span class="statItem" title="Spice bank"><b>S</b><span id="pSpice">0</span></span>
       <span class="statItem" title="Silo capacity"><b>C</b><span id="pCap">100</span></span>
-      <span class="statItem" title="Power"><b>P</b><span id="pPower">0</span></span>
+      <span class="statItem" id="statPower" title="Power grid — drawn / generated. Each wind turbine generates 6 GW; a refinery, an airport and a turret draw 6 GW each."><b>P</b><span id="pPower">0/0 GW</span></span>
+      <span class="statItem" title="Damage added to every shot your units fire (wind turbines and stronghold levels)"><b>D</b><span id="pDamage">+0</span></span>
       <span class="statItem" title="Army (troopers)"><b>A</b><span id="pArmy">0</span></span>
       <span class="statItem" title="Stronghold"><b>H</b><span id="pStronghold">160/160</span></span>
     </div>
@@ -357,16 +378,16 @@
         <button id="upgClose">Close</button>
       </div>
       <div id="actionBar">
-        <button id="buildHarvester" class="iconBtn" title="Harvester — 60 spice"><span class="costBadge">60</span></button>
-        <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice"><span class="costBadge">50</span></button>
-        <button id="buildSilo" class="iconBtn" title="Silo — 70 spice"><span class="costBadge">70</span></button>
-        <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice"><span class="costBadge">110</span></button>
-        <button id="buildAirport" class="iconBtn" title="Airport runway — 190 spice, builds sky fighters (upgrade it to a gunship pad for cluster gunships)"><span class="costBadge">190</span></button>
-        <button id="buildTurret" class="iconBtn" title="Turret — 90 spice"><span class="costBadge">90</span></button>
-        <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice"><span class="costBadge">25</span></button>
-        <button id="recruitJet" class="iconBtn" title="Sky fighter — 130 spice, needs an airport, 3min build (press again to queue another)"><span class="costBadge">130</span><span class="prodRadar" id="jetRadar"></span></button>
-        <button id="recruitBomber" class="iconBtn" title="Cluster gunship — 220 spice, needs an airport upgraded to a gunship pad, 5min build, bombs a 3x3 block (press again to queue another)"><span class="costBadge">220</span><span class="prodRadar" id="bomberRadar"></span></button>
-        <button id="recruitTank" class="iconBtn" title="Recruit tank — 100 spice"><span class="costBadge">100</span></button>
+        <button id="buildHarvester" class="iconBtn" title="Harvester — 60 spice"><span class="btnLabel">Harvester</span><span class="costBadge">60</span></button>
+        <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice, generates 6 GW for the grid and adds +5 damage to every shot"><span class="btnLabel">Turbine</span><span class="costBadge">50</span></button>
+        <button id="buildSilo" class="iconBtn" title="Silo — 70 spice, draws no power"><span class="btnLabel">Silo</span><span class="costBadge">70</span></button>
+        <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice + 6 GW (one wind turbine of its own)"><span class="btnLabel">Refinery</span><span class="powerTag">⚡6</span><span class="costBadge">110</span></button>
+        <button id="buildAirport" class="iconBtn" title="Airport runway — 190 spice + 6 GW (one wind turbine of its own), builds sky fighters (upgrade it to a gunship pad for cluster gunships)"><span class="btnLabel">Airport</span><span class="powerTag">⚡6</span><span class="costBadge">190</span></button>
+        <button id="buildTurret" class="iconBtn" title="Turret — 90 spice + 6 GW (one wind turbine of its own)"><span class="btnLabel">Turret</span><span class="powerTag">⚡6</span><span class="costBadge">90</span></button>
+        <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice"><span class="btnLabel">Trooper</span><span class="costBadge">25</span></button>
+        <button id="recruitJet" class="iconBtn" title="Sky fighter — 130 spice, needs an airport, 3min build (press again to queue another)"><span class="btnLabel">Fighter</span><span class="costBadge">130</span><span class="prodRadar" id="jetRadar"></span></button>
+        <button id="recruitBomber" class="iconBtn" title="Cluster gunship — 220 spice, needs an airport upgraded to a gunship pad, 5min build, bombs a 3x3 block (press again to queue another)"><span class="btnLabel">Gunship</span><span class="costBadge">220</span><span class="prodRadar" id="bomberRadar"></span></button>
+        <button id="recruitTank" class="iconBtn" title="Recruit tank — 100 spice"><span class="btnLabel">Tank</span><span class="costBadge">100</span></button>
       </div>
     </div>
     <div id="modeHint">MOVE — choose a tile</div>
@@ -381,11 +402,12 @@
         <div>Click a unit to select it, Shift+drag to box-select several. Click a tile to move, an enemy to attack.</div>
         <div>Attack arms group targeting. Search &amp; Destroy auto-hunts nearby enemies. Retreat pulls units back to base.</div>
         <div>Buildings need a clear grass or desert tile.</div>
+        <div>Power: one wind turbine generates 6 GW. A refinery, an airport and a turret each draw 6 GW, so each of them needs a turbine of its own — raise the turbine first or the order is refused. Harvesters, silos and units draw nothing. The HUD's P reads drawn/generated; every house opens with one turbine already feeding its free airport.</div>
         <div>Every build, recruit and upgrade except aircraft takes 5 seconds — a radar sweep runs over the button that ordered it until the work is done. Spice is charged the moment you order.</div>
         <div>Clicking your own stronghold opens its upgrade menu even with units selected.</div>
         <div>Click your own turret, airport or stronghold (with nothing selected) to open its upgrade menu — turrets buy damage, range and hull; the stronghold buys power and a house-wide damage bonus; the airport buys the gunship pad and faster builds.</div>
         <div>Drag the map, use arrow keys, or click the minimap to scroll. Fog clears as you explore.</div>
-        <div>Troopers drain 10 power/shot, tanks 20/2s (turbines add +5). Drain a stronghold's 10k power to eliminate it.</div>
+        <div>Troopers drain 10 power/shot, tanks 20/2s (turbines add +5 damage each, shown as D in the HUD). Drain a stronghold's 10k power to eliminate it.</div>
         <div>Harvesters unload at a silo or refinery — build one or spice is wasted. A refinery = 4 silos plus a free harvester.</div>
         <div>Troopers and tanks fight refineries adjacent, never enter them. Sandworms have a 1-in-5 swallow chance and give up after 5s. A hit auto-rallies idle units to Search &amp; Destroy.</div>
         <div>An airport runway builds sky fighters in 3 min. Cluster gunships stay locked (and their button hidden) until the airport is upgraded to a gunship pad for 500 spice; they then take 5 min, and a third airport level cuts every build time by 30%. The radar scope hovering over the runway counts the build down; press a recruit button again to queue another and a count badge appears mid-runway. Gunships bomb the whole 3x3 block around their target.</div>
@@ -525,9 +547,17 @@ const AIR_SHOT_DMG=50, AIR_SHOTS_PER_BURST=3, AIR_HIT_CHANCE=0.5;
 // the splash; the damage is up from the old wider-but-weaker 5x5 spread.
 const BOMBER_AOE_RADIUS=1, BOMBER_AOE_DMG=25;
 const TURBINE_DMG_BONUS=5; // each wind turbine adds +5 damage to every shot the house's units fire
+// ---- the power grid ----
+// A wind turbine puts 6 GW on its house's grid. A refinery, an airport and a
+// turret each draw those same 6 GW, so every one of them needs a turbine of
+// its own standing before it can be ordered — raise the turbine first, or the
+// order is refused. Silos, harvesters and every unit draw nothing.
+const TURBINE_OUTPUT_GW=6;
+const POWER_DRAW_GW={ refinery:6, airport:6, turret:6 };
 // Building hit points — much softer than the 10000hp stronghold, so a raid
 // that reaches the interior of a base can actually knock out its economy.
 const BUILDING_HP={ turbine:350, silo:450, refinery:450, airport:500, turret:400 };
+const BUILD_LABEL={ turbine:'Wind turbine', silo:'Silo', refinery:'Refinery', airport:'Airport', turret:'Turret' };
 // Repair mode (turret/airport/stronghold, toggled from the upgrade menu):
 // spice drains continuously at REPAIR_SPICE_PER_SEC and converts to hull at
 // REPAIR_HP_PER_SPICE — together, 1000 HP per 100 spice. See
@@ -2622,7 +2652,12 @@ function renderStats(){
   titleEl.style.color=ph.colorCss;
   document.getElementById('pSpice').textContent=Math.floor(ph.spice);
   document.getElementById('pCap').textContent=ph.cap;
-  document.getElementById('pPower').textContent=ph.power;
+  // Two different "power" numbers, kept apart on purpose: P is the wind-turbine
+  // grid that gates what can be built, D is the damage every shot carries.
+  const gridOut=gridOutputOf(ph), gridUsed=gridDrawOf(ph);
+  document.getElementById('pPower').textContent=gridUsed+'/'+gridOut+' GW';
+  document.getElementById('statPower').classList.toggle('powerTight', gridOut-gridUsed<POWER_DRAW_GW.turret);
+  document.getElementById('pDamage').textContent='+'+ph.power;
   document.getElementById('pArmy').textContent=ph.units.filter(isCombatUnit).length;
   const bLvl=baseLevel(ph);
   document.getElementById('pStronghold').textContent=
@@ -2655,6 +2690,13 @@ function renderStats(){
   document.getElementById('buildRefinery').disabled=ph.spice<REFINERY_COST || gameOver;
   document.getElementById('buildAirport').disabled=ph.spice<AIRPORT_COST || gameOver;
   document.getElementById('buildTurret').disabled=ph.spice<TURRET_COST || gameOver;
+  // A structure the grid cannot feed is marked, not disabled: pressing it has
+  // to be able to say *why* it is refusing, and a disabled button swallows the
+  // click. The ⚡ tag on the button carries the same news at a glance.
+  ['refinery','airport','turret'].forEach(type=>{
+    const btn=document.getElementById('build'+type[0].toUpperCase()+type.slice(1));
+    btn.classList.toggle('noPower', !hasPowerFor(ph,type));
+  });
   document.getElementById('recruitTroop').disabled=ph.spice<TROOP_COST || gameOver;
   const airportOwned=hasAirport(ph);
   document.getElementById('recruitJet').disabled=!airportOwned || ph.spice<JET_COST || gameOver;
@@ -2880,6 +2922,35 @@ function findOwnedRefinery(house){
   });
   return found;
 }
+// ---- power grid bookkeeping ----
+// Generated: TURBINE_OUTPUT_GW per standing wind turbine. Drawn: whatever
+// POWER_DRAW_GW bills for each structure the house owns, counted once per
+// structure — a 2x2 footprint bills only its primary tile, and a single-tile
+// building (turret, turbine) carries no `primary` field at all, so the
+// !==false test lets both through exactly once.
+function powerDrawOf(type){ return POWER_DRAW_GW[type]||0; }
+function gridOutputOf(house){
+  let gw=0;
+  buildingMap.forEach(b=>{ if(b.owner===house.id && b.type==='turbine') gw+=TURBINE_OUTPUT_GW; });
+  return gw;
+}
+function gridDrawOf(house){
+  let gw=0;
+  buildingMap.forEach(b=>{ if(b.owner===house.id && b.primary!==false) gw+=powerDrawOf(b.type); });
+  return gw+(house.powerPending||0);
+}
+function gridFreeOf(house){ return gridOutputOf(house)-gridDrawOf(house); }
+function hasPowerFor(house,type){ return gridFreeOf(house)>=powerDrawOf(type); }
+// house.powerPending books an order's draw for as long as it is inside its 5s
+// build, so the HUD counts it and a second order cannot be placed against the
+// same headroom. Every reserve is released again in completeStructure, whether
+// the structure went up or handed the spice back.
+function reservePower(house,type){ house.powerPending=(house.powerPending||0)+powerDrawOf(type); }
+function releasePower(house,type){ house.powerPending=Math.max(0,(house.powerPending||0)-powerDrawOf(type)); }
+function powerShortMsg(house,type){
+  return BUILD_LABEL[type]+' needs '+powerDrawOf(type)+' GW — raise a wind turbine first ('
+    +TURBINE_OUTPUT_GW+' GW each, '+gridFreeOf(house)+' GW spare).';
+}
 // Deploy point for a freshly built unit: the refinery for harvesters when the
 // house has one, the stronghold for everything else (and for a harvester in a
 // house with no refinery yet).
@@ -3026,9 +3097,20 @@ function completeStructure(house,type,x,y,cost,doneMsg){
   const big = type==='refinery' || type==='airport' || type==='silo';
   const footprint = big ? [[x,y],[x+1,y],[x,y+1],[x+1,y+1]] : [[x,y]];
   if(!house.alive) return;
+  // The draw this order booked when it was placed comes off the books here,
+  // before anything else looks at the grid — so the headroom check below sees
+  // what the finished structure will actually be competing with.
+  releasePower(house,type);
   if(footprint.some(([fx,fy])=>buildingMap.has(fx+','+fy))){
     house.spice=Math.min(house.cap, house.spice+cost);
     addLog('The site was taken before construction finished — '+cost+' spice refunded.');
+    renderStats(); return;
+  }
+  // A turbine shot out from under the order during those 5 seconds leaves the
+  // grid short — same refund rather than a structure with no power behind it.
+  if(!hasPowerFor(house,type)){
+    house.spice=Math.min(house.cap, house.spice+cost);
+    addLog('The grid lost its turbine before construction finished — '+cost+' spice refunded.');
     renderStats(); return;
   }
   const primaryKey=x+','+y;
@@ -3622,12 +3704,12 @@ function aiTurnForHouse(house){
         });
         house.spice-=SILO_COST; house.cap+=SILO_CAP_BONUS; spentEcon+=SILO_COST; redrawSpiceAndBuildings();
       }
-    } else if(budget>=TURRET_COST && Math.random()<0.4){
+    } else if(budget>=TURRET_COST && hasPowerFor(house,'turret') && Math.random()<0.4){
       const spot=findFreeTileNear(house.base.x,house.base.y);
       buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turret',owner:house.id,lvl:1,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret});
       house.spice-=TURRET_COST; spentEcon+=TURRET_COST; redrawSpiceAndBuildings();
       addLog('House '+house.name+' builds a turret.');
-    } else if(!hasAirport(house) && budget>=AIRPORT_COST && Math.random()<0.3){
+    } else if(!hasAirport(house) && budget>=AIRPORT_COST && hasPowerFor(house,'airport') && Math.random()<0.3){
       const spot=findFreeFootprintNear(house.base.x,house.base.y,'place-airport');
       if(spot){
         const primaryKey=spot.x+','+spot.y;
@@ -4281,11 +4363,12 @@ function handleBoardClick(e){
       const type = uiMode.type==='place-turbine' ? 'turbine' : uiMode.type==='place-silo' ? 'silo' : 'turret';
       const cost = type==='turbine' ? TURBINE_COST : type==='silo' ? SILO_COST : TURRET_COST;
       const btnId = type==='turbine' ? 'buildTurbine' : type==='silo' ? 'buildSilo' : 'buildTurret';
-      const label = type==='turbine' ? 'Wind turbine' : type==='silo' ? 'Silo' : 'Turret';
-      const doneMsg = type==='turbine' ? 'Wind turbine raised — attack damage +'+TURBINE_DMG_BONUS+'.'
+      const label = BUILD_LABEL[type];
+      const doneMsg = type==='turbine' ? 'Wind turbine raised — +'+TURBINE_OUTPUT_GW+' GW on the grid, attack damage +'+TURBINE_DMG_BONUS+'.'
         : type==='silo' ? 'Silo constructed — capacity +'+SILO_CAP_BONUS+'.'
-        : 'Turret constructed.';
-      if(ph.spice>=cost){
+        : 'Turret constructed — drawing '+powerDrawOf('turret')+' GW.';
+      if(!hasPowerFor(ph,type)){ addLog(powerShortMsg(ph,type)); }
+      else if(ph.spice>=cost){
         if(isMpClient()){
           const kind = type==='turbine'?'buildTurbine':type==='silo'?'buildSilo':'buildTurret';
           mpSend({type:'cmd', kind, x, y});
@@ -4293,6 +4376,7 @@ function handleBoardClick(e){
           startPlayerBuild(btnId);
         } else {
           ph.spice-=cost;
+          reservePower(ph,type);
           addLog(label+' under construction.');
           startPlayerBuild(btnId, ()=>completeStructure(ph,type,x,y,cost,doneMsg));
         }
@@ -4304,6 +4388,7 @@ function handleBoardClick(e){
 
   if(uiMode && uiMode.type==='place-refinery'){
     if(!placementValid('place-refinery',x,y)){ addLog('Not enough clear, explored ground here for a 2x2 refinery.'); }
+    else if(!hasPowerFor(ph,'refinery')){ addLog(powerShortMsg(ph,'refinery')); }
     else if(ph.spice>=REFINERY_COST){
       if(isMpClient()){
         mpSend({type:'cmd', kind:'buildRefinery', x, y});
@@ -4311,9 +4396,10 @@ function handleBoardClick(e){
         startPlayerBuild('buildRefinery');
       } else {
         ph.spice-=REFINERY_COST;
+        reservePower(ph,'refinery');
         addLog('Refinery under construction.');
         startPlayerBuild('buildRefinery', ()=>completeStructure(ph,'refinery',x,y,REFINERY_COST,
-          'Refinery constructed — capacity +'+REFINERY_CAP_BONUS+', a new harvester joins the fleet.'));
+          'Refinery constructed — capacity +'+REFINERY_CAP_BONUS+', drawing '+powerDrawOf('refinery')+' GW, a new harvester joins the fleet.'));
       }
     }
     uiMode=null; modeHint.style.display='none'; hidePlacementPreview(); renderStats();
@@ -4322,6 +4408,7 @@ function handleBoardClick(e){
 
   if(uiMode && uiMode.type==='place-airport'){
     if(!placementValid('place-airport',x,y)){ addLog('Not enough clear, explored ground here for a 2x2 airport.'); }
+    else if(!hasPowerFor(ph,'airport')){ addLog(powerShortMsg(ph,'airport')); }
     else if(ph.spice>=AIRPORT_COST){
       if(isMpClient()){
         mpSend({type:'cmd', kind:'buildAirport', x, y});
@@ -4329,9 +4416,10 @@ function handleBoardClick(e){
         startPlayerBuild('buildAirport');
       } else {
         ph.spice-=AIRPORT_COST;
+        reservePower(ph,'airport');
         addLog('Airport under construction.');
         startPlayerBuild('buildAirport', ()=>completeStructure(ph,'airport',x,y,AIRPORT_COST,
-          'Runway laid — sky fighters (3min) and cluster gunships (5min) can now be built here.'));
+          'Runway laid — drawing '+powerDrawOf('airport')+' GW; sky fighters (3min) and cluster gunships (5min) can now be built here.'));
       }
     }
     uiMode=null; modeHint.style.display='none'; hidePlacementPreview(); renderStats();
@@ -4435,19 +4523,25 @@ document.getElementById('buildSilo').onclick=()=>{
   if(!ph || ph.spice<SILO_COST || gameOver) return;
   uiMode={type:'place-silo'}; modeHint.textContent='PLACE SILO — choose the top-left of a clear 2x2 area'; modeHint.style.display='block';
 };
+// The three powered structures refuse at the button, before placement mode is
+// entered — being walked through choosing a tile only to be told the grid is
+// short would be the worse order of events.
 document.getElementById('buildRefinery').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<REFINERY_COST || gameOver) return;
+  if(!hasPowerFor(ph,'refinery')){ addLog(powerShortMsg(ph,'refinery')); return; }
   uiMode={type:'place-refinery'}; modeHint.textContent='PLACE REFINERY — choose the top-left of a clear 2x2 area'; modeHint.style.display='block';
 };
 document.getElementById('buildAirport').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<AIRPORT_COST || gameOver) return;
+  if(!hasPowerFor(ph,'airport')){ addLog(powerShortMsg(ph,'airport')); return; }
   uiMode={type:'place-airport'}; modeHint.textContent='PLACE AIRPORT — choose the top-left of a clear 2x2 area'; modeHint.style.display='block';
 };
 document.getElementById('buildTurret').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<TURRET_COST || gameOver) return;
+  if(!hasPowerFor(ph,'turret')){ addLog(powerShortMsg(ph,'turret')); return; }
   uiMode={type:'place-turret'}; modeHint.textContent='PLACE TURRET — choose a grass/desert tile'; modeHint.style.display='block';
 };
 document.getElementById('recruitTroop').onclick=()=>{
@@ -4626,7 +4720,7 @@ function serializeHouse(h){
   return { id:h.id, name:h.name, color:h.color, colorCss:h.colorCss, alive:h.alive,
     baseHp:h.baseHp, baseHpMax:h.baseHpMax, baseLvl:h.baseLvl||1, base:h.base,
     repairingBase:!!h.repairingBase,
-    spice:h.spice, cap:h.cap, power:h.power, airProd:serializeAirProd(h),
+    spice:h.spice, cap:h.cap, power:h.power, powerPending:h.powerPending||0, airProd:serializeAirProd(h),
     units:h.units.map(serializeUnit) };
 }
 function buildInitMessage(){
@@ -4653,7 +4747,7 @@ function deserializeHouse(hd){
   return { id:hd.id, name:hd.name, color:hd.color, colorCss:hd.colorCss, alive:hd.alive,
     ai:false, baseHp:hd.baseHp, baseHpMax:hd.baseHpMax, baseLvl:hd.baseLvl||1, base:hd.base,
     repairingBase:!!hd.repairingBase,
-    spice:hd.spice, cap:hd.cap, power:hd.power, airProd:deserializeAirProd(hd.airProd),
+    spice:hd.spice, cap:hd.cap, power:hd.power, powerPending:hd.powerPending||0, airProd:deserializeAirProd(hd.airProd),
     units:hd.units.map(u=>({...u, order:null, dir:0, frame:0, moving:false, sprite:null, moveFrom:null, moveTo:null, moveStart:0})),
     spentEconomy:0, spentMilitary:0, lastAttacker:null };
 }
@@ -4702,6 +4796,9 @@ function applyMpSnapshot(msg){
     const h=houseById(hd.id); if(!h) return;
     h.alive=hd.alive; h.baseHp=hd.baseHp; h.spice=hd.spice; h.cap=hd.cap; h.power=hd.power;
     h.repairingBase=!!hd.repairingBase;
+    // The grid draw of anything still building on the host, so the client's
+    // own HUD and its build gating read the same headroom the host enforces.
+    h.powerPending=hd.powerPending||0;
     // Both move only when a stronghold upgrade lands, but the client mirrors
     // rather than simulates, so they have to travel with every snapshot.
     h.baseHpMax=hd.baseHpMax; h.baseLvl=hd.baseLvl||1;
@@ -4839,7 +4936,7 @@ function applyRemoteCommand(msg){
     const cost=type==='turbine'?TURBINE_COST:TURRET_COST;
     const doneMsg='House '+house.name+(type==='turbine'?' raises a wind turbine.':' builds a turret.');
     queueBuildJob(()=>{
-      const ok=house.spice>=cost && !buildingMap.has(key) && !spiceMap.has(key)
+      const ok=house.spice>=cost && hasPowerFor(house,type) && !buildingMap.has(key) && !spiceMap.has(key)
         && terrain[msg.y] && terrain[msg.y][msg.x]!=='mountain'
         && (type!=='turbine' || terrain[msg.y][msg.x]!=='desert') && !isBaseTile(msg.x,msg.y);
       if(!ok) return;
@@ -4856,7 +4953,7 @@ function applyRemoteCommand(msg){
       const footprint=[[msg.x,msg.y],[msg.x+1,msg.y],[msg.x,msg.y+1],[msg.x+1,msg.y+1]];
       const blocked=footprint.some(([fx,fy])=> !inBounds(fx,fy) || terrain[fy][fx]==='mountain'
         || ((type==='refinery'||type==='airport') && terrain[fy][fx]==='desert') || buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy) || nearBaseFootprint(fx,fy,1));
-      if(blocked || house.spice<cost) return;
+      if(blocked || house.spice<cost || !hasPowerFor(house,type)) return;
       house.spice-=cost;
       completeStructure(house,type,msg.x,msg.y,cost,doneMsg);
     });
@@ -5087,7 +5184,7 @@ function newGame(chosenId, rivalId){
       // uses mp.myHouseId (not this flag) to tell the two apart.
       ai: hd.id!==chosenId && !(mp && mp.remoteHouseId===hd.id),
       base:{...HOUSE_SPAWNS[hd.id]}, baseHp:BASE_HP_MAX, baseHpMax:BASE_HP_MAX, baseLvl:1,
-      spice:START_SPICE, cap:START_CAP, power:0, units:[],
+      spice:START_SPICE, cap:START_CAP, power:0, powerPending:0, units:[],
       spentEconomy:0, spentMilitary:0, alive:true, lastAttacker:null
     }))
   };
@@ -5125,6 +5222,15 @@ function newGame(chosenId, rivalId){
         : {x:fx,y:fy,type:'airport',owner:h.id,primary:false,primaryKey};
       buildingMap.set(fx+','+fy, entry);
     });
+  });
+  // ...and with the wind turbine that feeds that airport. A refinery, airport
+  // or turret each draw 6 GW and a turbine generates exactly that, so without
+  // this grant every house would open the match 6 GW in the red and owe its
+  // first turbine to a building it was given for free.
+  state.houses.forEach(h=>{
+    const spot=findFreeTileNear(h.base.x,h.base.y,true);
+    buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:h.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine});
+    h.power+=TURBINE_DMG_BONUS;
   });
   for(let i=0;i<WORM_COUNT;i++){
     let x,y,tries=0;
