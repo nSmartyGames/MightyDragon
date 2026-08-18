@@ -384,7 +384,7 @@
         <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice + 6 GW (one wind turbine of its own)"><span class="btnLabel">Refinery</span><span class="powerTag">⚡6</span><span class="costBadge">110</span></button>
         <button id="buildAirport" class="iconBtn" title="Airport runway — 190 spice + 6 GW (one wind turbine of its own), builds sky fighters (upgrade it to a gunship pad for cluster gunships)"><span class="btnLabel">Airport</span><span class="powerTag">⚡6</span><span class="costBadge">190</span></button>
         <button id="buildTurret" class="iconBtn" title="Turret — 90 spice + 6 GW (one wind turbine of its own)"><span class="btnLabel">Turret</span><span class="powerTag">⚡6</span><span class="costBadge">90</span></button>
-        <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice"><span class="btnLabel">Trooper</span><span class="costBadge">25</span></button>
+        <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice, marches at a third of the base pace"><span class="btnLabel">Trooper</span><span class="costBadge">25</span></button>
         <button id="recruitJet" class="iconBtn" title="Sky fighter — 130 spice, needs an airport, 3min build (press again to queue another)"><span class="btnLabel">Fighter</span><span class="costBadge">130</span><span class="prodRadar" id="jetRadar"></span></button>
         <button id="recruitBomber" class="iconBtn" title="Cluster gunship — 220 spice, needs an airport upgraded to a gunship pad, 5min build, bombs a 3x3 block (press again to queue another)"><span class="btnLabel">Gunship</span><span class="costBadge">220</span><span class="prodRadar" id="bomberRadar"></span></button>
         <button id="recruitTank" class="iconBtn" title="Recruit tank — 100 spice"><span class="btnLabel">Tank</span><span class="costBadge">100</span></button>
@@ -408,6 +408,7 @@
         <div>Click your own turret, airport or stronghold (with nothing selected) to open its upgrade menu — turrets buy damage, range and hull; the stronghold buys power and a house-wide damage bonus; the airport buys the gunship pad and faster builds.</div>
         <div>Drag the map, use arrow keys, or click the minimap to scroll. Fog clears as you explore.</div>
         <div>Troopers drain 10 power/shot, tanks 20/2s (turbines add +5 damage each, shown as D in the HUD). Drain a stronghold's 10k power to eliminate it.</div>
+        <div>Pace: a tank or harvester sets the standard march. Troopers cross the sand at a third of it, cluster gunships fly at twice it and sky fighters at three times — air power is how you cross the map in a hurry.</div>
         <div>Harvesters unload at a silo or refinery — build one or spice is wasted. A refinery = 4 silos plus a free harvester.</div>
         <div>Troopers and tanks fight refineries adjacent, never enter them. Sandworms have a 1-in-5 swallow chance and give up after 5s. A hit auto-rallies idle units to Search &amp; Destroy.</div>
         <div>An airport runway builds sky fighters in 3 min. Cluster gunships stay locked (and their button hidden) until the airport is upgraded to a gunship pad for 500 spice; they then take 5 min, and a third airport level cuts every build time by 30%. The radar scope hovering over the runway counts the build down; press a recruit button again to queue another and a count badge appears mid-runway. Gunships bomb the whole 3x3 block around their target.</div>
@@ -512,6 +513,15 @@ const HARVESTER_CAP=30, HARVEST_RATE=12;
 const WORM_COUNT=15;
 const WORM_EAT_CHANCE=0.2; // a worm sharing a unit's tile only swallows it 1 time in 5 — mostly it's a near-miss
 const MOVE_MS=380;
+// Per-type movement pace, as a multiplier on the base MOVE_MS step: troopers
+// slog across the sand at a third of the old pace, the sky fighter tears along
+// at 3x and the helicopter gunship cruises at 2x. Anything unlisted (tanks,
+// harvesters) keeps the base pace. A step's wall-clock duration is what paces
+// movement — stepHouseUnits only advances a unit once its current step
+// animation has finished — so dividing MOVE_MS by the multiplier is all that
+// a speed change takes.
+const UNIT_SPEED_MULT={ trooper:1/3, jet:3, bomber:2 };
+function moveMsFor(u){ return MOVE_MS/(UNIT_SPEED_MULT[u.type]||1); }
 const TROOP_HP=100, TANK_HP=300, HARVESTER_HP=500;
 const AIRPORT_COST=190, JET_COST=130, BOMBER_COST=220;
 const JET_HP=90, BOMBER_HP=150;
@@ -610,6 +620,13 @@ const FLYER_TYPES={ jet:true, bomber:true };
 function isFlyer(type){ return !!FLYER_TYPES[type]; }
 // real-time pacing
 const TICK_MS=150;
+// Movement is pumped on its own, much finer timer than the main simulation
+// tick. A unit steps only when its previous step animation has finished, so
+// polling at TICK_MS would round every step up to the next 150ms boundary and
+// flatten the per-type speeds (a 190ms gunship step would cost 300ms, no
+// faster than a 380ms one). At MOVE_TICK_MS the rounding error is small enough
+// that the multipliers in UNIT_SPEED_MULT are what the eye actually sees.
+const MOVE_TICK_MS=20;
 const HARVEST_INTERVAL_MS=500;
 const ATTACK_COOLDOWN_MS=900; // trooper attack cadence
 const AI_THINK_INTERVAL_MS=4000;
@@ -2592,7 +2609,7 @@ app.ticker.add((delta)=>{
       u.sprite.tint=h.color;
       u.sprite.rotation=dirAngle(u.dir);
       if(u.moving){
-        const t=Math.min(1,(now-u.moveStart)/MOVE_MS);
+        const t=Math.min(1,(now-u.moveStart)/moveMsFor(u));
         u.sprite.x=u.moveFrom.x+(u.moveTo.x-u.moveFrom.x)*t;
         u.sprite.y=u.moveFrom.y+(u.moveTo.y-u.moveFrom.y)*t;
         if(t>=1){ u.moving=false; }
@@ -2834,7 +2851,12 @@ function stepToward(u,tx,ty){
   const targetMoved=!u._pathTarget || u._pathTarget.x!==tx || u._pathTarget.y!==ty;
   const stale=!u._path || u._path.length===0;
   const dueForRecalc=!u._lastPathCalc || now-u._lastPathCalc>=PATH_RECALC_MS;
-  if(stale || (targetMoved && dueForRecalc)){
+  // A search that already came back empty (boxed in by units, or no route at
+  // all) is retried on the PATH_RECALC_MS beat instead of on every movement
+  // pump — without this a stuck unit would re-run A* at MOVE_TICK_MS. A unit
+  // that has never searched (_path still null) is unaffected and paths at once.
+  const blockedRecently=u._path && u._path.length===0 && !dueForRecalc;
+  if(!blockedRecently && (stale || (targetMoved && dueForRecalc))){
     u._path=findPath(u.x,u.y,tx,ty,u.type,u.id) || [];
     u._pathTarget={x:tx,y:ty};
     u._lastPathCalc=now;
@@ -3432,7 +3454,13 @@ function tickStructureRepairs(house){
   });
 }
 function stepHouseUnits(house){
+  const now=performance.now();
   house.units.forEach(u=>{
+    // A finished step is retired here as well as in the render ticker, so
+    // movement pacing depends on the clock rather than on the frame rate — on
+    // a phone rendering at 30fps a jet's 127ms step would otherwise wait for
+    // the next frame before the next step could even be considered.
+    if(u.moving && now-u.moveStart>=moveMsFor(u)) u.moving=false;
     if(!u.order || u.moving) return;
     if(u.order.kind==='engage'){
       if(!isCombatUnit(u)){ u.order=null; return; }
@@ -3848,8 +3876,26 @@ function updateClock(){
 }
 
 let simHandle=null;
+let moveHandle=null;
+// Movement-only pump (see MOVE_TICK_MS). Everything it can reach is already
+// gated on its own clock — attacks by their per-type cooldown, harvesting by
+// HARVEST_INTERVAL_MS, stepping by the unit's own step animation — so running
+// it between simulation ticks changes nothing but how promptly a finished step
+// is followed by the next one.
+function movementTick(){
+  if(!state || gameOver) return;
+  state.houses.forEach(h=>{ if(h.alive) stepHouseUnits(h); });
+}
 let lastAiThink={}, lastWormMove=0, lastSpiceSpawn=0;
-function stopSim(){ if(simHandle){ clearInterval(simHandle); simHandle=null; } }
+function startSim(){
+  stopSim();
+  simHandle=setInterval(gameTick, TICK_MS);
+  moveHandle=setInterval(movementTick, MOVE_TICK_MS);
+}
+function stopSim(){
+  if(simHandle){ clearInterval(simHandle); simHandle=null; }
+  if(moveHandle){ clearInterval(moveHandle); moveHandle=null; }
+}
 
 function gameTick(){
   if(!state || gameOver) return;
@@ -3858,7 +3904,6 @@ function gameTick(){
   tickBuildJobs();
   state.houses.forEach(h=>{
     if(!h.alive) return;
-    stepHouseUnits(h);
     autoHarvestAndReturn(h);
     autoAssignHarvesters(h);
     tickAirProduction(h);
@@ -5021,7 +5066,7 @@ function onMpDisconnect(conn){
       c.on('close', ()=>onMpDisconnect(c));
       c.on('open', ()=>{
         hideMpWait();
-        if(state){ mpSend(buildInitMessage()); simHandle=setInterval(gameTick, TICK_MS); }
+        if(state){ mpSend(buildInitMessage()); startSim(); }
       });
     });
   } else {
@@ -5281,7 +5326,7 @@ async function start(chosenId, rivalId){
   revealAround(ph.base.x, ph.base.y, VISION_RADIUS+2);
   centerCameraOn(ph.base.x, ph.base.y);
   renderStats(); renderLog(); updateClock(); renderMinimap();
-  simHandle=setInterval(gameTick, TICK_MS);
+  startSim();
 }
 function showRivalSelect(chosenId){
   document.getElementById('houseOverlay').style.display='none';
