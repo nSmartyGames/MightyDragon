@@ -45,6 +45,12 @@
     border:1px solid var(--rust); border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,.6);
     image-rendering:pixelated; background:#000; cursor:pointer;
   }
+  /* Only affordance out of the 3D chase view — the context menu that opened
+     it is hidden while the view is up, so this sits under the minimap and is
+     the one visible way back to the map (Escape also works). */
+  #exit3dBtn{
+    position:absolute; top:222px; right:8px; z-index:20; display:none;
+  }
   /* Full-width header strip, fixed to the top of the viewport and floating
      over the fixed map underneath: a single row holding the game title,
      stat cards, house tag, rival summaries, and — to the right of the rival
@@ -360,6 +366,7 @@
   <div class="panel" id="boardWrap">
     <div id="boardHost">
       <div id="edgeVignette"></div>
+      <button id="exit3dBtn" class="hudBtn" title="Back to the map view">✕ Exit 3D</button>
       <canvas id="minimap" width="100" height="100" title="Click to jump the camera"></canvas>
       <div id="selectBox"></div>
       <div id="ctxMenu">
@@ -368,6 +375,7 @@
         <button id="ctxEngage">Search &amp; Destroy</button>
         <button id="ctxRetreat">Retreat</button>
         <button id="ctxHarvest">Harvest</button>
+        <button id="ctx3D">3D View</button>
         <button id="ctxCancel">Cancel</button>
       </div>
       <div id="upgMenu">
@@ -874,6 +882,7 @@ function zoomAt(clientX, clientY){
   app.renderer.resize(vs.w, vs.h);
   if(p5Instance) p5Instance.resizeCanvas(vs.w, vs.h);
   if(p5FogInstance) p5FogInstance.resizeCanvas(vs.w, vs.h);
+  if(p5ThreeD) p5ThreeD.resizeCanvas(vs.w, vs.h);
   const rect=app.view.getBoundingClientRect();
   const sx=clientX-rect.left, sy=clientY-rect.top;
   const wx=cam.x+sx/zoomFactor, wy=cam.y+sy/zoomFactor;
@@ -884,10 +893,12 @@ function zoomAt(clientX, clientY){
 }
 boardHost.addEventListener('dblclick', (e)=>{
   e.preventDefault();
+  if(view3d.active) return; // zoom is a map-view gesture; the 3D camera owns itself
   zoomAt(e.clientX, e.clientY);
 });
 let lastTapTime=0, lastTapX=0, lastTapY=0;
 boardHost.addEventListener('touchend', (e)=>{
+  if(view3d.active) return; // see the dblclick guard above
   if(e.changedTouches.length!==1) return;
   const t=e.changedTouches[0];
   const now=Date.now();
@@ -907,6 +918,7 @@ window.addEventListener('resize', ()=>{
   app.renderer.resize(vs.w, vs.h);
   if(p5Instance) p5Instance.resizeCanvas(vs.w, vs.h);
   if(p5FogInstance) p5FogInstance.resizeCanvas(vs.w, vs.h);
+  if(p5ThreeD) p5ThreeD.resizeCanvas(vs.w, vs.h);
   clampCamera();
 });
 
@@ -1206,15 +1218,22 @@ minimapCanvas.addEventListener('click',(e)=>{
   const rect=minimapCanvas.getBoundingClientRect();
   const mx=Math.floor((e.clientX-rect.left)/rect.width*MAPW);
   const my=Math.floor((e.clientY-rect.top)/rect.height*MAPH);
+  if(view3d.active) exit3D();
   if(inBounds(mx,my)){ followUnit=null; centerCameraOn(mx,my); renderMinimap(); }
 });
 
 const KEYS={};
-document.addEventListener('keydown',e=>{ KEYS[e.key]=true; if(e.key==='Escape') deselect(); });
+document.addEventListener('keydown',e=>{
+  KEYS[e.key]=true;
+  // In 3D, Escape backs out of the view first — the selection survives, so a
+  // second Escape then drops it exactly as it always did.
+  if(e.key==='Escape'){ if(view3d.active) exit3D(); else deselect(); }
+});
 document.addEventListener('keyup',e=>{ KEYS[e.key]=false; });
 app.ticker.add((delta)=>{
   const spd=8*delta;
   let manualPan=false;
+  if(view3d.active) return; // the 3D camera rides its unit; the 2D pan is idle
   if(KEYS['ArrowLeft']||KEYS['a']){ cam.x-=spd; manualPan=true; }
   if(KEYS['ArrowRight']||KEYS['d']){ cam.x+=spd; manualPan=true; }
   if(KEYS['ArrowUp']||KEYS['w']){ cam.y-=spd; manualPan=true; }
@@ -3837,6 +3856,7 @@ async function saveLearning(profile){
 
 async function endGame(result){
   gameOver=true;
+  if(view3d.active) exit3D();
   const overlay=document.getElementById('overlay');
   const ph=playerHouse();
   state.houses.forEach(h=>{
@@ -3994,6 +4014,7 @@ app.view.addEventListener('pointermove', updatePlacementPreview);
 
 function deselect(){
   if(!state) return;
+  if(view3d.active) exit3D();
   state.selectedUnits=[]; uiMode=null; followUnit=null;
   ctxMenu.style.display='none'; modeHint.style.display='none';
   closeUpgradeMenu();
@@ -4253,6 +4274,12 @@ function openCtxMenuFor(){
   document.getElementById('ctxAttack').style.display=anyCombat?'flex':'none';
   document.getElementById('ctxEngage').style.display=anyCombat?'flex':'none';
   document.getElementById('ctxHarvest').style.display=allHarvester?'flex':'none';
+  // Riding along only makes sense for one ground unit at a time: the chase
+  // camera has a single subject, and the ground-plane click pick would be
+  // wrong under a flyer. Tanks and troopers only, exactly one selected.
+  const btn3D=document.getElementById('ctx3D');
+  btn3D.style.display=canRide3D(sel)?'flex':'none';
+  btn3D.textContent=view3d.active?'Exit 3D View':'3D View';
   document.getElementById('ctxCancel').style.display=allHarvester?'none':'flex';
   // #hudBar (title/stats row + the #log history bar) is a fixed, floating
   // header with a higher z-index than ctxMenu's hardcoded top:8px, so the
@@ -4360,6 +4387,7 @@ app.view.addEventListener('pointermove',(e)=>{
   }
 });
 window.addEventListener('pointerup',(e)=>{
+  if(view3d.active){ dragState=null; return; }
   if(!dragState) return;
   boardHost.classList.remove('dragging');
   if(dragState.boxSelect && dragState.moved) finishSelectionBox(dragState.startX,dragState.startY,e.clientX,e.clientY);
@@ -4397,8 +4425,16 @@ function issueAttackOrders(units,target){
   }
 }
 function handleBoardClick(e){
-  if(!state || gameOver) return;
   const {x,y}=tileFromEvent(e);
+  handleTileCommand(x,y);
+}
+// Everything a click on the board means, expressed purely in tile coordinates.
+// Split out of handleBoardClick so the 3D chase view can feed it a tile picked
+// by ray-casting instead of one read off a pointer event, and inherit the whole
+// order pipeline unchanged — placement rules, attack targeting, the move
+// guards, and (crucially) the mpSend multiplayer echo.
+function handleTileCommand(x,y){
+  if(!state || gameOver) return;
   if(!inBounds(x,y)) return;
   const ph=playerHouse();
 
@@ -5717,6 +5753,849 @@ function upmTick(ts){
 document.getElementById('upmClose').addEventListener('click', closeUnitPreview);
 upmOverlay.addEventListener('click', (e)=>{ if(e.target===upmOverlay) closeUnitPreview(); });
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && upmOverlay.style.display==='flex') closeUnitPreview(); });
+
+// ================= 3D chase view =================
+// A fourth canvas over the board: a p5 instance in WEBGL mode that renders the
+// live battle from just behind one tank or trooper. It owns no game state — the
+// unit it rides, everything it draws and every order it issues all come from the
+// same arrays and maps the top-down view reads, so the two can never disagree.
+//
+// Coordinate mapping. p5's WEBGL space puts the origin at the canvas centre with
+// +x right, +y DOWN and +z toward the viewer. The game world is top-down pixels,
+// x east, y south. Keeping 1 p5 unit = 1 world pixel, the mapping is
+//     p5.x = worldX,   p5.z = worldY,   p5.y = -altitude
+// so the sand is the plane y=0 and altitude climbs into negative y. Every
+// existing coordinate (u.sprite.x, x*SZ, the activeFx positions) therefore drops
+// straight in with no conversion at all.
+//
+// The camera() up-vector is (0,1,0), NOT (0,-1,0): p5's perspective() bakes a
+// y-flip into the projection matrix, so passing +1 is what puts negative-y (our
+// altitude axis) at the top of the screen. Verified by rendering a ground plane
+// and reading back the top and bottom rows of pixels.
+const V3_FOV=Math.PI/3;              // 60 degrees vertical
+const V3_NEAR=6, V3_FAR=2600;
+const V3_CHASE=3.4*SZ;               // how far behind the unit the eye rides
+const V3_EYE_H=2.0*SZ;               // eye height above the sand
+const V3_LOOK=4.0*SZ;                // how far ahead of the unit it aims
+const V3_LOOK_H=0.5*SZ;              // ~11 degrees of downward pitch, all told
+const V3_YAW_TAU=180;                // ms; a 45-degree dir snap resolves in ~0.5s
+const V3_POS_TAU=90;                 // ms; also hides an MP client's snapshot jumps
+const V3_RADIUS=14;                  // tiles of detail drawn around the unit
+const V3_BAKE_R=20;                  // mountains are baked over a wider ring...
+const V3_BAKE_DRIFT=6;               // ...and only rebaked once the unit leaves this
+const V3_LOD=8;                      // beyond this many tiles, silhouettes only
+const V3_BUDGET=450;                 // hard cap on immediate-mode boxes per frame
+const V3_PICK_MAX=60*SZ;             // ignore near-horizontal picks landing miles away
+const V3_UNIT=SZ*0.55;               // world px per upmActorBoxes grid unit, set so
+                                     // a tank's hull comes out about one tile across
+const V3_BLD=SZ;                     // building boxes are authored in whole tiles
+const V3_FLY_ALT=3.5*SZ;
+// World units per ground texel. The map art is TILE(16) pixels per tile drawn
+// over SZ(32) world units, i.e. 2 units per art pixel; sampling at 4 doubles
+// the block size so the sand reads as chunky Minecraft-style squares rather
+// than a smooth photographic surface. Same 4 as VOX_PX in the unit preview.
+const V3_PIXEL=4;
+const V3_FOG_PIXEL=8; // the fog veil is a soft gradient, so it can be coarser still
+const V3_RIDEABLE={ tank:true, trooper:true };
+const V3_PICK_MSG={
+  sky:'Aim at the ground to give an order.',
+  far:'Too far off to make out — aim closer.',
+  offmap:'That is beyond the edge of the map.'
+};
+
+// Only a single ground unit can be ridden: the chase camera has one subject, and
+// the ground-plane click pick would be wrong under a flyer.
+function canRide3D(sel){ return !!(sel && sel.length===1 && V3_RIDEABLE[sel[0].type]); }
+
+const view3d={
+  active:false, unit:null,
+  yaw:0, eye:null, tgt:null, basis:null,
+  lastMs:0,
+  geom:null, geomCX:-9999, geomCY:-9999, geomFog:-1,
+  hover:null, flashes:[], boxes:0
+};
+let p5ThreeD=null;
+let v3GroundTex=null, v3FogTex=null, v3FogStamp=-1;
+let v3Drag=null;
+const exit3dBtn=document.getElementById('exit3dBtn');
+const edgeVignetteEl=document.getElementById('edgeVignette');
+
+// ---- colour helpers ----
+// upmShade() cannot be reused here: it does parseInt(hex.slice(1),16) and several
+// upmActorBoxes entries are already 'rgb(r,g,b)' strings (its own output), which
+// it silently turns grey. This parses both forms, once, into a cached triple.
+const v3CssCache=new Map();
+function v3ParseCss(css){
+  let rgb=v3CssCache.get(css);
+  if(rgb) return rgb;
+  if(typeof css==='string' && css.charAt(0)==='#'){
+    const n=parseInt(css.slice(1),16);
+    rgb=Number.isFinite(n) ? [(n>>16)&255,(n>>8)&255,n&255] : [136,136,136];
+  } else if(typeof css==='string' && css.indexOf('rgb')===0){
+    const m=css.match(/-?\d+/g);
+    rgb=m&&m.length>=3 ? [ +m[0], +m[1], +m[2] ] : [136,136,136];
+  } else rgb=[136,136,136];
+  v3CssCache.set(css,rgb);
+  return rgb;
+}
+function v3Fill(p,rgb,mul,redBias){
+  const m=mul==null?1:mul;
+  p.fill(
+    Math.min(255,rgb[0]*m+(redBias||0)),
+    Math.min(255,rgb[1]*m),
+    Math.min(255,rgb[2]*m)
+  );
+}
+// Hull damage darkens a model and pushes it red, the same read as the 2D hp bars.
+function v3Wear(hp,hpMax){
+  if(!hp || !hpMax) return {mul:1, red:0};
+  const f=Math.max(0,Math.min(1,hp/hpMax));
+  return { mul:0.55+0.45*f, red:(1-f)*55 };
+}
+
+// ---- visibility: the 3D view must never reveal more than the map does ----
+// These mirror the PIXI sprite-visibility rules one for one. Any change to the
+// fog rule is a two-site edit, and these are the second site.
+function v3SeesTile(x,y){ return !!(explored[y] && explored[y][x]); }
+function v3SeesUnit(h,u,ph){ return h===ph || v3SeesTile(u.x,u.y); }
+function v3SeesBuilding(b,ph){ return b.owner===ph.id || v3SeesTile(b.x,b.y); }
+
+// ---- per-type voxel box lists ----
+// Units come straight from upmActorBoxes so the 3D models match the map art for
+// free. It allocates fresh objects on every call, so cache per type+colour and
+// resolve each face colour to an rgb triple once rather than per frame.
+const v3ActorCache=new Map();
+function v3Actor(type,colorCss){
+  const k=type+'|'+colorCss;
+  let m=v3ActorCache.get(k);
+  if(!m){
+    m=upmActorBoxes(type,colorCss).map(b=>({ b, rgb:v3ParseCss(b.color) }));
+    v3ActorCache.set(k,m);
+  }
+  return m;
+}
+// Buildings have no upmActorBoxes entries, so they get their own lists here, in
+// the same {x,y,z,w,d,h} shape but authored in whole tiles and anchored at the
+// footprint's top-left corner. Modelled off the map sprites so the two agree.
+const V3_DARK='#242018', V3_METAL='#6d6459', V3_GLASS='#8fb6c8';
+const v3BldCache=new Map();
+function v3BuildingBoxes(type,colorCss,lvl){
+  const k=type+'|'+colorCss+'|'+(lvl||1);
+  let m=v3BldCache.get(k);
+  if(m) return m;
+  const c=colorCss, L=lvl||1;
+  let list;
+  switch(type){
+    case 'turbine': list=[
+      {x:0.42,y:0.42,z:0,    w:0.16,d:0.16,h:2.0,  color:'#cfc4ad'},
+      {x:0.34,y:0.34,z:1.98, w:0.32,d:0.32,h:0.26, color:V3_METAL}
+    ]; break;
+    case 'silo': list=[
+      {x:0.18,y:0.18,z:0,    w:1.64,d:1.64,h:1.1,  color:'#b9ae95'},
+      {x:0.1, y:0.1, z:1.1,  w:1.8, d:1.8, h:0.16, color:V3_METAL},
+      {x:0.8, y:0.8, z:1.26, w:0.4, d:0.4, h:0.3,  color:V3_DARK}
+    ]; break;
+    case 'refinery': list=[
+      {x:0.06,y:0.14,z:0,    w:1.88,d:1.5, h:0.82, color:c},
+      {x:0.2, y:0.24,z:0.82, w:0.9, d:0.6, h:0.22, color:V3_METAL},
+      {x:1.34,y:0.28,z:0.82, w:0.28,d:0.28,h:0.9,  color:V3_METAL},
+      {x:1.32,y:0.26,z:1.72, w:0.32,d:0.32,h:0.12, color:'#e0522a'},
+      {x:0.1, y:1.62,z:0,    w:1.5, d:0.3, h:0.18, color:V3_DARK}
+    ]; break;
+    case 'airport': list=[
+      {x:0.04,y:0.5, z:0,    w:1.92,d:1.0, h:0.06, color:'#3a352c'},
+      {x:0.3, y:0.97,z:0.06, w:0.34,d:0.06,h:0.02, color:'#d8cdb0'},
+      {x:0.86,y:0.97,z:0.06, w:0.34,d:0.06,h:0.02, color:'#d8cdb0'},
+      {x:1.42,y:0.97,z:0.06, w:0.34,d:0.06,h:0.02, color:'#d8cdb0'},
+      {x:0.1, y:0.06,z:0,    w:0.9, d:0.4, h:0.5,  color:c},
+      {x:1.24,y:0.08,z:0,    w:0.34,d:0.34,h:0.86, color:V3_METAL},
+      {x:1.18,y:0.02,z:0.86, w:0.46,d:0.46,h:0.24, color:V3_GLASS}
+    ]; break;
+    case 'turret': list=[
+      {x:0.16,y:0.16,z:0,    w:1.68,d:1.68,h:0.3,  color:V3_METAL},
+      {x:0.28,y:0.28,z:0.3,  w:1.44,d:1.44,h:0.16, color:c}
+    ].concat(L>=2?[{x:0.1,y:0.1,z:0, w:0.2,d:0.2,h:0.46, color:V3_METAL},
+                   {x:1.7,y:1.7,z:0, w:0.2,d:0.2,h:0.46, color:V3_METAL}]:[])
+     .concat(L>=3?[{x:0.1,y:1.7,z:0, w:0.2,d:0.2,h:0.46, color:V3_METAL},
+                   {x:1.7,y:0.1,z:0, w:0.2,d:0.2,h:0.46, color:V3_METAL}]:[]);
+      break;
+    case 'stronghold': list=[
+      {x:0.02,y:0.02,z:0,    w:1.96,d:1.96,h:0.6,  color:c},
+      {x:0.24,y:0.24,z:0.6,  w:1.52,d:1.52,h:0.55, color:'rgb('+v3ParseCss(c).map(v=>Math.round(v*0.82)).join(',')+')'},
+      {x:0.5, y:0.5, z:1.15, w:1.0, d:1.0, h:0.5,  color:'rgb('+v3ParseCss(c).map(v=>Math.round(v*0.66)).join(',')+')'},
+      {x:0.9, y:0.9, z:1.65, w:0.2, d:0.2, h:0.9,  color:V3_METAL},
+      {x:0.16,y:0.16,z:0.6,  w:0.22,d:0.22,h:0.34, color:V3_DARK},
+      {x:1.62,y:1.62,z:0.6,  w:0.22,d:0.22,h:0.34, color:V3_DARK}
+    ].concat(L>=2?[{x:0.66,y:0.66,z:1.65, w:0.68,d:0.68,h:0.3, color:c}]:[])
+     .concat(L>=3?[{x:0.76,y:0.76,z:1.95, w:0.48,d:0.48,h:0.3, color:c}]:[]);
+      break;
+    default: list=[{x:0.15,y:0.15,z:0, w:1.7,d:1.7,h:0.6, color:c}];
+  }
+  m=list.map(b=>({ b, rgb:v3ParseCss(b.color) }));
+  v3BldCache.set(k,m);
+  return m;
+}
+function v3IsBig(type){ return type==='refinery'||type==='airport'||type==='silo'; }
+
+// Draws one voxel box list. The lists use local +x = nose forward, +y = right,
+// +z = up (see the tank's barrel and the trooper's rifle in upmActorBoxes); p5
+// wants centre-anchored boxes with up on -y, hence the halved offsets and the
+// sign flip on the middle term.
+function v3DrawBoxes(p,list,V,wear,skip){
+  for(let i=0;i<list.length;i++){
+    if(skip && skip.indexOf(i)>=0) continue;
+    const b=list[i].b;
+    v3Fill(p,list[i].rgb,wear?wear.mul:1,wear?wear.red:0);
+    p.push();
+    p.translate((b.x+b.w/2)*V, -((b.z+b.h/2)*V), (b.y+b.d/2)*V);
+    p.box(b.w*V, b.h*V, b.d*V);
+    p.pop();
+    view3d.boxes++;
+  }
+}
+function v3Box(p,rgb,x,alt,z,w,h,d,mul){
+  v3Fill(p,rgb,mul);
+  p.push(); p.translate(x,-alt,z); p.box(w,h,d); p.pop();
+  view3d.boxes++;
+}
+
+// ---- textures lifted from the 2D layers ----
+// terrainBuffer and fogBuffer are p5.Graphics owned by the OTHER two p5
+// instances. Rather than hand a foreign graphics object to this renderer, take a
+// one-off snapshot into a p5.Image this instance owns: p5 then uploads it once
+// and leaves it alone, instead of re-uploading 1600x1600 pixels every frame.
+function v3SnapTexture(p,src,prev,texel,crisp){
+  if(!src) return prev;
+  const bw=Math.round(MAPW*SZ/texel), bh=Math.round(MAPH*SZ/texel);
+  const img=prev && prev.width===bw ? prev : p.createImage(bw,bh);
+  const cx=img.drawingContext;
+  // Nearest-neighbour decimation, never averaging — averaging would soften the
+  // very edges the blocky look depends on.
+  cx.imageSmoothingEnabled=false;
+  cx.clearRect(0,0,bw,bh);
+  cx.drawImage(src.canvas, 0,0, src.width,src.height, 0,0, bw,bh);
+  img.setModified(true);
+  if(crisp) v3Crisp(p,img);
+  return img;
+}
+// p5 1.9 filters textures linearly by default, which turns the sand into a blur
+// at ground level. setInterpolation is only reachable through the renderer's
+// texture cache, so this pokes at _renderer — guarded, since it is private API
+// and a future p5 could move it. Losing it costs sharpness, nothing else.
+function v3Crisp(p,img){
+  try{
+    const tex=p._renderer && p._renderer.getTexture && p._renderer.getTexture(img);
+    if(tex && tex.setInterpolation) tex.setInterpolation(p.NEAREST, p.NEAREST);
+  }catch(e){ /* filtering stays linear; purely cosmetic */ }
+}
+// Mountains are the one bit of terrain that needs real height — they block
+// movement and are the only landmark worth anything at ground level. Bake the
+// ring around the unit into a single retained geometry so the whole range costs
+// one draw call, and rebake only once the unit has drifted well inside it.
+function v3BakeMountains(p,cx,cy){
+  if(view3d.geom){ p.freeGeometry(view3d.geom); view3d.geom=null; }
+  // The minimap's rock colour, not TERRAIN_BLEND_RGB's — that one is the near-black
+  // used for edge blending and reads as a hole in the world at this range.
+  const rock=MINI_TERRAIN_COLOR.mountain;
+  view3d.geom=p.buildGeometry(()=>{
+    for(let ty=cy-V3_BAKE_R; ty<=cy+V3_BAKE_R; ty++){
+      for(let tx=cx-V3_BAKE_R; tx<=cx+V3_BAKE_R; tx++){
+        if(!inBounds(tx,ty) || terrain[ty][tx]!=='mountain') continue;
+        if(!v3SeesTile(tx,ty)) continue; // never skyline a range you have not found
+        // Deterministic height variation so a range reads as a ridge rather than
+        // a wall of identical cubes — quantised to half-tile steps, so the rock
+        // stacks in whole blocks the way the rest of the look implies.
+        const j=((tx*73856093)^(ty*19349663))>>>0;
+        const h=SZ*(1+(j%4)*0.5);
+        p.push();
+        p.fill(rock[0]+(j%17), rock[1]+(j%13), rock[2]+(j%11));
+        p.translate(tx*SZ+SZ/2, -h/2, ty*SZ+SZ/2);
+        p.box(SZ, h, SZ);
+        p.pop();
+      }
+    }
+  });
+  view3d.geomCX=cx; view3d.geomCY=cy;
+  view3d.geomFog=lastFogBuild;
+}
+
+// ---- camera smoothing ----
+// The atan2(sin,cos) round-trip wraps the delta into (-PI,PI] with no branching,
+// so a heading crossing north takes the short way round instead of unwinding.
+// The exponential factor keeps it frame-rate independent.
+function v3AngleTowards(cur,want,dtMs,tau){
+  let d=want-cur;
+  d=Math.atan2(Math.sin(d),Math.cos(d));
+  const k=1-Math.exp(-dtMs/tau);
+  return cur+d*k;
+}
+function v3LerpPos(cur,want,dtMs,tau){
+  if(!cur) return { x:want.x, z:want.z, alt:want.alt };
+  const k=1-Math.exp(-dtMs/tau);
+  return { x:cur.x+(want.x-cur.x)*k, z:cur.z+(want.z-cur.z)*k, alt:cur.alt+(want.alt-cur.alt)*k };
+}
+
+function ensure3DLayer(){
+  if(p5ThreeD) return p5ThreeD;
+  p5ThreeD=new p5((p)=>{
+    p.setup=function(){
+      p.pixelDensity(1); // as the other two layers do — and on a 3x phone this
+                         // alone is a 9x saving in fill rate
+      const c=p.createCanvas(vs.w, vs.h, p.WEBGL);
+      c.canvas.style.position='absolute'; c.canvas.style.left='0'; c.canvas.style.top='0';
+      c.canvas.style.zIndex='5'; c.canvas.style.pointerEvents='none';
+      c.canvas.style.display='none';
+      p.noStroke(); // never turn this on: p5 builds line geometry per stroked
+                    // edge, which would multiply the cost of every box here
+      p.noLoop();
+      v3BindPointer(c.canvas);
+    };
+    p.draw=function(){ v3Draw(p); };
+  }, boardHost);
+  return p5ThreeD;
+}
+
+function v3Draw(p){
+  // resizeCanvas() calls redraw() even on a noLoop'd instance, so this guard is
+  // what stops a window resize in 2D from running the scene against no anchor.
+  if(!view3d.active) return;
+  const u=view3d.unit;
+  const alive=u && u.sprite && state && !gameOver && state.houses.some(h=>h.units.includes(u));
+  if(!alive){ addLog('Your unit was destroyed — leaving the 3D view.'); exit3D(); return; }
+
+  const now=performance.now();
+  const dt=Math.min(64, now-view3d.lastMs); view3d.lastMs=now;
+  view3d.boxes=0;
+
+  // ---- camera ----
+  const wx=u.sprite.x, wy=u.sprite.y;
+  const alt=isFlyer(u.type)?V3_FLY_ALT:0;
+  view3d.yaw=v3AngleTowards(view3d.yaw, u.dir*Math.PI/4, dt, V3_YAW_TAU);
+  const fx=Math.sin(view3d.yaw), fy=-Math.cos(view3d.yaw);
+  view3d.eye=v3LerpPos(view3d.eye,{x:wx-fx*V3_CHASE, z:wy-fy*V3_CHASE, alt:alt+V3_EYE_H}, dt, V3_POS_TAU);
+  view3d.tgt=v3LerpPos(view3d.tgt,{x:wx+fx*V3_LOOK,  z:wy+fy*V3_LOOK,  alt:alt+V3_LOOK_H}, dt, V3_POS_TAU);
+
+  p.perspective(V3_FOV, p.width/p.height, V3_NEAR, V3_FAR);
+  p.camera(view3d.eye.x, -view3d.eye.alt, view3d.eye.z,
+           view3d.tgt.x, -view3d.tgt.alt, view3d.tgt.z, 0, 1, 0);
+
+  // Cache the basis this frame built, so click picking rays cannot be a frame
+  // out of step with what the player is actually looking at.
+  const dAlt=view3d.eye.alt-view3d.tgt.alt;
+  const dHor=Math.hypot(view3d.tgt.x-view3d.eye.x, view3d.tgt.z-view3d.eye.z);
+  const phi=Math.atan2(dAlt,dHor);
+  const sy=Math.sin(view3d.yaw), cy=Math.cos(view3d.yaw), sp=Math.sin(phi), cp=Math.cos(phi);
+  view3d.basis={
+    fwd:  { x: cp*sy, y: sp,  z: -cp*cy },
+    right:{ x: cy,    y: 0,   z:  sy    },
+    up:   { x: sp*sy, y:-cp,  z: -sp*cy }
+  };
+
+  // ---- sky and light ----
+  p.background(196,166,126);
+  p.ambientLight(96,88,76);
+  p.directionalLight(255,240,208, 0.35,0.85,-0.4);
+
+  // ---- ground ----
+  if(!v3GroundTex && terrainBuffer) v3GroundTex=v3SnapTexture(p,terrainBuffer,null,V3_PIXEL,true);
+  const span=MAPW*SZ;
+  p.push();
+  p.translate(span/2, 0, span/2);
+  p.rotateX(Math.PI/2);
+  if(v3GroundTex) p.texture(v3GroundTex); else p.fill(...MINI_TERRAIN_COLOR.desert);
+  p.plane(span, span);
+  p.pop();
+
+  // ---- mountains ----
+  const ucx=u.x, ucy=u.y;
+  if(!view3d.geom || view3d.geomFog!==lastFogBuild
+     || Math.abs(ucx-view3d.geomCX)>V3_BAKE_DRIFT || Math.abs(ucy-view3d.geomCY)>V3_BAKE_DRIFT){
+    v3BakeMountains(p,ucx,ucy);
+  }
+  if(view3d.geom){ p.push(); p.model(view3d.geom); p.pop(); }
+
+  // ---- fog ----
+  // Re-snapshot only when the 2D layer actually rebuilt its buffer. Drawn with
+  // depth writes off so the veil blends over the sand without clipping anything
+  // standing on it. This plane is what guarantees the 3D view cannot show ground
+  // the map is still hiding.
+  // The 2D fog layer is parked while we are in here, so drive its rebuild from
+  // this loop instead — otherwise ground explored during the ride would stay
+  // black. Same FOG_REBUILD_MS throttle the fog sketch uses.
+  if(fogDirty && p5FogInstance && (p5FogInstance.millis()-lastFogBuild)>=FOG_REBUILD_MS){
+    renderFogBuffer(); fogDirty=false; lastFogBuild=p5FogInstance.millis();
+  }
+  if(fogBuffer && v3FogStamp!==lastFogBuild){ v3FogTex=v3SnapTexture(p,fogBuffer,v3FogTex,V3_FOG_PIXEL,false); v3FogStamp=lastFogBuild; }
+  if(v3FogTex){
+    const gl=p.drawingContext;
+    gl.depthMask(false);
+    p.push();
+    p.translate(span/2, -0.6, span/2);
+    p.rotateX(Math.PI/2);
+    p.texture(v3FogTex);
+    p.plane(span, span);
+    p.pop();
+    gl.depthMask(true);
+  }
+
+  v3DrawScene(p,u,now);
+  v3DrawFx(p,now);
+  v3DrawReticle(p,now);
+}
+
+// Where a unit is actually shooting, so a tank's turret can track it. Returns
+// world pixels or null.
+function v3TargetPos(u){
+  const o=u.order;
+  if(!o || o.kind!=='attack') return null;
+  const th=houseById(o.targetHouseId);
+  if(!th) return null;
+  if(o.targetId==='base') return { x:(th.base.x+1)*SZ, y:(th.base.y+1)*SZ };
+  if(typeof o.targetId==='string' && o.targetId.indexOf('b:')===0){
+    const b=buildingMap.get(o.targetId.slice(2));
+    return b ? { x:b.x*SZ+SZ/2, y:b.y*SZ+SZ/2 } : null;
+  }
+  const t=th.units.find(v=>v.id===o.targetId);
+  return t && t.sprite ? { x:t.sprite.x, y:t.sprite.y } : null;
+}
+
+// Everything alive in the ring around the anchor. Candidates are gathered, then
+// sorted nearest-first and drawn until the box budget runs out, so when a battle
+// gets too big it thins from the back — where the haze already hides it — rather
+// than dropping the frame rate.
+function v3DrawScene(p,anchor,now){
+  const ph=playerHouse();
+  if(!ph) return;
+  const ax=anchor.sprite.x, ay=anchor.sprite.y;
+  const reach=V3_RADIUS*SZ, reach2=reach*reach;
+  const cand=[];
+
+  state.houses.forEach(h=>{
+    h.units.forEach(u=>{
+      if(!u.sprite || !v3SeesUnit(h,u,ph)) return;
+      const dx=u.sprite.x-ax, dy=u.sprite.y-ay, d2=dx*dx+dy*dy;
+      if(d2>reach2) return;
+      cand.push({ kind:'unit', d2, u, h });
+    });
+  });
+  buildingMap.forEach((b,key)=>{
+    if(b.primary===false) return; // footprint-only tile of a 2x2 — drawn at its origin
+    if(!v3SeesBuilding(b,ph)) return;
+    const big=v3IsBig(b.type);
+    const bx=b.x*SZ+(big?SZ:SZ/2), by=b.y*SZ+(big?SZ:SZ/2);
+    const dx=bx-ax, dy=by-ay, d2=dx*dx+dy*dy;
+    if(d2>reach2) return;
+    cand.push({ kind:'bld', d2, b });
+  });
+  state.houses.forEach(h=>{
+    if(!h.alive) return;
+    if(h!==ph && !v3SeesTile(h.base.x,h.base.y)) return;
+    const bx=(h.base.x+1)*SZ, by=(h.base.y+1)*SZ;
+    const dx=bx-ax, dy=by-ay, d2=dx*dx+dy*dy;
+    if(d2>reach2) return;
+    cand.push({ kind:'base', d2, h });
+  });
+  state.worms.forEach(w=>{
+    if(!w.sprite || isWormHidden(w) || !v3SeesTile(w.x,w.y)) return;
+    const dx=w.sprite.x-ax, dy=w.sprite.y-ay, d2=dx*dx+dy*dy;
+    if(d2>reach2) return;
+    cand.push({ kind:'worm', d2, w });
+  });
+  spiceMap.forEach(dep=>{
+    if(!v3SeesTile(dep.x,dep.y)) return;
+    const dx=dep.x*SZ+SZ/2-ax, dy=dep.y*SZ+SZ/2-ay, d2=dx*dx+dy*dy;
+    if(d2>reach2) return;
+    cand.push({ kind:'spice', d2, dep });
+  });
+
+  cand.sort((a,b)=>a.d2-b.d2);
+  const lod2=(V3_LOD*SZ)*(V3_LOD*SZ);
+  for(let i=0;i<cand.length;i++){
+    if(view3d.boxes>V3_BUDGET) break;
+    const c=cand[i], far=c.d2>lod2;
+    if(c.kind==='unit') v3DrawUnit(p,c.u,c.h,ph,now,far);
+    else if(c.kind==='bld') v3DrawBuilding(p,c.b,now,far);
+    else if(c.kind==='base') v3DrawBase(p,c.h,now,far);
+    else if(c.kind==='worm') v3DrawWorm(p,c.w);
+    else v3DrawSpice(p,c.dep);
+  }
+}
+
+function v3DrawUnit(p,u,h,ph,now,far){
+  const color=(h&&h.colorCss)||'#c1441e';
+  const rgb=v3ParseCss(color);
+  const wear=v3Wear(u.hp, UNIT_HP[u.type]);
+  const yaw=u.dir*Math.PI/4;
+  const alt=isFlyer(u.type)?V3_FLY_ALT:0;
+  // u.frame is declared but never incremented anywhere in the game, so animation
+  // phase comes from the clock plus a per-unit offset instead.
+  const ph2=(u.id*137)%1000;
+  const t=now+ph2;
+
+  if(far){ // silhouette only — a house-coloured slab reads fine this far out
+    v3Box(p,rgb, u.sprite.x, alt+SZ*0.28, u.sprite.y, SZ*0.7, SZ*0.55, SZ*0.7, wear.mul);
+    return;
+  }
+
+  const list=v3Actor(u.type,color);
+  p.push();
+  p.translate(u.sprite.x, -alt, u.sprite.y);
+  // upmActorBoxes is authored nose-along-local-+x; rotateY sends local +x to
+  // (cos a, 0, -sin a), and the ground heading is (sin yaw, 0, -cos yaw).
+  p.rotateY(Math.PI/2 - yaw);
+
+  if(u.type==='trooper' && u.moving){
+    p.translate(0, -Math.abs(Math.sin(t/150))*0.12*V3_UNIT, 0);
+    p.rotateZ(Math.sin(t/150)*0.10);
+  } else if(u.type==='bomber'){
+    p.translate(0, Math.sin(t/420)*0.08*V3_UNIT, 0);
+  } else if(u.type==='jet'){
+    p.rotateX(Math.sin(t/700)*0.12);
+  }
+
+  if(u.type==='tank'){
+    // Hull static; turret and barrel swing to whatever the tank is shooting at.
+    v3DrawBoxes(p,list,V3_UNIT,wear,[1,2]);
+    const tp=v3TargetPos(u);
+    let rel=0;
+    if(tp){
+      const want=Math.atan2(tp.x-u.sprite.x, -(tp.y-u.sprite.y));
+      rel=Math.atan2(Math.sin(want-yaw), Math.cos(want-yaw));
+    }
+    p.push();
+    p.rotateY(-rel);
+    v3DrawBoxes(p,[list[1],list[2]],V3_UNIT,wear);
+    p.pop();
+  } else if(u.type==='bomber'){
+    // Crossed main rotors (entries 5 and 6) spin on the mast.
+    v3DrawBoxes(p,list,V3_UNIT,wear,[5,6]);
+    p.push();
+    p.translate(-0.14*V3_UNIT, -0.66*V3_UNIT, 0);
+    p.rotateY(now/40);
+    p.translate(0.14*V3_UNIT, 0.66*V3_UNIT, 0);
+    v3DrawBoxes(p,[list[5],list[6]],V3_UNIT,wear);
+    p.pop();
+  } else {
+    v3DrawBoxes(p,list,V3_UNIT,wear);
+  }
+  p.pop();
+}
+
+function v3DrawBuilding(p,b,now,far){
+  const owner=houseById(b.owner);
+  const color=(owner&&owner.colorCss)||'#8a7a5a';
+  const rgb=v3ParseCss(color);
+  const big=v3IsBig(b.type);
+  const wear=v3Wear(b.hp, b.hpMax||BUILDING_HP[b.type]);
+  const ox=b.x*SZ, oz=b.y*SZ;
+  if(far){
+    const s=big?SZ*1.7:SZ*0.8;
+    v3Box(p,rgb, ox+(big?SZ:SZ/2), SZ*0.4, oz+(big?SZ:SZ/2), s, SZ*0.8, s, wear.mul);
+    return;
+  }
+  const lvl=b.type==='turret'?turretLevel(b):(b.type==='airport'?airportLevel(b):1);
+  p.push();
+  p.translate(ox,0,oz);
+  v3DrawBoxes(p, v3BuildingBoxes(b.type,color,lvl), V3_BLD, wear);
+
+  if(b.type==='turbine'){
+    // Three blades on the nacelle, turning at the same pace as the map sprite.
+    p.push();
+    p.translate(0.5*V3_BLD, -2.11*V3_BLD, 0.34*V3_BLD);
+    const spin=now/900;
+    for(let i=0;i<3;i++){
+      p.push();
+      p.rotateZ(spin + i*(Math.PI*2/3));
+      p.translate(0.55*V3_BLD, 0, 0);
+      p.fill(238,232,214);
+      p.box(1.1*V3_BLD, 0.1*V3_BLD, 0.05*V3_BLD);
+      p.pop();
+      view3d.boxes++;
+    }
+    p.pop();
+  } else if(b.type==='airport'){
+    p.push();
+    p.translate(1.41*V3_BLD, -1.16*V3_BLD, 0.25*V3_BLD);
+    p.rotateY(now/700);
+    p.fill(210,200,178);
+    p.box(0.7*V3_BLD, 0.05*V3_BLD, 0.16*V3_BLD);
+    p.pop();
+    view3d.boxes++;
+  } else if(b.type==='turret'){
+    // Head and barrel sweep for a target, the same range the turret really has.
+    const tp=v3NearestFoeOf(b);
+    const ang=tp ? Math.atan2(tp.x-(ox+SZ), -(tp.y-(oz+SZ))) : now/1400;
+    p.push();
+    p.translate(SZ, -0.46*V3_BLD, SZ);
+    p.rotateY(Math.PI/2-ang);
+    v3Fill(p,rgb,wear.mul*0.9,wear.red);
+    p.box(0.7*V3_BLD, 0.34*V3_BLD, 0.7*V3_BLD);
+    p.translate(0.62*V3_BLD, -0.02*V3_BLD, 0);
+    p.fill(36,32,26);
+    p.box(0.8*V3_BLD, 0.14*V3_BLD, 0.14*V3_BLD);
+    p.pop();
+    view3d.boxes+=2;
+  } else if(b.type==='refinery'){
+    // Flare tip flickers so the plant reads as running.
+    const f=0.6+0.4*Math.abs(Math.sin(now/220));
+    v3Fill(p,[255,150,60],f);
+    p.push(); p.translate(1.48*V3_BLD, -1.9*V3_BLD, 0.42*V3_BLD); p.box(0.22*V3_BLD); p.pop();
+    view3d.boxes++;
+  }
+  // Anything badly hurt trails smoke.
+  if(b.hp && b.hpMax && b.hp/b.hpMax<0.4){
+    for(let i=0;i<3;i++){
+      const rise=((now/900)+i*0.33)%1;
+      p.fill(70,64,58, 200*(1-rise));
+      p.push();
+      p.translate((big?1:0.5)*V3_BLD, -(1.0+rise*1.6)*V3_BLD, (big?1:0.5)*V3_BLD);
+      p.box((0.25+rise*0.5)*V3_BLD);
+      p.pop();
+      view3d.boxes++;
+    }
+  }
+  p.pop();
+}
+
+function v3NearestFoeOf(b){
+  const owner=houseById(b.owner);
+  if(!owner) return null;
+  const cx=b.x, cy=b.y, r=TURRET_RANGE+2;
+  let best=null, bd=Infinity;
+  state.houses.forEach(h=>{
+    if(h===owner) return;
+    h.units.forEach(u=>{
+      if(!u.sprite) return;
+      const d=Math.max(Math.abs(u.x-cx), Math.abs(u.y-cy));
+      if(d<=r && d<bd){ bd=d; best={x:u.sprite.x, y:u.sprite.y}; }
+    });
+  });
+  return best;
+}
+
+function v3DrawBase(p,h,now,far){
+  const rgb=v3ParseCss(h.colorCss);
+  const ox=h.base.x*SZ, oz=h.base.y*SZ;
+  const wear=v3Wear(h.hp, BASE_LEVELS[baseLevel(h)-1].hpMax);
+  if(far){ v3Box(p,rgb, ox+SZ, SZ*0.9, oz+SZ, SZ*1.8, SZ*1.8, SZ*1.8, wear.mul); return; }
+  p.push();
+  p.translate(ox,0,oz);
+  v3DrawBoxes(p, v3BuildingBoxes('stronghold',h.colorCss,baseLevel(h)), V3_BLD, wear);
+  // Banner on the mast, swaying.
+  p.push();
+  p.translate(1.02*V3_BLD, -2.35*V3_BLD, 1.0*V3_BLD);
+  p.rotateY(Math.sin(now/700)*0.25);
+  p.translate(0.2*V3_BLD, 0, 0);
+  v3Fill(p,rgb,1.15);
+  p.box(0.42*V3_BLD, 0.3*V3_BLD, 0.03*V3_BLD);
+  p.pop();
+  view3d.boxes++;
+  p.pop();
+}
+
+function v3DrawWorm(p,w){
+  const surfaced=w.surfaceUntil && performance.now()<w.surfaceUntil;
+  const rgb=[122,96,62];
+  if(surfaced){
+    // Rearing out of the sand: three tapering segments.
+    v3Box(p,rgb, w.sprite.x, SZ*0.5, w.sprite.y, SZ*1.1, SZ*1.0, SZ*1.1, 0.9);
+    v3Box(p,rgb, w.sprite.x, SZ*1.4, w.sprite.y, SZ*0.85, SZ*0.9, SZ*0.85, 1.0);
+    v3Box(p,[54,38,28], w.sprite.x, SZ*2.0, w.sprite.y, SZ*0.6, SZ*0.5, SZ*0.6, 1.0);
+  } else {
+    v3Box(p,rgb, w.sprite.x, SZ*0.12, w.sprite.y, SZ*1.3, SZ*0.22, SZ*0.8, 0.85);
+  }
+}
+
+function v3DrawSpice(p,dep){
+  const f=Math.max(0.35, Math.min(1, dep.amount/60));
+  v3Fill(p,[224,140,52], 0.7+0.5*f);
+  p.push();
+  p.translate(dep.x*SZ+SZ/2, -0.8, dep.y*SZ+SZ/2);
+  p.rotateX(Math.PI/2);
+  p.plane(SZ*0.92, SZ*0.92);
+  p.pop();
+  view3d.boxes++;
+}
+
+// Combat effects are read straight off activeFx — the same list the 2D layer
+// animates — so no new hook is needed anywhere in the combat code.
+function v3DrawFx(p,now){
+  for(let i=0;i<activeFx.length;i++){
+    const fx=activeFx[i];
+    const t=(now-fx.born)/fx.life;
+    if(t<0 || t>=1) continue;
+    if(fx.kind==='laser'){
+      const mx=(fx.fromX+fx.toX)/2, my=(fx.fromY+fx.toY)/2;
+      const len=Math.hypot(fx.toX-fx.fromX, fx.toY-fx.fromY);
+      p.fill(255,90,60);
+      p.push();
+      p.translate(mx, -SZ*0.35, my);
+      p.rotateY(-Math.atan2(fx.toY-fx.fromY, fx.toX-fx.fromX));
+      p.box(len, 2.5, 2.5);
+      p.pop();
+      view3d.boxes++;
+    } else if(fx.kind==='spark' || fx.kind==='explosion'){
+      const r=(fx.kind==='explosion'?SZ*0.9:SZ*0.4)*(0.4+t);
+      p.fill(255, 200-120*t, 90-60*t);
+      p.push(); p.translate(fx.x, -r*0.6, fx.y); p.box(r); p.pop();
+      view3d.boxes++;
+    } else if(fx.kind==='bomb'){
+      p.fill(60,54,44);
+      p.push(); p.translate(fx.targetX, -(1-t)*SZ*2.2, fx.targetY); p.box(SZ*0.28); p.pop();
+      view3d.boxes++;
+    } else if(fx.kind==='dead'){
+      p.fill(40,34,28);
+      p.push(); p.translate(fx.x, -1.2, fx.y); p.rotateX(Math.PI/2); p.plane(SZ*0.8, SZ*0.8); p.pop();
+      view3d.boxes++;
+    }
+  }
+}
+
+// Without a reticle, clicking into a perspective view is guesswork — this is
+// what makes the tile you are about to order legible.
+function v3DrawReticle(p,now){
+  const h=view3d.hover;
+  if(!h) return;
+  const cx=h.x*SZ+SZ/2, cz=h.y*SZ+SZ/2, half=SZ/2;
+  const pulse=0.7+0.3*Math.sin(now/220);
+  p.fill(255*pulse, 220*pulse, 120*pulse);
+  const bar=(dx,dz,w,d)=>{ p.push(); p.translate(cx+dx,-1.6,cz+dz); p.box(w,2,d); p.pop(); };
+  bar(0,-half,SZ,3); bar(0,half,SZ,3); bar(-half,0,3,SZ); bar(half,0,3,SZ);
+  view3d.boxes+=4;
+}
+
+// ---- picking: screen point -> ground tile ----
+// This p5 build has no screenPosition(), so the ray is assembled by hand from
+// the basis v3Draw cached this frame. perspective()'s first argument is the
+// VERTICAL field of view, so the horizontal half-angle carries the aspect ratio.
+function v3RayFromClient(clientX,clientY){
+  const r=p5ThreeD.canvas.getBoundingClientRect();
+  const ndcX=(2*(clientX-r.left)/r.width)-1;
+  const ndcY=1-(2*(clientY-r.top)/r.height);
+  const tanV=Math.tan(V3_FOV/2), tanH=tanV*(r.width/r.height);
+  const b=view3d.basis;
+  const d={
+    x:b.fwd.x + b.right.x*ndcX*tanH + b.up.x*ndcY*tanV,
+    y:b.fwd.y + b.right.y*ndcX*tanH + b.up.y*ndcY*tanV,
+    z:b.fwd.z + b.right.z*ndcX*tanH + b.up.z*ndcY*tanV
+  };
+  const L=Math.hypot(d.x,d.y,d.z)||1;
+  return { x:d.x/L, y:d.y/L, z:d.z/L };
+}
+function v3PickTile(clientX,clientY){
+  if(!view3d.basis || !view3d.eye) return { reason:'sky' };
+  const d=v3RayFromClient(clientX,clientY);
+  if(d.y<1e-4) return { reason:'sky' };          // at or above the horizon
+  const t=view3d.eye.alt/d.y;
+  if(t>V3_PICK_MAX) return { reason:'far' };     // grazing ray, lands miles off
+  const tx=Math.floor((view3d.eye.x+d.x*t)/SZ), ty=Math.floor((view3d.eye.z+d.z*t)/SZ);
+  if(!inBounds(tx,ty)) return { reason:'offmap' };
+  return { x:tx, y:ty };
+}
+
+function v3BindPointer(cv){
+  cv.addEventListener('pointerdown',(e)=>{ v3Drag={x:e.clientX,y:e.clientY,moved:false}; });
+  cv.addEventListener('pointermove',(e)=>{
+    if(!view3d.active) return;
+    if(v3Drag && (Math.abs(e.clientX-v3Drag.x)>4 || Math.abs(e.clientY-v3Drag.y)>4)) v3Drag.moved=true;
+    const hit=v3PickTile(e.clientX,e.clientY);
+    view3d.hover=hit.reason?null:hit;
+  });
+  cv.addEventListener('pointerleave',()=>{ view3d.hover=null; });
+  cv.addEventListener('pointerup',(e)=>{
+    const drag=v3Drag; v3Drag=null;
+    if(!view3d.active || !drag || drag.moved) return;
+    const hit=v3PickTile(e.clientX,e.clientY);
+    if(hit.reason){ addLog(V3_PICK_MSG[hit.reason]); return; }
+    handleTileCommand(hit.x,hit.y);
+    if(!state) return;
+    // An order clears or changes the selection, which would leave later clicks
+    // inert. Re-anchor to whatever ground unit the click selected, or put the
+    // rider back in the selection if it picked nothing.
+    const sel=state.selectedUnits;
+    if(sel.length===1 && sel[0]!==view3d.unit && V3_RIDEABLE[sel[0].type]){
+      view3d.unit=sel[0]; view3d.yaw=sel[0].dir*Math.PI/4; view3d.eye=view3d.tgt=null;
+      hideCtxMenu(); v3Hint();
+    } else if(!sel.includes(view3d.unit)){
+      state.selectedUnits=[view3d.unit];
+      updateSelectionRing();
+      hideCtxMenu(); v3Hint();
+    } else hideCtxMenu(), v3Hint();
+  });
+  // The 3D canvas sits inside #boardHost, whose dblclick/touchend listeners run
+  // zoomAt — those would fire on bubbled events, so they are guarded at source.
+  cv.addEventListener('dblclick',(e)=>{ e.preventDefault(); e.stopPropagation(); });
+}
+
+function v3Hint(){
+  modeHint.textContent='3D VIEW — click the ground to move, an enemy to attack · Esc to exit';
+  modeHint.style.display='block';
+}
+
+function enter3D(u){
+  if(!u || view3d.active || !state || gameOver) return;
+  ensure3DLayer();
+  view3d.active=true;
+  view3d.unit=u;
+  view3d.yaw=u.dir*Math.PI/4;
+  view3d.eye=null; view3d.tgt=null; view3d.basis=null;
+  view3d.lastMs=performance.now();
+  view3d.hover=null;
+  view3d.geomCX=-9999; view3d.geomCY=-9999;
+
+  uiMode=null; hidePlacementPreview();
+  followUnit=null;                 // stop the 2D camera fighting for the unit
+  hideCtxMenu();                   // keeps the selection, drops the menu
+  boardHost.classList.remove('targeting','dragging');
+
+  // Park the two 2D map layers. PIXI must keep ticking — it is what interpolates
+  // u.sprite.x/y, which this camera rides on — so only hide its canvas.
+  p5Instance.noLoop();    p5Instance.canvas.style.display='none';
+  p5FogInstance.noLoop(); p5FogInstance.canvas.style.display='none';
+  app.view.style.visibility='hidden';
+  edgeVignetteEl.style.display='none';
+
+  p5ThreeD.canvas.style.display='block';
+  p5ThreeD.canvas.style.pointerEvents='auto';
+  p5ThreeD.loop();
+  exit3dBtn.style.display='block';
+  v3Hint();
+  addLog('Visor down — riding the '+(UNIT_LABEL[u.type]||u.type)+'.');
+}
+
+function exit3D(){
+  if(!view3d.active) return;
+  view3d.active=false;
+  const u=view3d.unit; view3d.unit=null; view3d.hover=null;
+  if(p5ThreeD){
+    p5ThreeD.noLoop();
+    p5ThreeD.canvas.style.display='none';
+    p5ThreeD.canvas.style.pointerEvents='none';
+    // Every buildGeometry mints fresh GPU buffers; without this the ride leaks
+    // VRAM for as long as the session lasts.
+    if(view3d.geom){ p5ThreeD.freeGeometry(view3d.geom); view3d.geom=null; }
+    view3d.geomCX=-9999; view3d.geomCY=-9999;
+  }
+  p5Instance.canvas.style.display='';    p5Instance.loop();
+  p5FogInstance.canvas.style.display=''; p5FogInstance.loop();
+  app.view.style.visibility='';
+  edgeVignetteEl.style.display='';
+  exit3dBtn.style.display='none';
+  modeHint.style.display='none';
+
+  if(u && state && state.houses.some(h=>h.units.includes(u))) centerCameraOn(u.x,u.y);
+  if(state && state.selectedUnits.length) openCtxMenuFor();
+}
+
+document.getElementById('ctx3D').onclick=()=>{
+  if(view3d.active){ exit3D(); return; }
+  if(canRide3D(state && state.selectedUnits)) enter3D(state.selectedUnits[0]);
+};
+exit3dBtn.addEventListener('click', exit3D);
+// Capture phase, so this lands before any individual build/recruit handler.
+document.getElementById('actionBar').addEventListener('click', ()=>{
+  if(view3d.active) exit3D();
+}, true);
 
 Promise.all([
   // Trooper keeps the procedural trooperCanvas art (3-soldier squad, set in
