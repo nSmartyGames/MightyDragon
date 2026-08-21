@@ -1525,23 +1525,47 @@ function mountainCanvasB(cx,size){
 // Light grey palette so PIXI's per-house tint recolors it like every other
 // unit sprite. Two soldiers up front, one staggered behind for a squad
 // read rather than a single blob.
-function trooperCanvas(cx,size){
-  function soldier(x,yBase){
+// The trooper squad walks: TROOPER_WALK_FRAMES textures are baked once at load
+// and cycled while the unit is on the move (see textureFor). One frame is a
+// single point on the cycle — `ph` runs 0..1 around it. The squad is seen from
+// above and slightly behind, so a stride reads as the legs scissoring open and
+// shut, the body bobbing a little at each footfall, and the rifle swinging with
+// the opposite arm. The three soldiers are a third of a cycle apart so the
+// squad never marches in lockstep.
+const TROOPER_WALK_FRAMES=8;
+function trooperCanvas(cx,size,ph){
+  const phase=ph||0;
+  function soldier(x,yBase,off){
+    // 0..1 around the stride, then a sine for each leg (half a cycle apart).
+    const w=((phase+off)%1)*Math.PI*2;
+    const swing=Math.sin(w), lift=Math.abs(Math.cos(w));
+    // Body rises on the push-off and drops as the lead foot lands. The whole
+    // cycle is deliberately exaggerated: at 16px a naturalistic stride moves
+    // less than a pixel and reads as a static sprite.
+    const bob=-0.55*lift;
+    const by=yBase+bob;
+    const lean=swing*0.16;
+    // Legs: one strides forward as the other trails, and the trailing foot
+    // lifts clear of the sand instead of scraping through it.
     cx.strokeStyle='#c8c4ba'; cx.lineWidth=0.9;
     cx.beginPath();
-    cx.moveTo(x-0.6,yBase-0.2); cx.lineTo(x-1,yBase+1.6);
-    cx.moveTo(x+0.6,yBase-0.2); cx.lineTo(x+1,yBase+1.6);
+    cx.moveTo(x-0.6,by-0.2); cx.lineTo(x-1-swing*1.1, by+1.7+swing*1.4);
+    cx.moveTo(x+0.6,by-0.2); cx.lineTo(x+1+swing*1.1, by+1.7-swing*1.4);
     cx.stroke();
     cx.fillStyle='#e6e2d8';
-    cx.beginPath(); cx.ellipse(x,yBase-2,1.3,2.6,0,0,Math.PI*2); cx.fill();
-    cx.beginPath(); cx.arc(x,yBase-5,1.3,0,Math.PI*2); cx.fill();
+    cx.beginPath(); cx.ellipse(x,by-2,1.3,2.6,lean,0,Math.PI*2); cx.fill();
+    cx.beginPath(); cx.arc(x+swing*0.3,by-5,1.3,0,Math.PI*2); cx.fill();
     cx.strokeStyle='rgba(0,0,0,.45)'; cx.lineWidth=0.4;
-    cx.beginPath(); cx.ellipse(x,yBase-2,1.3,2.6,0,0,Math.PI*2); cx.stroke();
-    cx.beginPath(); cx.arc(x,yBase-5,1.3,0,Math.PI*2); cx.stroke();
+    cx.beginPath(); cx.ellipse(x,by-2,1.3,2.6,lean,0,Math.PI*2); cx.stroke();
+    cx.beginPath(); cx.arc(x+swing*0.3,by-5,1.3,0,Math.PI*2); cx.stroke();
+    // Rifle, carried across the body and swinging against the leading leg.
     cx.strokeStyle='#2a2a2a'; cx.lineWidth=0.8;
-    cx.beginPath(); cx.moveTo(x-1.8,yBase-0.5); cx.lineTo(x+3,yBase-5.5); cx.stroke();
+    cx.beginPath();
+    cx.moveTo(x-1.8-swing*0.7, by-0.5-swing*0.6);
+    cx.lineTo(x+3-swing*0.7,   by-5.5-swing*0.6);
+    cx.stroke();
   }
-  soldier(8,9); soldier(4,14); soldier(12,14);
+  soldier(8,9,0); soldier(4,14,1/3); soldier(12,14,2/3);
 }
 // Wind turbine: tapered tower + nacelle + a 3-blade hub, instead of the old
 // single line-and-dot. Drawn in white/light-grey tones (like refineryBody)
@@ -1617,11 +1641,11 @@ function siloCanvas(cx,size){
   cx.fillStyle='#5f5f5f';
   cx.fillRect(cxm-1.1,cxm+r*0.15,2.2,size/2-r+3);
 }
-// The harvester as the biggest truck on the map: an ultra-class mining haul
-// truck seen from above — six tyres (duals at the back) spread nearly the full
-// tile, a bumper and headlights across the nose, the operator cab tucked under
-// the dump body's overhanging canopy, engine deck and exhaust stacks alongside,
-// and a huge open bed running to the tail. It used to borrow the baked `tank`
+// The harvester: an ultra-class mining haul truck seen from above — six tyres
+// (duals at the back) spread nearly the full tile, a bumper and headlights
+// across the nose, the operator cab tucked under the dump body's overhanging
+// canopy, engine deck and exhaust stacks alongside, and a huge open bed
+// running to the tail. It used to borrow the baked `tank`
 // photo tile, which was the same silhouette as the actual tank unit.
 //
 // Everything is greyscale so the per-house tint still recolors it; the spice in
@@ -1633,7 +1657,15 @@ function siloCanvas(cx,size){
 // 16px the cab, stacks and bed ribs all collapse into the same grey pixel, and
 // rotating that to eight headings smears what is left.
 const HAUL_TRUCK_SUPERSAMPLE=4;
-const HAUL_TRUCK_SCALE=1.35; // ...and it rides this much larger than a 1-tile unit
+// How large the truck rides relative to a one-tile unit. It used to loom at
+// 1.35 tiles across; halved, so it now reads as a working vehicle among the
+// tanks rather than the biggest thing on the map.
+const HAUL_TRUCK_SCALE=0.675;
+// The truck art is authored in 16px tile units (see the `k` in haulTruckCanvas).
+// This is what one of those units measures on screen, so the harvest FX below
+// can be drawn in the same units the body is and stays pinned to the sprite at
+// whatever HAUL_TRUCK_SCALE is set to.
+function haulArtUnit(){ return SZ*HAUL_TRUCK_SCALE/16; }
 function haulTruckCanvas(cx,size){
   const k=size/16;
   const R=(x,y,w,h,r)=>roundedRectPath(cx,x*k,y*k,w*k,h*k,(r||0)*k);
@@ -1807,7 +1839,12 @@ const TEX = {
     t.baseTexture.scaleMode=PIXI.SCALE_MODES.LINEAR;
     return t;
   })(),
-  trooper: canvasTexture(TILE, trooperCanvas),
+  trooper: canvasTexture(TILE, (cx,size)=>trooperCanvas(cx,size,0)),
+  // One texture per point on the stride, cycled by textureFor while the squad
+  // is walking. Frame 0 is the standing pose the single texture above bakes,
+  // so a halted squad looks exactly as it always did.
+  trooperFrames: Array.from({length:TROOPER_WALK_FRAMES},(_,i)=>
+    canvasTexture(TILE,(cx,size)=>trooperCanvas(cx,size,i/TROOPER_WALK_FRAMES))),
   tank: null,
   sandTrail: canvasTexture(TILE, sandTrailCanvas),
   wormMouth: canvasTexture(TILE, wormMouthCanvas),
@@ -2436,21 +2473,38 @@ function playerHouse(){
 function allUnits(){ return state.houses.flatMap(h=>h.units); }
 function enemyHousesOf(house){ return state.houses.filter(h=>h!==house && h.alive); }
 
-// Per-frame texture pick. Everything but the gunship is a single static
-// texture; the gunship cycles TEX.bomberFrames so its rotor keeps turning
-// (the main ticker reassigns sprite.texture every frame anyway).
+// Per-frame texture pick. The gunship cycles TEX.bomberFrames so its rotor
+// keeps turning, and a marching trooper squad cycles TEX.trooperFrames so it
+// actually walks (the main ticker reassigns sprite.texture every frame anyway).
 const ROTOR_FRAME_MS=60;
 function textureFor(u){
   if(u.type==='bomber'){
     const f=TEX.bomberFrames;
     return f[Math.floor(performance.now()/ROTOR_FRAME_MS)%f.length];
   }
+  if(u.type==='trooper'){
+    // Driven by the stride phase, not by the wall clock, so the legs stop
+    // mid-pose the moment the squad halts rather than marching on the spot.
+    if(!u.moving) return TEX.trooper;
+    const f=TEX.trooperFrames;
+    return f[Math.floor((u._stride||0)*f.length)%f.length];
+  }
   return TEX[u.type];
+}
+// One shared 0..1 animation phase per unit, advanced only while the unit is
+// actually moving: the trooper's walk cycle rides it, and so do the tank's and
+// the harvester's wheels in the 3D view. Advancing it off travel rather than
+// off the clock is what keeps a halted unit's legs and wheels still.
+const STRIDE_PER_MS=1/560;   // one full stride every 560ms of walking
+function advanceStride(u,dtMs){
+  if(!u.moving) return;
+  u._stride=((u._stride||0)+dtMs*STRIDE_PER_MS)%1;
 }
 // On-screen scale for a unit's sprite. The harvester is the odd one out twice
 // over: its texture is baked HAUL_TRUCK_SUPERSAMPLE× oversized (so it has to be
-// scaled back down), and it rides HAUL_TRUCK_SCALE larger than a one-tile unit
-// so it looms over everything else on the map, as the biggest truck should.
+// scaled back down), and HAUL_TRUCK_SCALE then sets how large it rides relative
+// to a one-tile unit — currently smaller than one, so it sits among the tanks
+// rather than towering over them.
 function unitSpriteScale(type){
   return type==='harvester' ? ZOOM*HAUL_TRUCK_SCALE/HAUL_TRUCK_SUPERSAMPLE : ZOOM;
 }
@@ -2524,6 +2578,26 @@ function spawnLaserFx(fromX,fromY,toX,toY){
 function spawnBombFx(toX,toY,delay){
   spawnFx('bomb', { x:toX, y:toY-46, targetX:toX, targetY:toY, delay:delay||0 }, 480);
 }
+// Muzzle blast at the gun that fired: a tapering tongue of flame down the line
+// of fire, a white-hot flash at the barrel's mouth, and a spray of sparks
+// thrown out along it. Only the shell landing used to be drawn, which left a
+// firing tank looking like it had nothing to do with the explosion.
+const MUZZLE_SPARKS=14;
+function spawnMuzzleFx(fromX,fromY,toX,toY){
+  const a=Math.atan2(toY-fromY, toX-fromX);
+  // Start the flame at the barrel's mouth rather than the hull's centre.
+  const MUZZLE=SZ*0.42;
+  const mx=fromX+Math.cos(a)*MUZZLE, my=fromY+Math.sin(a)*MUZZLE;
+  // Each spark gets its own direction inside a narrow cone and its own reach,
+  // fixed at spawn so it flies straight instead of jittering every frame.
+  const sparks=[];
+  for(let i=0;i<MUZZLE_SPARKS;i++){
+    const spread=(Math.random()-0.5)*0.85;
+    sparks.push({ a:a+spread, speed:26+Math.random()*46, len:3+Math.random()*5, w:0.8+Math.random()*1.1,
+      hot:Math.random()<0.45, delay:Math.random()*0.18 });
+  }
+  spawnFx('muzzle', { x:mx, y:my, a, sparks }, 300);
+}
 function spawnExplosionFx(x,y){ spawnFx('explosion', { x, y }, 550); }
 function spawnDeadFx(x,y){ spawnFx('dead', { x, y }, 1000); }
 function updateActiveFx(now){
@@ -2554,6 +2628,39 @@ function updateActiveFx(now){
         g.beginFill(0xff4020,(1-bt)*0.8); g.drawCircle(0,0,r*0.55); g.endFill();
         g.y=fx.targetY; g.alpha=1;
       }
+    } else if(fx.kind==='muzzle'){
+      g.clear();
+      const a=fx.a, ca=Math.cos(a), sa=Math.sin(a);
+      const px=-sa, py=ca;                 // across the line of fire
+      // Flame tongue: longest and widest at the instant of firing, snuffed out
+      // over the first two thirds of the effect.
+      const ft=Math.min(1,t/0.66), fade=1-ft;
+      if(fade>0){
+        const len=SZ*(0.30+0.62*(1-ft*0.7)), half=SZ*0.17*(1-ft*0.55);
+        const tip=SZ*0.05;
+        [[0xffe9a8,1.0,0.30],[0xffab3c,0.85,0.62],[0xd8371a,0.6,1.0]].forEach(([col,alpha,scale])=>{
+          const L=len*scale, H=half*scale;
+          g.beginFill(col, alpha*fade);
+          g.drawPolygon([ px*H, py*H, ca*L+px*tip, sa*L+py*tip, ca*L-px*tip, sa*L-py*tip, -px*H, -py*H ]);
+          g.endFill();
+        });
+        // white-hot core right at the muzzle
+        g.beginFill(0xfffbe8, fade);
+        g.drawCircle(ca*SZ*0.06, sa*SZ*0.06, SZ*0.11*(1-ft*0.6));
+        g.endFill();
+      }
+      // Sparks thrown down the line of fire, decelerating as they go and each
+      // drawn as a short streak along its own direction.
+      fx.sparks.forEach(sp=>{
+        const st=(t-sp.delay)/(1-sp.delay);
+        if(st<=0 || st>=1) return;
+        const travel=sp.speed*(st*(2-st));   // ease-out: fast off the muzzle, then drags
+        const cx=Math.cos(sp.a)*travel, cy=Math.sin(sp.a)*travel;
+        const tailX=cx-Math.cos(sp.a)*sp.len, tailY=cy-Math.sin(sp.a)*sp.len;
+        g.lineStyle(sp.w, sp.hot?0xfff0b4:0xff8a2e, 1-st);
+        g.moveTo(tailX,tailY); g.lineTo(cx,cy);
+      });
+      g.lineStyle(0);
     } else if(fx.kind==='explosion'){
       g.clear();
       const r=4+t*18;
@@ -2599,18 +2706,21 @@ function updateHarvestSand(u,now){
   const at=(d,s)=>({ x:bx*d+lx*s, y:by*d+ly*s });
   const t=(now-u._lastHarvest)/HARVEST_SAND_MS;
   const fade=Math.min(1,(1-t)*2.5); // holds full while scooping, drops off at the end
-  // Distances are measured back from the sprite's center in world pixels: the
-  // tail lip sits ~20px behind it on a HAUL_TRUCK_SCALE truck, and the pickup
-  // bites the dune a little beyond that.
-  const GROUND=44, LIP=19;
+  // Every distance and size below is in the truck's own 16px art units (A),
+  // measured back from the sprite's center: the tail lip sits ~7 units behind
+  // it and the pickup bites the dune a little beyond that. Written this way so
+  // the whole conveyor shrinks and grows with HAUL_TRUCK_SCALE instead of
+  // floating out in front of a smaller truck.
+  const A=haulArtUnit();
+  const GROUND=16.3*A, LIP=7.04*A;
   // conveyor band, wide where it bites the dune and narrowing as it rides up
-  const p=[at(GROUND,8),at(GROUND,-8),at(LIP,-4.5),at(LIP,4.5)];
+  const p=[at(GROUND,2.96*A),at(GROUND,-2.96*A),at(LIP,-1.67*A),at(LIP,1.67*A)];
   g.beginFill(0xc98b46,0.28*fade);
   g.drawPolygon([p[0].x,p[0].y,p[1].x,p[1].y,p[2].x,p[2].y,p[3].x,p[3].y]);
   g.endFill();
   // side rails, so the band reads as a ramp climbing to the lip rather than as
   // a stain lying flat on the sand
-  g.lineStyle(1.2,0xa46f33,0.5*fade);
+  g.lineStyle(Math.max(0.6,0.44*A),0xa46f33,0.5*fade);
   g.moveTo(p[0].x,p[0].y); g.lineTo(p[3].x,p[3].y);
   g.moveTo(p[1].x,p[1].y); g.lineTo(p[2].x,p[2].y);
   g.lineStyle(0);
@@ -2618,25 +2728,25 @@ function updateHarvestSand(u,now){
   for(let i=0;i<SAND_GRAINS;i++){
     const ph=((now/620)+i/SAND_GRAINS)%1;
     const d=GROUND+(LIP-GROUND)*ph;
-    const spread=(((i*37)%11)/5-1)*6.5*(1-ph*0.75);
-    const pt=at(d,spread+Math.sin(ph*Math.PI*2+i)*0.8);
+    const spread=(((i*37)%11)/5-1)*2.41*A*(1-ph*0.75);
+    const pt=at(d,spread+Math.sin(ph*Math.PI*2+i)*0.30*A);
     g.beginFill(i%3?0xe0894a:0xf0b070, fade*Math.min(1,ph*4));
-    g.drawCircle(pt.x,pt.y,1+ph*1.5);
+    g.drawCircle(pt.x,pt.y,(0.37+ph*0.56)*A);
     g.endFill();
   }
   // dust kicked up where the pickup bites the dune
-  const puff=at(GROUND+3,0);
+  const puff=at(GROUND+1.11*A,0);
   g.beginFill(0xd9b98a,0.20*fade*(0.7+0.3*Math.sin(now/140)));
-  g.drawEllipse(puff.x,puff.y,9,6);
+  g.drawEllipse(puff.x,puff.y,3.33*A,2.22*A);
   g.endFill();
   // and the load itself, heaped in the bed by however much cargo is aboard
   const load=Math.max(0.25,Math.min(1,(u.carrying||0)/HARVESTER_CAP));
-  const heap=at(7,0);
+  const heap=at(2.59*A,0);
   g.beginFill(0xd2743a,0.85*fade);
-  g.drawEllipse(heap.x,heap.y,8*load,6.5*load);
+  g.drawEllipse(heap.x,heap.y,2.96*A*load,2.41*A*load);
   g.endFill();
   g.beginFill(0xf0a05a,0.6*fade);
-  g.drawEllipse(heap.x-lx*1.5,heap.y-ly*1.5,4.5*load,3*load);
+  g.drawEllipse(heap.x-lx*0.56*A,heap.y-ly*0.56*A,1.67*A*load,1.11*A*load);
   g.endFill();
 }
 function updateHealthBar(u,now){
@@ -2830,6 +2940,10 @@ app.ticker.add((delta)=>{
   state.houses.forEach(h=>{
     h.units.forEach(u=>{
       if(!u.sprite) return;
+      // delta is PIXI's frame delta in 60fps ticks. This runs even while the
+      // 3D chase view is up (PIXI keeps ticking to interpolate sprite.x/y),
+      // which is what keeps that view's wheels and legs moving too.
+      advanceStride(u, delta*(1000/60));
       u.sprite.texture=textureFor(u);
       u.sprite.tint=h.color;
       u.sprite.rotation=dirAngle(u.dir);
@@ -3425,6 +3539,10 @@ function removeUnitVisuals(u){
 function spawnAttackFx(u,targetX,targetY){
   if(u.type==='tank' || u.type==='bomber' || u.type==='turret') spawnBombFx(targetX,targetY);
   else if(u.sprite) spawnLaserFx(u.sprite.x,u.sprite.y,targetX,targetY);
+  // A tank's gun throws flame and sparks where it stands, not just where the
+  // shell lands. (The gunship bombs from altitude and the turret is drawn
+  // firing by its own art, so neither gets one.)
+  if(u.type==='tank' && u.sprite) spawnMuzzleFx(u.sprite.x,u.sprite.y,targetX,targetY);
   playFireSound();
   // Your own guns opening up is half of "a fight has started"; the other half
   // (being shot at) is picked up in alertNearbyDefenders below.
@@ -6020,12 +6138,29 @@ function upmDrawCube(box,theta,cx,cy){
 
 // Per-type voxel builds, relative to an actor's own (gx,gy) ground position.
 const UPM_SKIN='#c99a6a', UPM_DARK='#242018';
+const UPM_RUBBER='#1c1c1c';
+// Ground vehicles now stand on visible running gear rather than floating on a
+// flat slab. Every box carrying `wheel:true` is a road wheel or tyre: the 3D
+// view rolls those about their own axle while the vehicle is moving (see
+// v3DrawUnit), and leaves the rest of the hull alone. `wheel` is a plain extra
+// field, so any renderer that doesn't know about it just draws a box.
 function upmActorBoxes(type,color){
   switch(type){
     case 'tank': return [
-      {x:-0.7,y:-0.9,z:0, w:1.4,d:1.8,h:0.5, color},
-      {x:-0.4,y:-0.4,z:0.5, w:0.8,d:0.8,h:0.4, color:upmShade(color,0.75)},
-      {x:0.35,y:-0.12,z:0.65, w:1.0,d:0.24,h:0.2, color:UPM_DARK}
+      // Hull sits up on the running gear now, clear of the sand.
+      {x:-0.7,y:-0.9,z:0.26, w:1.4,d:1.8,h:0.5, color},
+      {x:-0.4,y:-0.4,z:0.76, w:0.8,d:0.8,h:0.4, color:upmShade(color,0.75)},
+      {x:0.35,y:-0.12,z:0.91, w:1.0,d:0.24,h:0.2, color:UPM_DARK},
+      // Track skirts down each flank...
+      {x:-0.72,y:-0.98,z:0.2, w:1.44,d:0.22,h:0.24, color:upmShade(color,0.6)},
+      {x:-0.72,y:0.76,z:0.2,  w:1.44,d:0.22,h:0.24, color:upmShade(color,0.6)},
+      // ...and three road wheels under each of them.
+      {x:-0.62,y:-1.0,z:0, w:0.36,d:0.26,h:0.36, color:UPM_RUBBER, wheel:true},
+      {x:-0.18,y:-1.0,z:0, w:0.36,d:0.26,h:0.36, color:UPM_RUBBER, wheel:true},
+      {x: 0.26,y:-1.0,z:0, w:0.36,d:0.26,h:0.36, color:UPM_RUBBER, wheel:true},
+      {x:-0.62,y:0.74,z:0, w:0.36,d:0.26,h:0.36, color:UPM_RUBBER, wheel:true},
+      {x:-0.18,y:0.74,z:0, w:0.36,d:0.26,h:0.36, color:UPM_RUBBER, wheel:true},
+      {x: 0.26,y:0.74,z:0, w:0.36,d:0.26,h:0.36, color:UPM_RUBBER, wheel:true}
     ];
     case 'jet': return [
       {x:-0.9,y:-0.25,z:0, w:1.8,d:0.5,h:0.3, color},
@@ -6047,13 +6182,25 @@ function upmActorBoxes(type,color){
       {x:-0.35,y:-0.62,z:-0.18, w:0.34,d:0.24,h:0.24, color:UPM_DARK},
       {x:-0.35,y:0.38,z:-0.18, w:0.34,d:0.24,h:0.24, color:UPM_DARK}
     ];
+    // Six tyres — a steer axle up front and dual pairs at the back — matching
+    // the six-wheeled haul truck the map sprite draws.
     case 'harvester': return [
-      {x:-0.9,y:-0.6,z:0, w:1.8,d:1.2,h:0.7, color},
-      {x:0.5,y:-0.3,z:0.7, w:0.5,d:0.6,h:0.4, color:UPM_DARK},
-      {x:-0.8,y:-0.5,z:0.7, w:0.6,d:1.0,h:0.35, color:'#e0522a'}
+      {x:-0.9,y:-0.6,z:0.3, w:1.8,d:1.2,h:0.7, color},
+      {x:0.5,y:-0.3,z:1.0, w:0.5,d:0.6,h:0.4, color:UPM_DARK},
+      {x:-0.8,y:-0.5,z:1.0, w:0.6,d:1.0,h:0.35, color:'#e0522a'},
+      {x:0.42,y:-0.78,z:0, w:0.42,d:0.24,h:0.42, color:UPM_RUBBER, wheel:true},
+      {x:0.42,y:0.54,z:0,  w:0.42,d:0.24,h:0.42, color:UPM_RUBBER, wheel:true},
+      {x:-0.74,y:-0.86,z:0, w:0.46,d:0.24,h:0.46, color:UPM_RUBBER, wheel:true},
+      {x:-0.74,y:-0.6,z:0,  w:0.46,d:0.24,h:0.46, color:UPM_RUBBER, wheel:true},
+      {x:-0.74,y:0.36,z:0,  w:0.46,d:0.24,h:0.46, color:UPM_RUBBER, wheel:true},
+      {x:-0.74,y:0.62,z:0,  w:0.46,d:0.24,h:0.46, color:UPM_RUBBER, wheel:true}
     ];
+    // Two separate legs rather than one block, so the 3D view can swing them
+    // through the same stride the map sprite walks (see v3DrawUnit). `leg:-1`
+    // and `leg:1` are the two halves of the cycle.
     default: return [ // trooper (also the enemy-dummy fallback)
-      {x:-0.28,y:-0.28,z:0, w:0.56,d:0.56,h:0.5, color:UPM_DARK},
+      {x:-0.28,y:-0.28,z:0, w:0.56,d:0.24,h:0.5, color:UPM_DARK, leg:-1},
+      {x:-0.28,y:0.04,z:0,  w:0.56,d:0.24,h:0.5, color:UPM_DARK, leg:1},
       {x:-0.33,y:-0.33,z:0.5, w:0.66,d:0.66,h:0.55, color},
       {x:-0.2,y:-0.2,z:1.05, w:0.4,d:0.4,h:0.4, color:UPM_SKIN},
       {x:0.28,y:-0.13,z:0.6, w:0.5,d:0.14,h:0.14, color:UPM_DARK}
@@ -6332,9 +6479,50 @@ function v3Actor(type,colorCss){
   let m=v3ActorCache.get(k);
   if(!m){
     m=upmActorBoxes(type,colorCss).map(b=>({ b, rgb:v3ParseCss(b.color) }));
+    // Index the running gear once, here, rather than re-scanning the list every
+    // frame: `wheels` roll about their own axle, `legs` swing from the hip, and
+    // `moving` is the two together — what the static pass has to skip.
+    m.wheels=[]; m.legs=[];
+    m.forEach((e,i)=>{ if(e.b.wheel) m.wheels.push(i); else if(e.b.leg) m.legs.push(i); });
+    m.moving=m.wheels.concat(m.legs);
     v3ActorCache.set(k,m);
   }
   return m;
+}
+// Draws one box spun about a pivot given as a model-z height: its own centre
+// for a wheel, the hip joint for a leg. The rotation is about p5's z axis,
+// which after the model's nose-along-local-+x orientation is the vehicle's
+// lateral axis — the one a wheel actually turns on.
+function v3DrawPart(p,entry,V,wear,angle,pivotZ){
+  const b=entry.b;
+  v3Fill(p,entry.rgb,wear?wear.mul:1,wear?wear.red:0);
+  p.push();
+  p.translate((b.x+b.w/2)*V, -(pivotZ*V), (b.y+b.d/2)*V);
+  p.rotateZ(angle);
+  p.translate(0, -((b.z+b.h/2)-pivotZ)*V, 0);
+  p.box(b.w*V, b.h*V, b.d*V);
+  p.pop();
+  view3d.boxes++;
+}
+// A wheel turns three times per stride cycle — an exact whole number, so the
+// phase wrapping back to 0 lands on a full revolution and never visibly snaps.
+const V3_WHEEL_TURNS=3;
+function v3DrawWheels(p,list,wear,u){
+  if(!list.wheels.length) return;
+  const roll=(u._stride||0)*Math.PI*2*V3_WHEEL_TURNS;
+  list.wheels.forEach(i=>{
+    const b=list[i].b;
+    v3DrawPart(p,list[i],V3_UNIT,wear,roll,b.z+b.h/2);
+  });
+}
+function v3DrawLegs(p,list,wear,u){
+  if(!list.legs.length) return;
+  const w=(u._stride||0)*Math.PI*2;
+  list.legs.forEach(i=>{
+    const b=list[i].b;
+    // The two legs are half a cycle apart; the hip is the top of the box.
+    v3DrawPart(p,list[i],V3_UNIT,wear, Math.sin(w+(b.leg>0?Math.PI:0))*0.55, b.z+b.h);
+  });
 }
 // Buildings have no upmActorBoxes entries, so they get their own lists here, in
 // the same {x,y,z,w,d,h} shape but authored in whole tiles and anchored at the
@@ -6707,8 +6895,11 @@ function v3DrawUnit(p,u,h,ph,now,far){
   p.rotateY(Math.PI/2 - yaw);
 
   if(u.type==='trooper' && u.moving){
-    p.translate(0, -Math.abs(Math.sin(t/150))*0.12*V3_UNIT, 0);
-    p.rotateZ(Math.sin(t/150)*0.10);
+    // Bob and lean off the same stride phase the legs swing on, so the body
+    // rises on the push-off instead of drifting against its own footfalls.
+    const w=(u._stride||0)*Math.PI*2;
+    p.translate(0, -Math.abs(Math.sin(w))*0.12*V3_UNIT, 0);
+    p.rotateZ(Math.sin(w)*0.10);
   } else if(u.type==='bomber'){
     p.translate(0, Math.sin(t/420)*0.08*V3_UNIT, 0);
   } else if(u.type==='jet'){
@@ -6716,8 +6907,10 @@ function v3DrawUnit(p,u,h,ph,now,far){
   }
 
   if(u.type==='tank'){
-    // Hull static; turret and barrel swing to whatever the tank is shooting at.
-    v3DrawBoxes(p,list,V3_UNIT,wear,[1,2]);
+    // Hull static; road wheels roll, and the turret and barrel swing to
+    // whatever the tank is shooting at.
+    v3DrawBoxes(p,list,V3_UNIT,wear,[1,2].concat(list.moving));
+    v3DrawWheels(p,list,wear,u);
     const tp=v3TargetPos(u);
     let rel=0;
     if(tp){
@@ -6738,7 +6931,9 @@ function v3DrawUnit(p,u,h,ph,now,far){
     v3DrawBoxes(p,[list[5],list[6]],V3_UNIT,wear);
     p.pop();
   } else {
-    v3DrawBoxes(p,list,V3_UNIT,wear);
+    v3DrawBoxes(p,list,V3_UNIT,wear,list.moving);
+    v3DrawWheels(p,list,wear,u);
+    v3DrawLegs(p,list,wear,u);
   }
   p.pop();
 }
