@@ -403,11 +403,11 @@
       </div>
       <div id="actionBar">
         <button id="buildHarvester" class="iconBtn" title="Harvester — 60 spice"><span class="btnLabel">Harvester</span><span class="costBadge">60</span></button>
-        <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice, generates 6 GW for the grid and adds +5 damage to every shot. Also extends your build zone: every structure must stand within 10 tiles of a turbine."><span class="btnLabel">Turbine</span><span class="costBadge">50</span></button>
-        <button id="buildSilo" class="iconBtn" title="Silo — 70 spice, draws no power. Must stand within 10 tiles of a wind turbine."><span class="btnLabel">Silo</span><span class="costBadge">70</span></button>
-        <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice + 6 GW (one wind turbine of its own). Must stand within 10 tiles of a wind turbine."><span class="btnLabel">Refinery</span><span class="powerTag">⚡6</span><span class="costBadge">110</span></button>
-        <button id="buildAirport" class="iconBtn" title="Airport runway — 190 spice + 6 GW (one wind turbine of its own), builds sky fighters (upgrade it to a gunship pad for cluster gunships)"><span class="btnLabel">Airport</span><span class="powerTag">⚡6</span><span class="costBadge">190</span></button>
-        <button id="buildTurret" class="iconBtn" title="Turret — 90 spice + 6 GW (one wind turbine of its own). Must stand within 10 tiles of a wind turbine."><span class="btnLabel">Turret</span><span class="powerTag">⚡6</span><span class="costBadge">90</span></button>
+        <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice, generates 6 GW for the grid and adds +5 damage to every shot. Needs solid ground, never sand. Also extends your build zone: every structure must stand within 10 tiles of a turbine."><span class="btnLabel">Turbine</span><span class="costBadge">50</span></button>
+        <button id="buildSilo" class="iconBtn" title="Silo — 70 spice, draws no power. Needs solid ground (never sand) within 10 tiles of a wind turbine."><span class="btnLabel">Silo</span><span class="costBadge">70</span></button>
+        <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice + 6 GW (one wind turbine of its own). Needs solid ground (never sand) within 10 tiles of a wind turbine."><span class="btnLabel">Refinery</span><span class="powerTag">⚡6</span><span class="costBadge">110</span></button>
+        <button id="buildAirport" class="iconBtn" title="Airport runway — 190 spice + 6 GW (one wind turbine of its own), builds sky fighters (upgrade it to a gunship pad for cluster gunships). Needs solid ground (never sand) within 10 tiles of a wind turbine."><span class="btnLabel">Airport</span><span class="powerTag">⚡6</span><span class="costBadge">190</span></button>
+        <button id="buildTurret" class="iconBtn" title="Turret — 90 spice + 6 GW (one wind turbine of its own). Needs solid ground (never sand) within 10 tiles of a wind turbine."><span class="btnLabel">Turret</span><span class="powerTag">⚡6</span><span class="costBadge">90</span></button>
         <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice, marches at a third of the base pace"><span class="btnLabel">Trooper</span><span class="costBadge">25</span></button>
         <button id="recruitJet" class="iconBtn" title="Sky fighter — 130 spice, needs an airport, 3min build (press again to queue another)"><span class="btnLabel">Fighter</span><span class="costBadge">130</span><span class="prodRadar" id="jetRadar"></span></button>
         <button id="recruitBomber" class="iconBtn" title="Cluster gunship — 220 spice, needs an airport upgraded to a gunship pad, 5min build, bombs a 3x3 block (press again to queue another)"><span class="btnLabel">Gunship</span><span class="costBadge">220</span><span class="prodRadar" id="bomberRadar"></span></button>
@@ -418,7 +418,7 @@
     <div class="legend">
       <span id="camHint">drag map / arrow keys to scroll</span>
       <span><i class="swatch" style="background:#3a2f22"></i>Rocky mountain (impassable)</span>
-      <span><i class="swatch" style="background:#caa46a"></i>Desert</span>
+      <span><i class="swatch" style="background:#caa46a"></i>Desert sand (nothing can be built on it)</span>
     </div>
     <div class="hint collapsed" id="hintBox">
       <div class="hint-bar" id="hintBar" title="Toggle help"><span>H</span><span id="hintArrow">▸</span></div>
@@ -426,7 +426,7 @@
         <div>Click a unit to select it, Shift+drag to box-select several. Click a tile to move, an enemy to attack.</div>
         <div>Attack arms group targeting. Search &amp; Destroy auto-hunts nearby enemies. Retreat pulls units back to base. Repeat re-issues your last order to whatever is selected now.</div>
         <div>A unit stays selected — and its action menu stays open — after every order, so you can keep commanding it without re-selecting.</div>
-        <div>Buildings need a clear grass or desert tile, and must stand within 10 tiles of one of your wind turbines. Pick a build button and every legal tile lights up as a green rectangle, with a faint ring marking each turbine's reach.</div>
+        <div>Buildings need solid ground — sand will not hold a foundation, so no structure of any kind goes up on the desert — and must stand within 10 tiles of one of your wind turbines. Pick a build button and every legal tile lights up as a green rectangle, with a faint ring marking each turbine's reach.</div>
         <div>On a touchscreen, tap once to aim a building — the footprint blinks green if it can go there, red if it can't — then tap the same tile again to confirm.</div>
         <div>Power: one wind turbine generates 6 GW. A refinery, an airport and a turret each draw 6 GW, so each of them needs a turbine of its own — raise the turbine first or the order is refused. Harvesters, silos and units draw nothing. The HUD's P reads drawn/generated; every house opens with one turbine already feeding its free airport.</div>
         <div>Every build, recruit and upgrade except aircraft takes 5 seconds — a radar sweep runs over the button that ordered it until the work is done. Spice is charged the moment you order.</div>
@@ -3096,24 +3096,25 @@ function beginWormStep(w,nx,ny){
   w.moveFrom={x:w.x*SZ+SZ/2,y:w.y*SZ+SZ/2}; w.x=nx; w.y=ny;
   w.moveTo={x:w.x*SZ+SZ/2,y:w.y*SZ+SZ/2}; w.moveStart=performance.now(); w.moving=true;
 }
-// avoidDesert is for the AI's own turbine placement — it needs solid ground
-// same as the player does via placementValid, but this helper (also used for
-// harvester move-to-spot and turret placement) is otherwise fog-independent
-// and shouldn't gain a desert restriction those other callers never asked for.
-function findFreeTileNear(cx,cy,avoidDesert){
+// A walkable free tile near (cx,cy) — a destination for a unit, not a
+// building site. Structure placement never comes through here any more: it
+// all goes through findFreeFootprintNear below, which asks placementValid and
+// so is held to exactly the same rules the player is (solid ground included).
+function findFreeTileNear(cx,cy){
   for(let r=1;r<8;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
     const x=cx+dx,y=cy+dy;
     if(!inBounds(x,y)) continue;
-    if(terrain[y][x]!=='mountain' && (!avoidDesert || terrain[y][x]!=='desert') && !buildingMap.has(x+','+y) && !isBaseTile(x,y)) return {x,y};
+    if(terrain[y][x]!=='mountain' && !buildingMap.has(x+','+y) && !isBaseTile(x,y)) return {x,y};
   }
   return {x:cx,y:cy};
 }
-// Like findFreeTileNear but for a 2x2 footprint (silo/airport/refinery) — scans
-// outward for a spot where the whole footprint is clear, not just one tile.
-// ignoreFog lets newGame()'s free-starting-airport grant use this before
-// any tile has been explored yet (placementValid's explored check is right
-// for interactive player placement, but would make every call here return
-// null during initial world setup, silently skipping the airport).
+// The nearest site to (cx,cy) that placementValid accepts for this structure,
+// or null. Works for a 1x1 turbine/turret as well as a 2x2 silo/airport/
+// refinery, since placementFootprint already knows which is which.
+// ignoreFog lets newGame()'s free-starting grants use this before any tile has
+// been explored yet (placementValid's explored check is right for interactive
+// player placement, but would make every call here return null during initial
+// world setup, silently skipping the grant).
 function findFreeFootprintNear(cx,cy,placeType,ignoreFog){
   for(let r=1;r<10;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
     const x=cx+dx,y=cy+dy;
@@ -3950,11 +3951,16 @@ function aiTurnForHouse(house){
       const pad=findOwnedAirport(house);
       applyAirportUpgrade(house, pad.x+','+pad.y);
     } else if(budget>=TURBINE_COST){
-      const spot=findFreeTileNear(house.base.x,house.base.y,true);
-      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine});
-      house.spice-=TURBINE_COST; house.power+=TURBINE_DMG_BONUS; spentEcon+=TURBINE_COST; redrawSpiceAndBuildings();
+      // Sited through placementValid, same as every other structure — an AI
+      // turbine dropped straight onto a free tile could land on sand, which
+      // is exactly what the player is refused.
+      const spot=findFreeFootprintNear(house.base.x,house.base.y,'place-turbine',true);
+      if(spot){
+        buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:house.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine});
+        house.spice-=TURBINE_COST; house.power+=TURBINE_DMG_BONUS; spentEcon+=TURBINE_COST; redrawSpiceAndBuildings();
+      }
     } else if(budget>=SILO_COST){
-      const spot=findFreeFootprintNear(house.base.x,house.base.y,'place-silo');
+      const spot=findFreeFootprintNear(house.base.x,house.base.y,'place-silo',true);
       if(spot){
         const primaryKey=spot.x+','+spot.y;
         placementFootprint('place-silo',spot.x,spot.y).forEach(([fx,fy],i)=>{
@@ -3966,12 +3972,14 @@ function aiTurnForHouse(house){
         house.spice-=SILO_COST; house.cap+=SILO_CAP_BONUS; spentEcon+=SILO_COST; redrawSpiceAndBuildings();
       }
     } else if(budget>=TURRET_COST && hasPowerFor(house,'turret') && Math.random()<0.4){
-      const spot=findFreeTileNear(house.base.x,house.base.y);
-      buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turret',owner:house.id,lvl:1,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret});
-      house.spice-=TURRET_COST; spentEcon+=TURRET_COST; redrawSpiceAndBuildings();
-      addLog('House '+house.name+' builds a turret.');
+      const spot=findFreeFootprintNear(house.base.x,house.base.y,'place-turret',true);
+      if(spot){
+        buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turret',owner:house.id,lvl:1,hp:BUILDING_HP.turret,hpMax:BUILDING_HP.turret});
+        house.spice-=TURRET_COST; spentEcon+=TURRET_COST; redrawSpiceAndBuildings();
+        addLog('House '+house.name+' builds a turret.');
+      }
     } else if(!hasAirport(house) && budget>=AIRPORT_COST && hasPowerFor(house,'airport') && Math.random()<0.3){
-      const spot=findFreeFootprintNear(house.base.x,house.base.y,'place-airport');
+      const spot=findFreeFootprintNear(house.base.x,house.base.y,'place-airport',true);
       if(spot){
         const primaryKey=spot.x+','+spot.y;
         placementFootprint('place-airport',spot.x,spot.y).forEach(([fx,fy],i)=>{
@@ -4191,9 +4199,13 @@ function nearBaseFootprint(x,y,margin){
   return !!state && state.houses.some(h=>
     x>=h.base.x-margin && x<=h.base.x+1+margin && y>=h.base.y-margin && y<=h.base.y+1+margin);
 }
-// Refinery/turbine/airport all need solid ground under their foundation, so
-// sand is off-limits for those specifically — silo and turret still allow it.
-const NEEDS_SOLID_GROUND=new Set(['place-refinery','place-turbine','place-airport']);
+// Nothing is founded on sand. A dune won't hold a foundation, so every
+// structure — turbine, silo, turret, refinery and airport alike — needs solid
+// ground under its whole footprint. (This used to apply to the refinery,
+// turbine and airport only, which left silos and turrets sitting out on the
+// open desert.) Grass is the only buildable terrain: mountain is impassable
+// and desert is sand.
+function solidGround(x,y){ return terrain[y][x]!=='mountain' && terrain[y][x]!=='desert'; }
 const BUILD_TYPE_OF={ 'place-turbine':'turbine', 'place-silo':'silo', 'place-turret':'turret', 'place-refinery':'refinery', 'place-airport':'airport' };
 // Everything a house can anchor a new structure off: each of its standing
 // wind turbines, plus — for a turbine only — its own stronghold, so a house
@@ -4221,8 +4233,7 @@ function placementValid(placeType,x,y,ignoreFog,house){
   const big=placeType==='place-silo'||placeType==='place-refinery'||placeType==='place-airport';
   const anchors=house?buildAnchorsFor(house,placeType):null;
   return placementFootprint(placeType,x,y).every(([fx,fy])=>
-    inBounds(fx,fy) && terrain[fy][fx]!=='mountain' &&
-    (!NEEDS_SOLID_GROUND.has(placeType) || terrain[fy][fx]!=='desert') &&
+    inBounds(fx,fy) && solidGround(fx,fy) &&
     (ignoreFog || explored[fy][fx]) &&
     !buildingMap.has(fx+','+fy) && !spiceMap.has(fx+','+fy) &&
     (!anchors || withinBuildRadius(anchors,fx,fy)) &&
@@ -4236,6 +4247,8 @@ function placementRefusalMsg(placeType,x,y,house){
   if(!anchors.length) return BUILD_LABEL[BUILD_TYPE_OF[placeType]]+' needs a wind turbine to build around — raise one next to your stronghold first.';
   if(!placementFootprint(placeType,x,y).every(([fx,fy])=>withinBuildRadius(anchors,fx,fy)))
     return 'Too far out — a structure has to stand within '+BUILD_RADIUS+' tiles of one of your wind turbines.';
+  if(placementFootprint(placeType,x,y).some(([fx,fy])=>inBounds(fx,fy) && terrain[fy][fx]==='desert'))
+    return 'Sand will not hold a foundation — build on solid ground.';
   const big=placeType==='place-silo'||placeType==='place-refinery'||placeType==='place-airport';
   return big ? 'Not enough clear, explored ground here for a 2x2 '+BUILD_TYPE_OF[placeType]+'.'
              : 'Cannot build there — needs clear, explored ground.';
@@ -5465,8 +5478,7 @@ function applyRemoteCommand(msg){
     const doneMsg='House '+house.name+(type==='turbine'?' raises a wind turbine.':' builds a turret.');
     queueBuildJob(()=>{
       const ok=house.spice>=cost && hasPowerFor(house,type) && !buildingMap.has(key) && !spiceMap.has(key)
-        && terrain[msg.y] && terrain[msg.y][msg.x]!=='mountain'
-        && (type!=='turbine' || terrain[msg.y][msg.x]!=='desert') && !isBaseTile(msg.x,msg.y);
+        && inBounds(msg.x,msg.y) && solidGround(msg.x,msg.y) && !isBaseTile(msg.x,msg.y);
       if(!ok) return;
       house.spice-=cost;
       completeStructure(house,type,msg.x,msg.y,cost,doneMsg);
@@ -5479,8 +5491,8 @@ function applyRemoteCommand(msg){
     const doneMsg='House '+house.name+(type==='silo'?' builds a silo.':type==='refinery'?' completes a refinery.':' completes an airport.');
     queueBuildJob(()=>{
       const footprint=[[msg.x,msg.y],[msg.x+1,msg.y],[msg.x,msg.y+1],[msg.x+1,msg.y+1]];
-      const blocked=footprint.some(([fx,fy])=> !inBounds(fx,fy) || terrain[fy][fx]==='mountain'
-        || ((type==='refinery'||type==='airport') && terrain[fy][fx]==='desert') || buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy) || nearBaseFootprint(fx,fy,1));
+      const blocked=footprint.some(([fx,fy])=> !inBounds(fx,fy) || !solidGround(fx,fy)
+        || buildingMap.has(fx+','+fy) || spiceMap.has(fx+','+fy) || nearBaseFootprint(fx,fy,1));
       if(blocked || house.spice<cost || !hasPowerFor(house,type)) return;
       house.spice-=cost;
       completeStructure(house,type,msg.x,msg.y,cost,doneMsg);
@@ -5720,12 +5732,13 @@ function newGame(chosenId, rivalId){
   // Every house starts with a silo already built next to its stronghold, so
   // harvesters have somewhere to unload from turn one instead of spilling cargo.
   // ignoreFog is required here — nothing is explored yet this early in newGame,
-  // so without it placementValid rejects every tile and this always fell
-  // through to the findFreeTileNear fallback below, which only checks the
-  // single origin tile (not the silo's full 2x2 footprint) and would happily
-  // hand back a spot whose other 3 tiles land right on top of the base.
+  // so without it placementValid rejects every tile and the grant is skipped.
+  // There is deliberately no fallback: a silo may only stand on ground that
+  // passes the same placementValid check the player's own build does, footprint
+  // and solid ground included.
   state.houses.forEach(h=>{
-    const spot=findFreeFootprintNear(h.base.x,h.base.y,'place-silo',true) || findFreeTileNear(h.base.x,h.base.y);
+    const spot=findFreeFootprintNear(h.base.x,h.base.y,'place-silo',true);
+    if(!spot) return;
     const primaryKey=spot.x+','+spot.y;
     placementFootprint('place-silo',spot.x,spot.y).forEach(([fx,fy],i)=>{
       const entry=(i===0)
@@ -5756,7 +5769,8 @@ function newGame(chosenId, rivalId){
   // this grant every house would open the match 6 GW in the red and owe its
   // first turbine to a building it was given for free.
   state.houses.forEach(h=>{
-    const spot=findFreeTileNear(h.base.x,h.base.y,true);
+    const spot=findFreeFootprintNear(h.base.x,h.base.y,'place-turbine',true);
+    if(!spot) return;
     buildingMap.set(spot.x+','+spot.y, {x:spot.x,y:spot.y,type:'turbine',owner:h.id,hp:BUILDING_HP.turbine,hpMax:BUILDING_HP.turbine});
     h.power+=TURBINE_DMG_BONUS;
   });
