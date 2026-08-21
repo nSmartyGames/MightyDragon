@@ -11,6 +11,15 @@
   :root{
     --sand-3:#8a5a2b; --night:#1c130a; --rust:#c1441e; --rust-dark:#8a2e12;
     --spice:#e0522a; --paper:#f3e3c0; --sand-2:#c99a4a;
+    /* Live height of the fixed #hudBar, written by syncHudHeight() on every
+       resize/wrap/log-expand. Everything that floats in the top strip of the
+       map (minimap, mode hint, legend, help box, context menus) is anchored
+       off it, so none of them can end up tucked underneath the header. The
+       64px seed is only what the first paint uses before JS measures. */
+    --hudH:64px;
+    /* Rendered edge length of the minimap, so the 3D-exit button below it
+       can be placed off the same number instead of a hardcoded offset. */
+    --miniSize:150px;
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
@@ -41,7 +50,8 @@
     background:radial-gradient(ellipse at center, rgba(10,6,2,0) 55%, rgba(10,6,2,.6) 100%);
   }
   #minimap{
-    position:absolute; top:64px; right:8px; width:150px; height:150px; z-index:18;
+    position:absolute; top:calc(var(--hudH) + 8px); right:8px;
+    width:var(--miniSize); height:var(--miniSize); z-index:18;
     border:1px solid var(--rust); border-radius:4px; box-shadow:0 4px 12px rgba(0,0,0,.6);
     image-rendering:pixelated; background:#000; cursor:pointer;
   }
@@ -49,7 +59,8 @@
      it is hidden while the view is up, so this sits under the minimap and is
      the one visible way back to the map (Escape also works). */
   #exit3dBtn{
-    position:absolute; top:222px; right:8px; z-index:20; display:none;
+    position:absolute; top:calc(var(--hudH) + var(--miniSize) + 16px); right:8px;
+    z-index:20; display:none;
   }
   /* Full-width header strip, fixed to the top of the viewport and floating
      over the fixed map underneath: a single row holding the game title,
@@ -258,7 +269,7 @@
      never push the board around; stacked in the top-left corner, under the
      fixed header. */
   .hint{
-    position:absolute; left:8px; top:98px; z-index:11; font-size:9px; color:#c9b088;
+    position:absolute; left:8px; top:calc(var(--hudH) + 38px); z-index:11; font-size:9px; color:#c9b088;
     background:rgba(20,12,4,.55); border-radius:6px; max-width:44%;
     line-height:1.4;
   }
@@ -274,7 +285,7 @@
   .hint.collapsed{ max-width:none; }
   .hint.collapsed .hint-text{ display:none; }
   .legend{
-    position:absolute; left:8px; top:66px; z-index:11; display:flex; gap:8px; font-size:9px;
+    position:absolute; left:8px; top:calc(var(--hudH) + 6px); z-index:11; display:flex; gap:8px; font-size:9px;
     color:var(--sand-2); flex-wrap:wrap; background:rgba(20,12,4,.55); padding:4px 8px; border-radius:6px; max-width:44%;
   }
   .legend span{display:flex; align-items:center; gap:4px;}
@@ -285,13 +296,13 @@
     border:1px solid #33ff66; background:rgba(51,255,102,.15);
   }
   /* Fixed to the board's top-left corner rather than anchored next to the
-     selected unit, so it never covers the nearby tiles/enemies the new
-     click-to-move-or-attack interaction relies on clicking. top:8px here is
-     only a pre-JS fallback — #hudBar floats fixed above the board with a
-     higher z-index, so openCtxMenuFor() overwrites top on every open to sit
-     just below hudBar's actual rendered height instead of under it. */
+     selected unit, so it never covers the nearby tiles/enemies the
+     click-to-move-or-attack interaction relies on clicking. #hudBar floats
+     fixed above the board with a higher z-index, so the offset comes off
+     --hudH (its live measured height) — same as every other piece of chrome
+     pinned to the top of the map. */
   #ctxMenu, #upgMenu{
-    position:absolute; top:8px; left:8px; display:none; flex-direction:column;
+    position:absolute; top:calc(var(--hudH) + 8px); left:8px; display:none; flex-direction:column;
     background:#241609; border:1px solid var(--rust); border-radius:4px;
     box-shadow:0 6px 18px rgba(0,0,0,.6); z-index:19; overflow:hidden; min-width:110px;
   }
@@ -309,10 +320,14 @@
   #upgMenu button:disabled{ opacity:.45; cursor:not-allowed; }
   #upgRepair.on{ background:linear-gradient(180deg,#2c5c2c,#173a17); border-color:#4ad34a; color:#c8ffc8; }
   #modeHint{
-    position:absolute; top:66px; left:50%; transform:translateX(-50%);
+    position:absolute; top:calc(var(--hudH) + 6px); left:50%; transform:translateX(-50%);
     background:rgba(20,12,4,.85); border:1px solid var(--rust); border-radius:12px;
     padding:4px 12px; font-size:11px; letter-spacing:1px; color:var(--spice);
     display:none; z-index:12; pointer-events:none;
+    /* One line wherever it fits: this floats over the very tiles the player is
+       about to pick from, so a wrapped 4-line banner hides the choice it is
+       describing. On a narrow phone it still wraps rather than overflow. */
+    max-width:92vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   #loadErr{
     position:fixed; inset:0; background:#1c130a; color:#e0522a; display:none;
@@ -331,10 +346,10 @@
     #actionBar button.iconBtn{ height:48px; background-size:26px 26px; }
     .costBadge, .powerTag{ font-size:8px; }
     .btnLabel{ font-size:7px; top:2px; letter-spacing:0; }
-    #minimap{ width:90px; height:90px; top:52px; right:5px; }
-    #modeHint{ top:52px; }
-    .legend{ top:52px; max-width:60%; }
-    .hint{ top:80px; max-width:60%; }
+    :root{ --miniSize:90px; }
+    #minimap{ right:5px; }
+    .legend{ max-width:60%; }
+    .hint{ max-width:60%; }
   }
 </style>
 </head>
@@ -375,6 +390,7 @@
         <button id="ctxEngage">Search &amp; Destroy</button>
         <button id="ctxRetreat">Retreat</button>
         <button id="ctxHarvest">Harvest</button>
+        <button id="ctxRepeat" title="Re-issue the last order to the current selection">Repeat</button>
         <button id="ctx3D">3D View</button>
         <button id="ctxCancel">Cancel</button>
       </div>
@@ -387,11 +403,11 @@
       </div>
       <div id="actionBar">
         <button id="buildHarvester" class="iconBtn" title="Harvester — 60 spice"><span class="btnLabel">Harvester</span><span class="costBadge">60</span></button>
-        <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice, generates 6 GW for the grid and adds +5 damage to every shot"><span class="btnLabel">Turbine</span><span class="costBadge">50</span></button>
-        <button id="buildSilo" class="iconBtn" title="Silo — 70 spice, draws no power"><span class="btnLabel">Silo</span><span class="costBadge">70</span></button>
-        <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice + 6 GW (one wind turbine of its own)"><span class="btnLabel">Refinery</span><span class="powerTag">⚡6</span><span class="costBadge">110</span></button>
+        <button id="buildTurbine" class="iconBtn" title="Wind turbine — 50 spice, generates 6 GW for the grid and adds +5 damage to every shot. Also extends your build zone: every structure must stand within 10 tiles of a turbine."><span class="btnLabel">Turbine</span><span class="costBadge">50</span></button>
+        <button id="buildSilo" class="iconBtn" title="Silo — 70 spice, draws no power. Must stand within 10 tiles of a wind turbine."><span class="btnLabel">Silo</span><span class="costBadge">70</span></button>
+        <button id="buildRefinery" class="iconBtn" title="Refinery — 110 spice + 6 GW (one wind turbine of its own). Must stand within 10 tiles of a wind turbine."><span class="btnLabel">Refinery</span><span class="powerTag">⚡6</span><span class="costBadge">110</span></button>
         <button id="buildAirport" class="iconBtn" title="Airport runway — 190 spice + 6 GW (one wind turbine of its own), builds sky fighters (upgrade it to a gunship pad for cluster gunships)"><span class="btnLabel">Airport</span><span class="powerTag">⚡6</span><span class="costBadge">190</span></button>
-        <button id="buildTurret" class="iconBtn" title="Turret — 90 spice + 6 GW (one wind turbine of its own)"><span class="btnLabel">Turret</span><span class="powerTag">⚡6</span><span class="costBadge">90</span></button>
+        <button id="buildTurret" class="iconBtn" title="Turret — 90 spice + 6 GW (one wind turbine of its own). Must stand within 10 tiles of a wind turbine."><span class="btnLabel">Turret</span><span class="powerTag">⚡6</span><span class="costBadge">90</span></button>
         <button id="recruitTroop" class="iconBtn" title="Recruit trooper — 25 spice, marches at a third of the base pace"><span class="btnLabel">Trooper</span><span class="costBadge">25</span></button>
         <button id="recruitJet" class="iconBtn" title="Sky fighter — 130 spice, needs an airport, 3min build (press again to queue another)"><span class="btnLabel">Fighter</span><span class="costBadge">130</span><span class="prodRadar" id="jetRadar"></span></button>
         <button id="recruitBomber" class="iconBtn" title="Cluster gunship — 220 spice, needs an airport upgraded to a gunship pad, 5min build, bombs a 3x3 block (press again to queue another)"><span class="btnLabel">Gunship</span><span class="costBadge">220</span><span class="prodRadar" id="bomberRadar"></span></button>
@@ -408,8 +424,10 @@
       <div class="hint-bar" id="hintBar" title="Toggle help"><span>H</span><span id="hintArrow">▸</span></div>
       <div class="hint-text">
         <div>Click a unit to select it, Shift+drag to box-select several. Click a tile to move, an enemy to attack.</div>
-        <div>Attack arms group targeting. Search &amp; Destroy auto-hunts nearby enemies. Retreat pulls units back to base.</div>
-        <div>Buildings need a clear grass or desert tile.</div>
+        <div>Attack arms group targeting. Search &amp; Destroy auto-hunts nearby enemies. Retreat pulls units back to base. Repeat re-issues your last order to whatever is selected now.</div>
+        <div>A unit stays selected — and its action menu stays open — after every order, so you can keep commanding it without re-selecting.</div>
+        <div>Buildings need a clear grass or desert tile, and must stand within 10 tiles of one of your wind turbines. Pick a build button and every legal tile lights up as a green rectangle, with a faint ring marking each turbine's reach.</div>
+        <div>On a touchscreen, tap once to aim a building — the footprint blinks green if it can go there, red if it can't — then tap the same tile again to confirm.</div>
         <div>Power: one wind turbine generates 6 GW. A refinery, an airport and a turret each draw 6 GW, so each of them needs a turbine of its own — raise the turbine first or the order is refused. Harvesters, silos and units draw nothing. The HUD's P reads drawn/generated; every house opens with one turbine already feeding its free airport.</div>
         <div>Every build, recruit and upgrade except aircraft takes 5 seconds — a radar sweep runs over the button that ordered it until the work is done. Spice is charged the moment you order.</div>
         <div>Clicking your own stronghold opens its upgrade menu even with units selected.</div>
@@ -571,6 +589,12 @@ const TURBINE_DMG_BONUS=5; // each wind turbine adds +5 damage to every shot the
 // its own standing before it can be ordered — raise the turbine first, or the
 // order is refused. Silos, harvesters and every unit draw nothing.
 const TURBINE_OUTPUT_GW=6;
+// Nothing gets built out in the middle of nowhere: every structure has to sit
+// inside a wind turbine's 10-tile service radius (measured radially, i.e. as a
+// circle, not a square). Turbines themselves may also anchor off the house's
+// own stronghold — otherwise losing your last turbine would lock the house out
+// of building anything ever again, including the turbine that would fix it.
+const BUILD_RADIUS=10;
 const POWER_DRAW_GW={ refinery:6, airport:6, turret:6 };
 // Building hit points — much softer than the 10000hp stronghold, so a raid
 // that reaches the interior of a base can actually knock out its economy.
@@ -689,13 +713,25 @@ function ensureAudio(){
 // gesture that unlocks audioCtx, so autoplay restrictions never bite.
 // Dissonant low drone (minor 2nd, not a fifth) + a war-drum pulse + a slow
 // sweeping alien siren replace the old plain desert-wind pad.
+// The score runs on two buses under musicGain, cross-faded by the scheduler
+// at the bottom of startMusic:
+//   warBus   — the tense material that has always been here (the minor-2nd
+//              drone, the dune-wind bed, the war drums, the alien siren).
+//   chillBus — a slow, consonant interlude that surfaces every couple of
+//              minutes and then recedes, so a long match isn't one unbroken
+//              wall of dread. Never while a fight is on: tryEnterChill waits
+//              combat out, and a combat alert cuts a running interlude short.
 let musicGain=null, musicStarted=false, musicOn=true;
+let warBus=null, chillBus=null, chillActive=false, chillTimer=null;
+const MUSIC_LEVEL=0.07;
 function startMusic(){
   if(!audioCtx || musicStarted) return;
   musicStarted=true;
   musicGain=audioCtx.createGain();
-  musicGain.gain.value=musicOn?0.07:0;
+  musicGain.gain.value=musicOn?MUSIC_LEVEL:0;
   musicGain.connect(audioCtx.destination);
+  warBus=audioCtx.createGain(); warBus.gain.value=1; warBus.connect(musicGain);
+  chillBus=audioCtx.createGain(); chillBus.gain.value=0; chillBus.connect(musicGain);
 
   // Two low drones a minor 2nd apart — an unresolved, tense pad instead of
   // the old consonant open-fifth desert pad.
@@ -705,7 +741,7 @@ function startMusic(){
     const filter=audioCtx.createBiquadFilter();
     filter.type='lowpass'; filter.frequency.value=260+i*50;
     const g=audioCtx.createGain(); g.gain.value=0.5;
-    osc.connect(filter); filter.connect(g); g.connect(musicGain);
+    osc.connect(filter); filter.connect(g); g.connect(warBus);
     osc.start();
   });
 
@@ -719,7 +755,7 @@ function startMusic(){
   const noiseFilter=audioCtx.createBiquadFilter();
   noiseFilter.type='bandpass'; noiseFilter.frequency.value=500; noiseFilter.Q.value=0.7;
   const noiseGain=audioCtx.createGain(); noiseGain.gain.value=0.28;
-  noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(musicGain);
+  noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(warBus);
   noise.start();
 
   const lfo=audioCtx.createOscillator(); lfo.frequency.value=0.045;
@@ -740,7 +776,7 @@ function startMusic(){
     osc.frequency.exponentialRampToValueAtTime(42,t0+0.22);
     g.gain.setValueAtTime(0.55,t0);
     g.gain.exponentialRampToValueAtTime(0.001,t0+0.3);
-    osc.connect(g); g.connect(musicGain);
+    osc.connect(g); g.connect(warBus);
     osc.start(t0); osc.stop(t0+0.32);
 
     setTimeout(warDrum, 640+Math.random()*380);
@@ -762,7 +798,7 @@ function startMusic(){
 
   const sirenFilter=audioCtx.createBiquadFilter();
   sirenFilter.type='bandpass'; sirenFilter.frequency.value=500; sirenFilter.Q.value=4;
-  siren.connect(sirenFilter); sirenFilter.connect(sirenGain); sirenGain.connect(musicGain);
+  siren.connect(sirenFilter); sirenFilter.connect(sirenGain); sirenGain.connect(warBus);
   siren.start();
 
   // MIDI-like ambient plucks: short triangle-wave notes with a fast
@@ -776,7 +812,7 @@ function startMusic(){
     g.gain.setValueAtTime(0,t0);
     g.gain.linearRampToValueAtTime(0.22,t0+0.015);
     g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
-    osc.connect(g); g.connect(musicGain);
+    osc.connect(g); g.connect(warBus);
     osc.start(t0); osc.stop(t0+dur+0.05);
   }
   function midiAmbient(){
@@ -787,16 +823,186 @@ function startMusic(){
     setTimeout(midiAmbient, 900+Math.random()*1500);
   }
   setTimeout(midiAmbient, 2500);
+
+  // ---- the chill interlude ----
+  // A warm, consonant Amin7 pad, running continuously but silent until
+  // chillBus is faded up. Each voice is very slightly detuned by its own
+  // sub-audio LFO so the chord breathes instead of sitting dead still.
+  [110, 164.81, 220, 261.63, 329.63].forEach((f,i)=>{
+    const osc=audioCtx.createOscillator(); osc.type='triangle'; osc.frequency.value=f;
+    const drift=audioCtx.createOscillator(); drift.frequency.value=0.05+i*0.017;
+    const driftGain=audioCtx.createGain(); driftGain.gain.value=0.5+i*0.25;
+    drift.connect(driftGain); driftGain.connect(osc.frequency); drift.start();
+    const lp=audioCtx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=760+i*90; lp.Q.value=0.4;
+    const g=audioCtx.createGain(); g.gain.value=i===0?0.16:0.085;
+    osc.connect(lp); lp.connect(g); g.connect(chillBus);
+    osc.start();
+  });
+  // Soft bells wandering an A-minor pentatonic, only struck while the
+  // interlude is actually up (the timer keeps running either way, so the
+  // next interlude starts on a note rather than in silence).
+  const chillScale=[220,261.63,293.66,329.63,392,440,523.25];
+  function chillBell(){
+    if(!musicStarted || !audioCtx) return;
+    if(chillActive){
+      const t0=audioCtx.currentTime;
+      const osc=audioCtx.createOscillator(); osc.type='sine';
+      osc.frequency.value=chillScale[Math.floor(Math.random()*chillScale.length)];
+      const g=audioCtx.createGain();
+      g.gain.setValueAtTime(0,t0);
+      g.gain.linearRampToValueAtTime(0.17,t0+0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+2.8);
+      osc.connect(g); g.connect(chillBus);
+      osc.start(t0); osc.stop(t0+2.9);
+    }
+    setTimeout(chillBell, 1900+Math.random()*2300);
+  }
+  setTimeout(chillBell, 5000);
+  scheduleChill();
+}
+// How long the score waits between chill interludes, and how long one lasts.
+const CHILL_GAP_MS=[95000,155000];
+const CHILL_LEN_MS=[36000,54000];
+function scheduleChill(){
+  clearTimeout(chillTimer);
+  chillTimer=setTimeout(tryEnterChill, CHILL_GAP_MS[0]+Math.random()*(CHILL_GAP_MS[1]-CHILL_GAP_MS[0]));
+}
+function tryEnterChill(){
+  if(!musicStarted || !audioCtx) return;
+  // Dropping into a lullaby while the player is under fire would be absurd —
+  // hold off and try again shortly after the shooting stops.
+  if(performance.now()<combatUntil){ chillTimer=setTimeout(tryEnterChill, 15000); return; }
+  chillActive=true;
+  const t=audioCtx.currentTime;
+  warBus.gain.setTargetAtTime(0.10,t,4);   // long fades, so the seam isn't audible
+  chillBus.gain.setTargetAtTime(1,t,4);
+  chillTimer=setTimeout(exitChill, CHILL_LEN_MS[0]+Math.random()*(CHILL_LEN_MS[1]-CHILL_LEN_MS[0]));
+}
+function exitChill(){
+  clearTimeout(chillTimer);
+  if(!chillActive){ scheduleChill(); return; }
+  chillActive=false;
+  if(audioCtx && warBus){
+    const t=audioCtx.currentTime;
+    warBus.gain.setTargetAtTime(1,t,3);
+    chillBus.gain.setTargetAtTime(0,t,3);
+  }
+  scheduleChill();
 }
 function toggleMusic(){
   musicOn=!musicOn;
-  if(musicGain) musicGain.gain.setTargetAtTime(musicOn?0.07:0, audioCtx.currentTime, 0.3);
+  if(musicGain) musicGain.gain.setTargetAtTime(musicOn?MUSIC_LEVEL:0, audioCtx.currentTime, 0.3);
   const btn=document.getElementById('musicToggle');
   if(btn) btn.textContent=musicOn?'🔊':'🔇';
 }
+
+// ================= combat alert =================
+// A short brass-and-timpani stinger the moment your house is drawn into a
+// fight — either your units open up, or something of yours is being shot at.
+// It is an alert, not part of the score, so it goes straight to the output
+// (like the laser/explosion SFX) and still sounds with the music muted, and
+// it is rate-limited hard: one cue per engagement, not one per shot.
+let combatUntil=0, lastCombatAlertAt=-1e9;
+const COMBAT_ALERT_COOLDOWN_MS=30000;  // shortest gap between two stingers
+const COMBAT_WINDOW_MS=18000;          // how long after the last shot a fight still counts as "on"
+function playCombatAlert(){
+  if(!audioCtx) return;
+  const t0=audioCtx.currentTime;
+  const bus=audioCtx.createGain(); bus.gain.value=0.85;
+  bus.connect(audioCtx.destination);
+
+  // Brass-ish stab: detuned saws plus an octave square, opened by a fast
+  // filter sweep so each hit has a bite on the front.
+  const stab=(freq,at,dur,peak)=>{
+    [[1,'sawtooth',0.55],[1.006,'sawtooth',0.45],[2,'square',0.16]].forEach(([mul,type,mix])=>{
+      const osc=audioCtx.createOscillator(); osc.type=type; osc.frequency.value=freq*mul;
+      const f=audioCtx.createBiquadFilter(); f.type='lowpass'; f.Q.value=1.2;
+      f.frequency.setValueAtTime(380,t0+at);
+      f.frequency.linearRampToValueAtTime(2800,t0+at+0.10);
+      const g=audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001,t0+at);
+      g.gain.exponentialRampToValueAtTime(peak*mix,t0+at+0.045);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+at+dur);
+      osc.connect(f); f.connect(g); g.connect(bus);
+      osc.start(t0+at); osc.stop(t0+at+dur+0.05);
+    });
+  };
+  // Two calls on the tonic, then the minor third and fifth held together —
+  // the classic "enemy sighted" fanfare shape, in G minor.
+  stab(196.00, 0.00, 0.24, 0.30);   // G3
+  stab(196.00, 0.30, 0.24, 0.30);   // G3
+  stab(233.08, 0.60, 1.60, 0.30);   // Bb3
+  stab(293.66, 0.62, 1.60, 0.20);   // D4
+
+  // Timpani under the first call and again under the held chord.
+  [0, 0.6].forEach(at=>{
+    const osc=audioCtx.createOscillator(), g=audioCtx.createGain();
+    osc.type='sine';
+    osc.frequency.setValueAtTime(98,t0+at);
+    osc.frequency.exponentialRampToValueAtTime(49,t0+at+0.5);
+    g.gain.setValueAtTime(0.45,t0+at);
+    g.gain.exponentialRampToValueAtTime(0.001,t0+at+0.7);
+    osc.connect(g); g.connect(bus);
+    osc.start(t0+at); osc.stop(t0+at+0.75);
+  });
+
+  // A breath of filtered noise leading into the fanfare, like a drawn breath.
+  const bufSize=Math.floor(audioCtx.sampleRate*0.5);
+  const buf=audioCtx.createBuffer(1,bufSize,audioCtx.sampleRate);
+  const nd=buf.getChannelData(0);
+  for(let i=0;i<bufSize;i++) nd[i]=(Math.random()*2-1)*Math.sin(Math.PI*i/bufSize);
+  const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+  const nf=audioCtx.createBiquadFilter(); nf.type='bandpass'; nf.Q.value=1.5;
+  nf.frequency.setValueAtTime(300,t0); nf.frequency.linearRampToValueAtTime(1800,t0+0.45);
+  const ng=audioCtx.createGain(); ng.gain.value=0.12;
+  noise.connect(nf); nf.connect(ng); ng.connect(bus);
+  noise.start(t0);
+
+  // Duck the score for the length of the cue so the stinger sits on top.
+  if(musicGain && musicOn){
+    musicGain.gain.setTargetAtTime(MUSIC_LEVEL*0.35, t0, 0.15);
+    musicGain.gain.setTargetAtTime(MUSIC_LEVEL, t0+2.2, 0.8);
+  }
+}
+// Called wherever the player's house is shooting or being shot at. Keeps the
+// "a fight is on" window alive (which is what holds the chill interlude back)
+// and fires the stinger at most once per COMBAT_ALERT_COOLDOWN_MS.
+function notePlayerCombat(){
+  const now=performance.now();
+  const fresh = now-lastCombatAlertAt>COMBAT_ALERT_COOLDOWN_MS;
+  combatUntil=now+COMBAT_WINDOW_MS;
+  if(!fresh) return;
+  lastCombatAlertAt=now;
+  // A chill interlude has no business running once shots are exchanged.
+  if(chillActive) exitChill();
+  playCombatAlert();
+}
 document.getElementById('musicToggle').addEventListener('click', toggleMusic);
+
+// ---- header height -> --hudH ----
+// #hudBar is fixed, floats over the map, and has no fixed height: it wraps to
+// a second row on narrow viewports and grows again whenever the log is
+// expanded. Everything pinned to the top of the map (minimap, mode hint,
+// legend, help box, both popup menus) is positioned off var(--hudH), so the
+// header's real rendered height has to be published back into CSS after every
+// layout change — otherwise the minimap sits at a guessed offset and its top
+// edge disappears under the bar.
+const hudBarEl=document.getElementById('hudBar');
+function syncHudHeight(){
+  const h=Math.ceil(hudBarEl.getBoundingClientRect().height);
+  if(h>0) document.documentElement.style.setProperty('--hudH', h+'px');
+}
+syncHudHeight();
+window.addEventListener('resize', syncHudHeight);
+window.addEventListener('orientationchange', syncHudHeight);
+if(window.ResizeObserver) new ResizeObserver(syncHudHeight).observe(hudBarEl);
+// Web fonts landing after first paint reflow the bar; re-measure once they do.
+if(document.fonts && document.fonts.ready) document.fonts.ready.then(syncHudHeight);
 document.getElementById('logHistoryBtn').addEventListener('click', ()=>{
   document.getElementById('log').classList.toggle('expanded');
+  // The expand is a 150ms max-height transition, so read the settled height
+  // once it has finished on top of whatever the ResizeObserver saw mid-way.
+  setTimeout(syncHudHeight, 200);
 });
 document.getElementById('hintBar').addEventListener('click', ()=>{
   const collapsed = document.getElementById('hintBox').classList.toggle('collapsed');
@@ -3219,12 +3425,20 @@ function spawnAttackFx(u,targetX,targetY){
   if(u.type==='tank' || u.type==='bomber' || u.type==='turret') spawnBombFx(targetX,targetY);
   else if(u.sprite) spawnLaserFx(u.sprite.x,u.sprite.y,targetX,targetY);
   playFireSound();
+  // Your own guns opening up is half of "a fight has started"; the other half
+  // (being shot at) is picked up in alertNearbyDefenders below.
+  const ph=playerHouse();
+  if(ph && u.owner===ph.id) notePlayerCombat();
 }
 // Idle (or hunting-without-a-target) friendly combat units within range of a
 // spot that just took a hit switch to Search & Destroy, so a raid on the
 // stronghold or an outlying building pulls in nearby defenders automatically
 // instead of needing a manual order.
 function alertNearbyDefenders(house,x,y){
+  // This runs on every hit the house takes — its stronghold, one of its
+  // units, or one of its buildings — which makes it the natural place to
+  // notice that the player is under attack.
+  if(house===playerHouse()) notePlayerCombat();
   house.units.forEach(u=>{
     if(!isCombatUnit(u)) return;
     // Flyers never auto-scramble off this passive alert — they only fight
@@ -3980,37 +4194,174 @@ function nearBaseFootprint(x,y,margin){
 // Refinery/turbine/airport all need solid ground under their foundation, so
 // sand is off-limits for those specifically — silo and turret still allow it.
 const NEEDS_SOLID_GROUND=new Set(['place-refinery','place-turbine','place-airport']);
+const BUILD_TYPE_OF={ 'place-turbine':'turbine', 'place-silo':'silo', 'place-turret':'turret', 'place-refinery':'refinery', 'place-airport':'airport' };
+// Everything a house can anchor a new structure off: each of its standing
+// wind turbines, plus — for a turbine only — its own stronghold, so a house
+// that has just lost its last turbine can still raise a replacement instead of
+// being permanently locked out of the build menu.
+function buildAnchorsFor(house,placeType){
+  const anchors=[];
+  if(!house) return anchors;
+  buildingMap.forEach(b=>{ if(b.owner===house.id && b.type==='turbine') anchors.push({x:b.x,y:b.y}); });
+  if(placeType==='place-turbine' && house.alive) anchors.push({x:house.base.x+0.5, y:house.base.y+0.5});
+  return anchors;
+}
+// Radial (circular) distance, so the buildable area around a turbine reads as
+// a disc — a square Chebyshev range would let a corner sit 14 tiles out.
+function withinBuildRadius(anchors,fx,fy){
+  return anchors.some(a=>Math.hypot(a.x-fx, a.y-fy)<=BUILD_RADIUS);
+}
 // Single source of truth for "can this building go here" — shared by the
-// hover preview and the actual click handler so the preview never lies.
-function placementValid(placeType,x,y,ignoreFog){
+// hover preview, the buildable-zone overlay and the actual click handler, so
+// the preview never lies. `house` is optional: pass it for interactive player
+// placement to enforce the turbine service radius; the AI's own build search
+// and newGame()'s free starting grants call it without one (those are placed
+// hard against their stronghold, before any turbine exists).
+function placementValid(placeType,x,y,ignoreFog,house){
   const big=placeType==='place-silo'||placeType==='place-refinery'||placeType==='place-airport';
+  const anchors=house?buildAnchorsFor(house,placeType):null;
   return placementFootprint(placeType,x,y).every(([fx,fy])=>
     inBounds(fx,fy) && terrain[fy][fx]!=='mountain' &&
     (!NEEDS_SOLID_GROUND.has(placeType) || terrain[fy][fx]!=='desert') &&
     (ignoreFog || explored[fy][fx]) &&
     !buildingMap.has(fx+','+fy) && !spiceMap.has(fx+','+fy) &&
+    (!anchors || withinBuildRadius(anchors,fx,fy)) &&
     (big ? !nearBaseFootprint(fx,fy,1) : !isBaseTile(fx,fy)));
 }
+// Why a placement was refused, so the log says something more useful than one
+// catch-all sentence — the turbine radius in particular is a new rule players
+// have to learn, and "needs clear ground" would be actively misleading there.
+function placementRefusalMsg(placeType,x,y,house){
+  const anchors=buildAnchorsFor(house,placeType);
+  if(!anchors.length) return BUILD_LABEL[BUILD_TYPE_OF[placeType]]+' needs a wind turbine to build around — raise one next to your stronghold first.';
+  if(!placementFootprint(placeType,x,y).every(([fx,fy])=>withinBuildRadius(anchors,fx,fy)))
+    return 'Too far out — a structure has to stand within '+BUILD_RADIUS+' tiles of one of your wind turbines.';
+  const big=placeType==='place-silo'||placeType==='place-refinery'||placeType==='place-airport';
+  return big ? 'Not enough clear, explored ground here for a 2x2 '+BUILD_TYPE_OF[placeType]+'.'
+             : 'Cannot build there — needs clear, explored ground.';
+}
+
+// Two layers make up build placement feedback:
+//   placeZone    — the green placeholder rectangles marking every tile a
+//                  structure of the armed type could actually be dropped on
+//                  (plus a faint ring per wind turbine showing its service
+//                  radius). Hover-capable pointers only: on a desktop the
+//                  player sweeps the mouse over the map and reads the legal
+//                  spots straight off the board instead of guessing.
+//   placePreview — the rectangle under the cursor (or under a pending tap),
+//                  green when the drop is legal, red when it isn't.
+const placeZone=new PIXI.Graphics();
+placeZone.visible=false;
 const placePreview=new PIXI.Graphics();
 placePreview.visible=false;
-layerFx.addChild(placePreview);
-function hidePlacementPreview(){ placePreview.visible=false; }
-function isPlaceMode(){ return !!(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo' || uiMode.type==='place-turret' || uiMode.type==='place-refinery' || uiMode.type==='place-airport')); }
-function updatePlacementPreview(e){
-  if(!isPlaceMode()){ hidePlacementPreview(); return; }
-  const {x,y}=tileFromEvent(e);
-  const w=(uiMode.type==='place-silo'||uiMode.type==='place-refinery'||uiMode.type==='place-airport')?2:1;
-  const valid=inBounds(x,y) && placementValid(uiMode.type,x,y);
+// start() and applyMpInit() both wipe layerFx to reset the board's FX, which
+// would leave these two orphaned (and permanently invisible) for the rest of
+// the session. Re-parenting them is part of that reset.
+function attachPlacementLayers(){ layerFx.addChild(placeZone, placePreview); }
+attachPlacementLayers();
+// A mouse/trackpad has a hover state to paint the zone for; a touchscreen has
+// none, and gets the two-tap confirm flow below instead.
+const HOVER_POINTER = !window.matchMedia || window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+function hidePlacementPreview(){
+  placePreview.visible=false; placeZone.visible=false;
+  placeBlink=null; pendingPlacement=null;
+}
+function isPlaceMode(){ return !!(uiMode && BUILD_TYPE_OF[uiMode.type]); }
+function placeFootprintSize(placeType){ return (placeType==='place-silo'||placeType==='place-refinery'||placeType==='place-airport')?2:1; }
+
+// Repaints placePreview as a w-by-w rectangle at (x,y) in the given colour.
+function drawPlacePreview(x,y,valid,w){
   const color=valid?0x33cc33:0xdd3333;
   placePreview.clear();
-  placePreview.lineStyle(2,color,0.9);
+  placePreview.lineStyle(2,color,0.95);
   placePreview.beginFill(color,0.3);
   placePreview.drawRect(0,0,SZ*w,SZ*w);
   placePreview.endFill();
   placePreview.x=x*SZ; placePreview.y=y*SZ;
+  placePreview.alpha=1;
   placePreview.visible=true;
 }
+
+// ---- the green placeholder field (desktop hover) ----
+// Only the tiles inside a turbine's radius can ever be legal, so the scan
+// walks those discs rather than the whole 100x100 map. Rebuilt at most a few
+// times a second while the pointer moves, and whenever the armed build type
+// changes — buildings finishing, spice landing and fog lifting all move the
+// answer, so it can't just be computed once when the mode is entered.
+let zoneCacheType=null, zoneCacheAt=0;
+const ZONE_REFRESH_MS=250;
+function refreshBuildZone(force){
+  if(!isPlaceMode()){ placeZone.visible=false; return; }
+  const now=performance.now();
+  if(!force && uiMode.type===zoneCacheType && now-zoneCacheAt<ZONE_REFRESH_MS){ placeZone.visible=true; return; }
+  zoneCacheType=uiMode.type; zoneCacheAt=now;
+  const ph=playerHouse();
+  const anchors=buildAnchorsFor(ph,uiMode.type);
+  placeZone.clear();
+  // The service radius itself, one soft ring per anchor, so the limit is
+  // visible even where the ground inside it happens to be unbuildable.
+  placeZone.lineStyle(1,0x33cc33,0.22);
+  anchors.forEach(a=>placeZone.drawCircle((a.x+0.5)*SZ,(a.y+0.5)*SZ,BUILD_RADIUS*SZ));
+  placeZone.lineStyle(1,0x66ff88,0.5);
+  placeZone.beginFill(0x33cc33,0.16);
+  const seen=new Set();
+  const R=Math.ceil(BUILD_RADIUS);
+  anchors.forEach(a=>{
+    const ax=Math.round(a.x), ay=Math.round(a.y);
+    for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
+      const x=ax+dx, y=ay+dy;
+      if(!inBounds(x,y)) continue;
+      const k=x+','+y;
+      if(seen.has(k)) continue;
+      seen.add(k);
+      if(!placementValid(uiMode.type,x,y,false,ph)) continue;
+      // One inset square per legal anchor tile, never the whole footprint: for
+      // a 2x2 structure every anchor's footprint overlaps its neighbours', and
+      // drawing those would fuse the whole field into one green slab with no
+      // readable spots in it. The full footprint is what the hover rectangle
+      // under the cursor shows.
+      placeZone.drawRect(x*SZ+2, y*SZ+2, SZ-4, SZ-4);
+    }
+  });
+  placeZone.endFill();
+  placeZone.visible=true;
+}
+
+function updatePlacementPreview(e){
+  if(!isPlaceMode()){ hidePlacementPreview(); return; }
+  // A touch "move" is a drag, not a hover — leave the tap-confirm state alone.
+  if(e && e.pointerType && e.pointerType!=='mouse') return;
+  if(HOVER_POINTER) refreshBuildZone();
+  const {x,y}=tileFromEvent(e);
+  const valid=inBounds(x,y) && placementValid(uiMode.type,x,y,false,playerHouse());
+  drawPlacePreview(x,y,valid,placeFootprintSize(uiMode.type));
+}
 app.view.addEventListener('pointermove', updatePlacementPreview);
+
+// ---- touch: tap once to aim, tap again to build ----
+// A touchscreen never hovers, so the first tap on a tile stands in for the
+// hover: the footprint blinks there — green if the structure would go up,
+// red if the spot is refused — and only a second tap on the same tile
+// actually commits the order. Tapping elsewhere just moves the aim.
+let pendingPlacement=null;          // {x,y,type} awaiting its confirming tap
+let placeBlink=null;                // {until} while the blink animation runs
+const PLACE_BLINK_MS=900, PLACE_BLINK_PERIOD_MS=160;
+function armPlacementTap(x,y,valid){
+  pendingPlacement={x,y,type:uiMode.type,valid};
+  placeBlink={until:performance.now()+PLACE_BLINK_MS};
+  drawPlacePreview(x,y,valid,placeFootprintSize(uiMode.type));
+}
+function placementTapPending(x,y){
+  return !!(pendingPlacement && pendingPlacement.type===uiMode.type &&
+            pendingPlacement.x===x && pendingPlacement.y===y);
+}
+app.ticker.add(()=>{
+  if(!placeBlink || !placePreview.visible) return;
+  const now=performance.now();
+  if(now>=placeBlink.until){ placeBlink=null; placePreview.alpha=1; return; }
+  // Straight on/off blink rather than a fade — it has to read as an alarm.
+  placePreview.alpha = Math.floor(now/PLACE_BLINK_PERIOD_MS)%2===0 ? 1 : 0.12;
+});
 
 function deselect(){
   if(!state) return;
@@ -4119,7 +4470,6 @@ function renderUpgradeMenu(){
   repair.textContent = full ? 'Hull full' : (repairing ? 'Repairing… (stop)' : 'Repair ('+REPAIR_SPICE_PER_SEC+'/s)');
   repair.classList.toggle('on', repairing && !full);
   repair.disabled = full || gameOver;
-  upgMenu.style.top=(document.getElementById('hudBar').getBoundingClientRect().bottom+8)+'px';
   upgMenu.style.display='flex';
 }
 // Charges the spice and applies one step of the turret ladder. Shared by the
@@ -4281,31 +4631,47 @@ function openCtxMenuFor(){
   btn3D.style.display=canRide3D(sel)?'flex':'none';
   btn3D.textContent=view3d.active?'Exit 3D View':'3D View';
   document.getElementById('ctxCancel').style.display=allHarvester?'none':'flex';
-  // #hudBar (title/stats row + the #log history bar) is a fixed, floating
-  // header with a higher z-index than ctxMenu's hardcoded top:8px, so the
-  // menu used to render right underneath it, hidden. hudBar's height isn't
-  // fixed (it can wrap), so read its real rendered bottom edge each time
-  // instead of hardcoding a taller offset that could still be wrong.
-  ctxMenu.style.top=(document.getElementById('hudBar').getBoundingClientRect().bottom+8)+'px';
+  refreshRepeatButton();
   ctxMenu.style.display='flex'; modeHint.textContent='Click a tile to move, or an enemy to attack'; modeHint.style.display='block';
 }
-document.getElementById('ctxAttack').onclick=()=>{
-  uiMode={type:'attack-target'};
-  ctxMenu.style.display='none';
-  modeHint.textContent='ATTACK — choose an enemy'; modeHint.style.display='block';
-};
-document.getElementById('ctxEngage').onclick=()=>{
+// ---- the last order given, for the Repeat action ----
+// Only player-issued unit orders are recorded (never the AI's, never a remote
+// client's replayed command), because Repeat re-issues it to whatever is
+// selected right now. An attack is stored as the tile that was struck, not as
+// the target object: by the time it is repeated the original unit may be dead
+// and something else may be standing there, and "hit that spot again" is the
+// useful reading.
+let lastOrder=null;
+const LAST_ORDER_LABEL={ move:'Move', attack:'Attack', engage:'Search & Destroy', retreat:'Retreat', harvest:'Harvest' };
+function noteLastOrder(o){ lastOrder=o; refreshRepeatButton(); }
+function refreshRepeatButton(){
+  const btn=document.getElementById('ctxRepeat');
+  if(!btn) return;
+  if(!lastOrder){ btn.style.display='none'; return; }
+  btn.style.display='flex';
+  btn.title='Repeat: '+LAST_ORDER_LABEL[lastOrder.kind]
+    +(lastOrder.kind==='move'||lastOrder.kind==='attack' ? ' ('+lastOrder.x+','+lastOrder.y+')' : '');
+}
+
+// Each order is its own function so the menu button and Repeat drive exactly
+// the same code path — Repeat can never drift out of step with the button it
+// mirrors.
+function orderEngage(record){
   const combatants=state.selectedUnits.filter(isCombatUnit);
+  if(!combatants.length){ addLog('Nothing selected that can hunt.'); return; }
   combatants.forEach(u=>{
     const owner=houseById(u.owner);
     u.order={kind:'engage'};
     addLog("House "+owner.name+"'s "+u.type+' begins searching the map for enemies to destroy.');
   });
-  deselect();
-  if(combatants.length){ followUnit=combatants[0]; if(isMpClient()) mpSend({type:'cmd', kind:'engage', unitIds:combatants.map(u=>u.id)}); }
-};
-document.getElementById('ctxRetreat').onclick=()=>{
+  followUnit=combatants[0];
+  if(isMpClient()) mpSend({type:'cmd', kind:'engage', unitIds:combatants.map(u=>u.id)});
+  if(record!==false) noteLastOrder({kind:'engage'});
+  keepMenuOpen();
+}
+function orderRetreat(record){
   const units=state.selectedUnits.slice();
+  if(!units.length) return;
   units.forEach(u=>{
     const owner=houseById(u.owner);
     // The stronghold tile itself is never a valid destination — retreat to a
@@ -4314,11 +4680,14 @@ document.getElementById('ctxRetreat').onclick=()=>{
     u.order={kind:'move', x:spot.x, y:spot.y};
     addLog("House "+owner.name+"'s "+u.type+' retreats to the stronghold.');
   });
-  deselect();
-  if(units.length){ followUnit=units[0]; if(isMpClient()) mpSend({type:'cmd', kind:'retreat', unitIds:units.map(u=>u.id)}); }
-};
-document.getElementById('ctxHarvest').onclick=()=>{
+  followUnit=units[0];
+  if(isMpClient()) mpSend({type:'cmd', kind:'retreat', unitIds:units.map(u=>u.id)});
+  if(record!==false) noteLastOrder({kind:'retreat'});
+  keepMenuOpen();
+}
+function orderHarvest(record){
   const units=state.selectedUnits.filter(u=>u.type==='harvester');
+  if(!units.length){ addLog('No harvester selected.'); return; }
   units.forEach(h=>{
     const owner=houseById(h.owner);
     const best=nearestSpiceDeposit(h);
@@ -4327,9 +4696,67 @@ document.getElementById('ctxHarvest').onclick=()=>{
       addLog("House "+owner.name+"'s harvester heads out to harvest spice.");
     }
   });
-  deselect();
-  if(units.length){ followUnit=units[0]; if(isMpClient()) mpSend({type:'cmd', kind:'harvest', unitIds:units.map(u=>u.id)}); }
+  followUnit=units[0];
+  if(isMpClient()) mpSend({type:'cmd', kind:'harvest', unitIds:units.map(u=>u.id)});
+  if(record!==false) noteLastOrder({kind:'harvest'});
+  keepMenuOpen();
+}
+// Orders no longer end the selection. A player who has just told a squad to
+// retreat almost always wants to give it another order straight after, and
+// dropping the selection (and the menu with it) forced a re-select and a
+// re-open every single time. Only Cancel, Escape, or picking something else
+// clears it now; the menu is simply redrawn so its buttons match whatever is
+// still selected.
+function keepMenuOpen(){
+  // The 3D chase view deliberately runs with the menu down (it would float
+  // over the cockpit), so orders given from in there leave it hidden.
+  if(view3d.active) return;
+  if(state && state.selectedUnits.length){ updateSelectionRing(); openCtxMenuFor(); }
+}
+function orderMoveTo(x,y,record){
+  let mover=null, blockedMsg=null, moverIds=[];
+  state.selectedUnits.forEach(u=>{
+    const flyer=isFlyer(u.type);
+    if(!flyer && !passable(x,y)){ blockedMsg='Rocky mountains block that route.'; return; }
+    if(!flyer && isBaseTile(x,y)){ blockedMsg='A stronghold tile is never a valid destination.'; return; }
+    if(!flyer && buildingMap.has(x+','+y) && u.type!=='harvester'){ blockedMsg='Only harvesters can enter a silo or refinery.'; return; }
+    u.order={kind:'move', x, y}; if(!mover) mover=u; moverIds.push(u.id);
+  });
+  if(mover){
+    addLog('Order given: move to ('+x+','+y+').'); followUnit=mover;
+    if(isMpClient()) mpSend({type:'cmd', kind:'move', unitIds:moverIds, x, y});
+    if(record!==false) noteLastOrder({kind:'move', x, y});
+  }
+  else if(blockedMsg) addLog(blockedMsg);
+  keepMenuOpen();
+}
+function repeatLastOrder(){
+  if(!lastOrder){ addLog('No previous order to repeat.'); return; }
+  if(!state.selectedUnits.length){ addLog('Select a unit first — Repeat re-issues the last order to it.'); return; }
+  if(lastOrder.kind==='move'){ orderMoveTo(lastOrder.x, lastOrder.y, false); return; }
+  if(lastOrder.kind==='attack'){
+    const target=enemyTargetAt(playerHouse(), lastOrder.x, lastOrder.y);
+    if(!target){ addLog('Nothing left to attack at ('+lastOrder.x+','+lastOrder.y+') — pick a new target.'); return; }
+    const attackers=state.selectedUnits.filter(isCombatUnit);
+    if(!attackers.length){ addLog('Nothing selected that can attack.'); return; }
+    issueAttackOrders(attackers, target, lastOrder.x, lastOrder.y, false);
+    keepMenuOpen();
+    return;
+  }
+  if(lastOrder.kind==='engage') orderEngage(false);
+  else if(lastOrder.kind==='retreat') orderRetreat(false);
+  else if(lastOrder.kind==='harvest') orderHarvest(false);
+}
+
+document.getElementById('ctxAttack').onclick=()=>{
+  uiMode={type:'attack-target'};
+  ctxMenu.style.display='none';
+  modeHint.textContent='ATTACK — choose an enemy'; modeHint.style.display='block';
 };
+document.getElementById('ctxEngage').onclick=()=>orderEngage();
+document.getElementById('ctxRetreat').onclick=()=>orderRetreat();
+document.getElementById('ctxHarvest').onclick=()=>orderHarvest();
+document.getElementById('ctxRepeat').onclick=()=>repeatLastOrder();
 document.getElementById('ctxCancel').onclick=()=>{ deselect(); };
 
 function tileFromEvent(e){
@@ -4405,7 +4832,10 @@ function enemyTargetAt(ph,x,y){
   if(enemyBuilding && enemyBuilding.b.owner!==ph.id) return {kind:'building', key:enemyBuilding.key, houseId:enemyBuilding.b.owner, type:enemyBuilding.b.type};
   return null;
 }
-function issueAttackOrders(units,target){
+// tx/ty are the tile the order was aimed at — kept only so Repeat can aim at
+// the same square later. record=false when Repeat is the caller, so repeating
+// an attack doesn't rewrite the very entry it just read.
+function issueAttackOrders(units,target,tx,ty,record){
   if(!units.length) return;
   units.forEach(u=>{
     if(target.kind==='unit') u.order={kind:'attack', targetHouseId:target.houseId, targetId:target.unit.id};
@@ -4415,6 +4845,7 @@ function issueAttackOrders(units,target){
   const label = target.kind==='unit' ? target.unit.type : target.kind==='base' ? 'stronghold' : target.type;
   addLog('Order given: attack House '+houseById(target.houseId).name+"'s "+label+'.');
   followUnit=units[0];
+  if(record!==false && tx!==undefined) noteLastOrder({kind:'attack', x:tx, y:ty});
   // Only fires for a client's own local input (never when the host applies
   // an already-received remote command back through this same function).
   if(isMpClient()){
@@ -4426,20 +4857,31 @@ function issueAttackOrders(units,target){
 }
 function handleBoardClick(e){
   const {x,y}=tileFromEvent(e);
-  handleTileCommand(x,y);
+  // Touch (and pen) get the tap-to-aim / tap-to-confirm build flow; a mouse
+  // has already shown the same answer as a hover rectangle, so it commits on
+  // the first click exactly as before.
+  handleTileCommand(x,y, !!(e && e.pointerType && e.pointerType!=='mouse'));
 }
 // Everything a click on the board means, expressed purely in tile coordinates.
 // Split out of handleBoardClick so the 3D chase view can feed it a tile picked
 // by ray-casting instead of one read off a pointer event, and inherit the whole
 // order pipeline unchanged — placement rules, attack targeting, the move
 // guards, and (crucially) the mpSend multiplayer echo.
-function handleTileCommand(x,y){
+function handleTileCommand(x,y,viaTouch){
   if(!state || gameOver) return;
   if(!inBounds(x,y)) return;
   const ph=playerHouse();
 
+  // One gate in front of all five placement branches: on a touchscreen the
+  // first tap on a tile only aims (and blinks the footprint green or red);
+  // the order itself waits for a confirming second tap on that same tile.
+  if(isPlaceMode() && viaTouch && !placementTapPending(x,y)){
+    armPlacementTap(x,y, placementValid(uiMode.type,x,y,false,ph));
+    return;
+  }
+
   if(uiMode && (uiMode.type==='place-turbine' || uiMode.type==='place-silo' || uiMode.type==='place-turret')){
-    if(!placementValid(uiMode.type,x,y)){ addLog('Cannot build there — needs clear, explored ground.'); }
+    if(!placementValid(uiMode.type,x,y,false,ph)){ addLog(placementRefusalMsg(uiMode.type,x,y,ph)); }
     else {
       const type = uiMode.type==='place-turbine' ? 'turbine' : uiMode.type==='place-silo' ? 'silo' : 'turret';
       const cost = type==='turbine' ? TURBINE_COST : type==='silo' ? SILO_COST : TURRET_COST;
@@ -4468,7 +4910,7 @@ function handleTileCommand(x,y){
   }
 
   if(uiMode && uiMode.type==='place-refinery'){
-    if(!placementValid('place-refinery',x,y)){ addLog('Not enough clear, explored ground here for a 2x2 refinery.'); }
+    if(!placementValid('place-refinery',x,y,false,ph)){ addLog(placementRefusalMsg('place-refinery',x,y,ph)); }
     else if(!hasPowerFor(ph,'refinery')){ addLog(powerShortMsg(ph,'refinery')); }
     else if(ph.spice>=REFINERY_COST){
       if(isMpClient()){
@@ -4488,7 +4930,7 @@ function handleTileCommand(x,y){
   }
 
   if(uiMode && uiMode.type==='place-airport'){
-    if(!placementValid('place-airport',x,y)){ addLog('Not enough clear, explored ground here for a 2x2 airport.'); }
+    if(!placementValid('place-airport',x,y,false,ph)){ addLog(placementRefusalMsg('place-airport',x,y,ph)); }
     else if(!hasPowerFor(ph,'airport')){ addLog(powerShortMsg(ph,'airport')); }
     else if(ph.spice>=AIRPORT_COST){
       if(isMpClient()){
@@ -4513,8 +4955,9 @@ function handleTileCommand(x,y){
   if(uiMode && uiMode.type==='attack-target'){
     uiMode=null; modeHint.style.display='none';
     const target=enemyTargetAt(ph,x,y);
-    if(!target){ addLog('No enemy there to attack.'); return; }
-    issueAttackOrders(state.selectedUnits.filter(isCombatUnit), target);
+    if(!target){ addLog('No enemy there to attack.'); keepMenuOpen(); return; }
+    issueAttackOrders(state.selectedUnits.filter(isCombatUnit), target, x, y);
+    keepMenuOpen();
     return;
   }
 
@@ -4527,9 +4970,9 @@ function handleTileCommand(x,y){
   // popping open and shutting on every click on the unit itself. Combat
   // units attack an enemy unit/building/stronghold under the cursor;
   // anything else is a move order (non-combat units and any unit with no
-  // attack available just move). Selection persists after a command so
-  // follow-up orders can be issued right away — only Cancel, Escape, or
-  // selecting something else clears it.
+  // attack available just move). The selection AND its action menu persist
+  // after a command so follow-up orders can be issued right away — only
+  // Cancel, Escape, or selecting something else clears it.
   if(state.selectedUnits.length){
     // Your own stronghold wins the click outright, whatever is selected —
     // trooper, tank, harvester or aircraft. Ground units were never allowed
@@ -4552,21 +4995,9 @@ function handleTileCommand(x,y){
     const target=enemyTargetAt(ph,x,y);
     if(target){
       const attackers=state.selectedUnits.filter(isCombatUnit);
-      if(attackers.length){ issueAttackOrders(attackers, target); hideCtxMenu(); return; }
+      if(attackers.length){ issueAttackOrders(attackers, target, x, y); keepMenuOpen(); return; }
     }
-    let mover=null, blockedMsg=null, moverIds=[];
-    state.selectedUnits.forEach(u=>{
-      const flyer=isFlyer(u.type);
-      if(!flyer && !passable(x,y)){ blockedMsg='Rocky mountains block that route.'; return; }
-      if(!flyer && isBaseTile(x,y)){ blockedMsg='A stronghold tile is never a valid destination.'; return; }
-      if(!flyer && buildingMap.has(x+','+y) && u.type!=='harvester'){ blockedMsg='Only harvesters can enter a silo or refinery.'; return; }
-      u.order={kind:'move', x, y}; if(!mover) mover=u; moverIds.push(u.id);
-    });
-    if(mover){
-      addLog('Order given: move to ('+x+','+y+').'); followUnit=mover; hideCtxMenu();
-      if(isMpClient()) mpSend({type:'cmd', kind:'move', unitIds:moverIds, x, y});
-    }
-    else if(blockedMsg) addLog(blockedMsg);
+    orderMoveTo(x,y);
     return;
   }
 
@@ -4594,15 +5025,30 @@ document.getElementById('buildHarvester').onclick=()=>{
     findOwnedRefinery(ph) ? 'New harvester rolls out of the refinery.' : 'New harvester deployed at the stronghold.'));
   renderStats();
 };
+// Arms one of the five placement modes: sets uiMode, puts the instruction up,
+// and immediately paints the green placeholder field so the legal spots are on
+// screen before the pointer has moved at all.
+function enterPlaceMode(type,hint){
+  const ph=playerHouse();
+  if(!buildAnchorsFor(ph,type).length){
+    addLog(BUILD_LABEL[BUILD_TYPE_OF[type]]+' has to stand within '+BUILD_RADIUS+' tiles of one of your wind turbines — you have none standing.');
+    return;
+  }
+  uiMode={type};
+  pendingPlacement=null; placeBlink=null;
+  modeHint.textContent=hint+(HOVER_POINTER?'':' · tap twice');
+  modeHint.style.display='block';
+  if(HOVER_POINTER) refreshBuildZone(true);
+}
 document.getElementById('buildTurbine').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<TURBINE_COST || gameOver) return;
-  uiMode={type:'place-turbine'}; modeHint.textContent='PLACE TURBINE — choose a grass/desert tile'; modeHint.style.display='block';
+  enterPlaceMode('place-turbine','PLACE TURBINE — pick a green tile');
 };
 document.getElementById('buildSilo').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<SILO_COST || gameOver) return;
-  uiMode={type:'place-silo'}; modeHint.textContent='PLACE SILO — choose the top-left of a clear 2x2 area'; modeHint.style.display='block';
+  enterPlaceMode('place-silo','PLACE SILO — pick a green tile (2x2, top-left)');
 };
 // The three powered structures refuse at the button, before placement mode is
 // entered — being walked through choosing a tile only to be told the grid is
@@ -4611,19 +5057,19 @@ document.getElementById('buildRefinery').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<REFINERY_COST || gameOver) return;
   if(!hasPowerFor(ph,'refinery')){ addLog(powerShortMsg(ph,'refinery')); return; }
-  uiMode={type:'place-refinery'}; modeHint.textContent='PLACE REFINERY — choose the top-left of a clear 2x2 area'; modeHint.style.display='block';
+  enterPlaceMode('place-refinery','PLACE REFINERY — pick a green tile (2x2, top-left)');
 };
 document.getElementById('buildAirport').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<AIRPORT_COST || gameOver) return;
   if(!hasPowerFor(ph,'airport')){ addLog(powerShortMsg(ph,'airport')); return; }
-  uiMode={type:'place-airport'}; modeHint.textContent='PLACE AIRPORT — choose the top-left of a clear 2x2 area'; modeHint.style.display='block';
+  enterPlaceMode('place-airport','PLACE AIRPORT — pick a green tile (2x2, top-left)');
 };
 document.getElementById('buildTurret').onclick=()=>{
   const ph=playerHouse();
   if(!ph || ph.spice<TURRET_COST || gameOver) return;
   if(!hasPowerFor(ph,'turret')){ addLog(powerShortMsg(ph,'turret')); return; }
-  uiMode={type:'place-turret'}; modeHint.textContent='PLACE TURRET — choose a grass/desert tile'; modeHint.style.display='block';
+  enterPlaceMode('place-turret','PLACE TURRET — pick a green tile');
 };
 document.getElementById('recruitTroop').onclick=()=>{
   const ph=playerHouse();
@@ -4857,6 +5303,7 @@ function applyMpInit(msg){
   addLog('Connected — House '+houseById(mp.myHouseId).name+' vs House '+houseById(mp.remoteHouseId).name+'.');
   buildWorldVisuals();
   layerUnits.removeChildren(); layerFx.removeChildren();
+  attachPlacementLayers();
   resetAirClocks();
   clearBuildJobs();
   selectionRings=[]; activeFx=[];
@@ -5355,6 +5802,7 @@ async function start(chosenId, rivalId){
   buildWorldVisuals();
   layerUnits.removeChildren();
   layerFx.removeChildren();
+  attachPlacementLayers();
   resetAirClocks();
   clearBuildJobs();
   selectionRings=[]; activeFx=[];
